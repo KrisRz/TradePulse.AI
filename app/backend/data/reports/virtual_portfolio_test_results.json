@@ -1,0 +1,16 @@
+{
+  "portfolio_id": "test_portfolio",
+  "starting_balance": 10000.0,
+  "current_balance": 10279.824999999999,
+  "total_position_value": 0,
+  "total_unrealized_pnl": 0,
+  "total_portfolio_value": 10279.824999999999,
+  "total_return": 279.8249999999989,
+  "total_return_percentage": 2.798249999999989,
+  "active_positions": 0,
+  "total_trades": 5,
+  "win_rate": 80.0,
+  "total_realized_pnl": 109.82500000000002,
+  "created_at": "2025-07-16T16:51:07.320019",
+  "last_updated": "2025-07-16T16:51:07.320421"
+}

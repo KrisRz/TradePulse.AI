@@ -1,0 +1,36 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+// import OrderForm from '../../components/trading/OrderForm';
+// import PositionsList from '../../components/trading/PositionsList';
+// import TradeHistory from '../../components/trading/TradeHistory';
+// import RiskManagement from '../../components/trading/RiskManagement';
+// import TradingChart from '../../components/trading/TradingChart';
+// import MarketInfo from '../../components/trading/MarketInfo';
+---
+
+<DashboardLayout title="Trading - TradePulse.AI">
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Trading Dashboard</h1>
+        <p class="text-gray-600 dark:text-gray-400 mt-1">
+          Manual trading with AI assistance
+        </p>
+      </div>
+    </div>
+
+    <!-- Trading content placeholder -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Order Form</h2>
+        <p class="text-gray-600 dark:text-gray-300">Trading components loading...</p>
+      </div>
+      
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Positions</h2>
+        <p class="text-gray-600 dark:text-gray-300">Position components loading...</p>
+      </div>
+    </div>
+  </div>
+</DashboardLayout> 

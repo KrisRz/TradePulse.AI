@@ -1,0 +1,162 @@
+[
+  {
+    "timestamp": "2025-07-16T19:51:28.394270",
+    "performance": {
+      "random_forest": {
+        "cv_r2_mean": 0.9556451999583107,
+        "cv_r2_std": 0.08859587518000575,
+        "test_r2": -1.588456205028772,
+        "test_rmse": 19653.350771039222,
+        "ensemble_weight": 0.005377964904534253,
+        "overfitting": 2.5441014049870825
+      },
+      "gradient_boosting": {
+        "cv_r2_mean": 0.9458921680867565,
+        "cv_r2_std": 0.1079695547805067,
+        "test_r2": -1.5917232452188426,
+        "test_rmse": 19665.749674919083,
+        "ensemble_weight": 0.005374574193728775,
+        "overfitting": 2.5376154133055993
+      },
+      "elastic_net": {
+        "cv_r2_mean": 0.99933842420578,
+        "cv_r2_std": 0.001110504281550647,
+        "test_r2": 0.9999218583106995,
+        "test_rmse": 107.98393525630328,
+        "ensemble_weight": 0.9788032863618061,
+        "overfitting": -0.0005834341049194558
+      },
+      "xgboost": {
+        "cv_r2_mean": 0.931623899936676,
+        "cv_r2_std": 0.1298054614757542,
+        "test_r2": -1.7516651153564453,
+        "test_rmse": 20263.47808250104,
+        "ensemble_weight": 0.005216035977279999,
+        "overfitting": 2.6832890152931212
+      },
+      "lightgbm": {
+        "cv_r2_mean": 0.9374801943160092,
+        "cv_r2_std": 0.12226192336967533,
+        "test_r2": -1.738940326926803,
+        "test_rmse": 20216.570283393536,
+        "ensemble_weight": 0.00522813856265081,
+        "overfitting": 2.676420521242812
+      },
+      "ensemble": {
+        "cv_r2_mean": 0.9999218583106995,
+        "cv_r2_std": 0.0,
+        "test_r2": 0.9999218583106995,
+        "test_rmse": 107.98393525630328,
+        "ensemble_weight": 1.0,
+        "overfitting": 0.0
+      }
+    },
+    "analysis": {
+      "best_performer": "elastic_net",
+      "most_stable": "elastic_net",
+      "most_overfitted": "xgboost",
+      "ensemble_contribution": {
+        "random_forest": "Minimal",
+        "gradient_boosting": "Minimal",
+        "elastic_net": "Dominant",
+        "xgboost": "Minimal",
+        "lightgbm": "Minimal"
+      },
+      "model_rankings": {
+        "1": "elastic_net",
+        "2": "random_forest",
+        "3": "gradient_boosting",
+        "4": "lightgbm",
+        "5": "xgboost"
+      },
+      "performance_insights": [
+        "ElasticNet excels due to L1/L2 regularization with high-dimensional features",
+        "Tree-based models (random_forest, gradient_boosting, xgboost, lightgbm) show severe overfitting",
+        "elastic_net dominates ensemble with 97.9% weight"
+      ]
+    },
+    "model_count": 5,
+    "best_performer": "elastic_net",
+    "ensemble_r2": 0.9999218583106995
+  },
+  {
+    "timestamp": "2025-07-16T19:51:44.005410",
+    "performance": {
+      "random_forest": {
+        "cv_r2_mean": 0.9556451999583107,
+        "cv_r2_std": 0.08859587518000575,
+        "test_r2": -1.588456205028772,
+        "test_rmse": 19653.350771039222,
+        "ensemble_weight": 0.005377964904534253,
+        "overfitting": 2.5441014049870825
+      },
+      "gradient_boosting": {
+        "cv_r2_mean": 0.9458921680867565,
+        "cv_r2_std": 0.1079695547805067,
+        "test_r2": -1.5917232452188426,
+        "test_rmse": 19665.749674919083,
+        "ensemble_weight": 0.005374574193728775,
+        "overfitting": 2.5376154133055993
+      },
+      "elastic_net": {
+        "cv_r2_mean": 0.99933842420578,
+        "cv_r2_std": 0.001110504281550647,
+        "test_r2": 0.9999218583106995,
+        "test_rmse": 107.98393525630328,
+        "ensemble_weight": 0.9788032863618061,
+        "overfitting": -0.0005834341049194558
+      },
+      "xgboost": {
+        "cv_r2_mean": 0.931623899936676,
+        "cv_r2_std": 0.1298054614757542,
+        "test_r2": -1.7516651153564453,
+        "test_rmse": 20263.47808250104,
+        "ensemble_weight": 0.005216035977279999,
+        "overfitting": 2.6832890152931212
+      },
+      "lightgbm": {
+        "cv_r2_mean": 0.9374801943160092,
+        "cv_r2_std": 0.12226192336967533,
+        "test_r2": -1.738940326926803,
+        "test_rmse": 20216.570283393536,
+        "ensemble_weight": 0.00522813856265081,
+        "overfitting": 2.676420521242812
+      },
+      "ensemble": {
+        "cv_r2_mean": 0.9999218583106995,
+        "cv_r2_std": 0.0,
+        "test_r2": 0.9999218583106995,
+        "test_rmse": 107.98393525630328,
+        "ensemble_weight": 1.0,
+        "overfitting": 0.0
+      }
+    },
+    "analysis": {
+      "best_performer": "elastic_net",
+      "most_stable": "elastic_net",
+      "most_overfitted": "xgboost",
+      "ensemble_contribution": {
+        "random_forest": "Minimal",
+        "gradient_boosting": "Minimal",
+        "elastic_net": "Dominant",
+        "xgboost": "Minimal",
+        "lightgbm": "Minimal"
+      },
+      "model_rankings": {
+        "1": "elastic_net",
+        "2": "random_forest",
+        "3": "gradient_boosting",
+        "4": "lightgbm",
+        "5": "xgboost"
+      },
+      "performance_insights": [
+        "ElasticNet excels due to L1/L2 regularization with high-dimensional features",
+        "Tree-based models (random_forest, gradient_boosting, xgboost, lightgbm) show severe overfitting",
+        "elastic_net dominates ensemble with 97.9% weight"
+      ]
+    },
+    "model_count": 5,
+    "best_performer": "elastic_net",
+    "ensemble_r2": 0.9999218583106995
+  }
+]

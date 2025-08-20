@@ -1,0 +1,217 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+app/backend/venv/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Data files (too large for git)
+data/historical/raw_files/*.csv
+data/historical/raw_files/*.zip
+data/historical/processed/*.csv
+data/historical/processed/*.parquet
+data/historical/*.parquet
+data/historical/backup/*.parquet
+data/live/
+data/models/
+data/logs/
+data/dynamodb/
+data/redis/
+data/localstack/
+
+# Keep directory structure but ignore content
+data/historical/processed/.gitkeep
+data/models/.gitkeep
+data/logs/.gitkeep
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# VS Code
+.vscode/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# AWS
+.aws/
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+dist/
+.turbo/
+
+# Testing
+.coverage
+.pytest_cache/
+coverage/
+*.cover
+.hypothesis/
+
+# Planning and Documentation Files (work-in-progress)
+modeltrening.md
+FRONTEND_COMPLETION_PLAN.md
+Cel-projektu.md
+plan.md
+DATA_PIPELINE_GUIDE.md
+.cursorrules
+AWS_SETUP.md
+TRADE_EXECUTION_LAYER_PLAN.md
+MODEL_RETRAINING_GUIDE.md
+ROOT_CLEANUP_SUMMARY.md
+CLEANUP_SUMMARY.md
+Next_step.md
+ENTERPRISE_SYSTEM_README.md
+scripts_cleanup_plan.md
+PERFORMANCE_OPTIMIZATION_STRATEGY.md
+WEEK_1_IMPLEMENTATION_COMPLETE.md
+PHASE_3_IMPLEMENTATION.md
+Real_Trading_Dashboard_Plan.md
+
+# Cleanup documentation (development artifacts)
+*CLEANUP*.md
+*cleanup*
+cleanup_backup/
+
+# Development logs and temporary files
+quick_training.log
+test_backend.py
+check_dynamodb.py
+activate_live_data_system.py
+production_monitoring_system.py
+enterprise_frontend_analysis.md
+
+# Backup files
+*.bak
+*.backup
+
+# Backup directories
+backup_models/
+cleanup_backup/
+scripts_backup_*/
+app/backend-backup-*/
+app/backend-staging/
+
+# Build outputs and static generated files  
+app/frontend/storybook-static/
+app/frontend/playwright-report/
+app/frontend/test-results/
+
+# Temporary data files (too large for portfolio)
+data/*.json
+data/*.db
+data/*.parquet
+
+# Root-level temporary files and scripts (development/testing only)
+emergency_portfolio_fix.py
+monitor_overnight.py
+overnight_monitoring_data.json
+portfolio_backup.json
+start_system_with_restart.sh
+test_integration_check.py
+# Large database files (GitHub limit exceeded)
+app/backend/data/dynamodb/*.tar.gz
+app/backend/data/dynamodb/*.db
+data/historical/*.parquet
+# Large data files - excluded from git
+data/historical/backup/*.parquet
+data/historical/BTCUSDT_1m_2025_complete.parquet
+data/historical/BTCUSDT_1m_complete.parquet
+*.parquet
+
+# Large model files (>100MB) - excluded from git
+app/backend/models/enterprise/layer_5_confidence.pkl
+app/backend/models/enterprise/layer_4_filters.pkl
+app/backend/models/enterprise/*.pkl
+app/backend/models/enterprise/*.h5
+
+# ML Training scripts and outputs (development only)
+app/backend/scripts/ml/
+app/backend/models/
+*.pkl
+*.h5
+*.model
+*.joblib
+
+# Large log files
+logs/*.out
+logs/*.log
+*.out
+monitor.out
+
+# Large data and performance files
+current_status.json
+performance_data_*.json
+system_metrics_*.json
+check_portfolio.py
+
+# Node modules (already covered but being explicit)
+app/frontend/node_modules/
+
+.turbo/

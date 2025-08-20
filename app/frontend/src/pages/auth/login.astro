@@ -1,0 +1,127 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import LoginForm from '../../components/shared/auth/LoginForm';
+---
+
+<BaseLayout title="Sign In - TradePulse.AI">
+  <div class="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900">
+    <div class="sm:mx-auto sm:w-full sm:max-w-md">
+      <div class="flex justify-center">
+        <svg class="w-16 h-16 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+        </svg>
+      </div>
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
+        Sign in to your account
+      </h2>
+      <p class="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
+        Access your virtual trading portfolio and AI-powered signals
+      </p>
+    </div>
+
+    <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+      <div class="bg-white dark:bg-gray-800 py-8 px-4 shadow-xl sm:rounded-lg sm:px-10 border border-gray-200 dark:border-gray-700">
+        <LoginForm 
+          client:load
+          onSuccess={() => {
+            console.log('🔐 Login Page: onSuccess callback triggered');
+            // Check user role and redirect appropriately
+            const userData = localStorage.getItem('user_data');
+            console.log('🔐 Login Page: User data from localStorage:', userData);
+            if (userData) {
+              const user = JSON.parse(userData);
+              console.log('🔐 Login Page: Parsed user:', user);
+              if (user.role === 'admin') {
+                console.log('🔐 Login Page: Redirecting admin to /admin/dashboard');
+                window.location.href = '/admin/dashboard';
+              } else {
+                console.log('🔐 Login Page: Redirecting user to /user_dashboard');
+                window.location.href = '/user_dashboard';
+              }
+            } else {
+              console.log('🔐 Login Page: No user data, fallback to /user_dashboard');
+              // Fallback to user dashboard
+              window.location.href = '/user_dashboard';
+            }
+          }}
+          onSwitchToRegister={() => {
+            // Navigate to register page
+            window.location.href = '/auth/register';
+          }}
+        />
+      </div>
+      
+      <div class="mt-6 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          Don't have an account?{' '}
+          <a href="/auth/register" class="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300">
+            Sign up for free
+          </a>
+        </p>
+      </div>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  /* Additional custom styles for the login page */
+  .auth-container {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  
+  .auth-form {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.9);
+  }
+  
+  .dark .auth-form {
+    background: rgba(31, 41, 55, 0.9);
+  }
+</style>
+
+<script>
+  // Handle client-side routing for SPA-like behavior
+  document.addEventListener('DOMContentLoaded', async function() {
+    // Only redirect if explicitly coming from a login form submission
+    // Don't auto-redirect on direct page visits to allow manual login
+    const urlParams = new URLSearchParams(window.location.search);
+    const autoCheck = urlParams.get('auto_check');
+    
+    // Check if user is already logged in with a valid token (only if autoCheck is enabled)
+    const token = localStorage.getItem('auth_token');
+    if (token && autoCheck === 'true') {
+      try {
+        // Validate token by making a test API call
+        const response = await fetch('/api/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          // Token is valid, user is already authenticated, redirect to user dashboard
+          console.log('User already authenticated, redirecting to user dashboard');
+          window.location.href = '/user_dashboard';
+        } else {
+          // Token is invalid, remove it and show login form
+          console.log('Invalid token found, removing and showing login form');
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user_data');
+        }
+      } catch (error) {
+        // Network error or API unavailable, remove token and show login form
+        console.log('Error validating token, removing and showing login form:', error);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_data');
+      }
+    }
+    
+    // Add logout functionality for debugging
+    if (urlParams.get('logout') === 'true') {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
+      console.log('Logged out, localStorage cleared');
+    }
+  });
+</script> 

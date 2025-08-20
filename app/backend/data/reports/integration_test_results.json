@@ -1,0 +1,157 @@
+{
+  "timestamp": "2025-07-18T17:57:06.499469",
+  "success_rate": 1.0,
+  "passed_tests": 8,
+  "total_tests": 8,
+  "results": {
+    "Database Setup": true,
+    "Database Tables": true,
+    "Backend API": true,
+    "Live Data WebSocket": true,
+    "Data Storage": true,
+    "ML Model Inference": true,
+    "Virtual Portfolio": true,
+    "Live Price Feed": true
+  },
+  "api_responses": {
+    "/health": {
+      "status": "healthy",
+      "timestamp": "2025-07-18T18:57:04.916884",
+      "version": "1.0.0"
+    },
+    "/api/admin/system-status": {
+      "status": "online",
+      "uptime": "2 days, 14 hours",
+      "system_load": 1.25,
+      "services": {
+        "database": "healthy",
+        "redis": "healthy",
+        "websocket": "healthy",
+        "ml_pipeline": "healthy",
+        "trading_engine": "healthy"
+      },
+      "resources": {
+        "cpu_usage": 23.8,
+        "memory_usage": 67.5,
+        "disk_usage": 45.2
+      }
+    },
+    "/api/admin/virtual-portfolio": {
+      "stats": {
+        "total_value": 10634.56,
+        "total_pnl": 634.56,
+        "total_pnl_percentage": 6.35,
+        "total_trades": 2847,
+        "ai_win_rate": 67.3,
+        "ai_sharpe_ratio": 2.14,
+        "daily_trades": 12,
+        "max_drawdown": -2.8,
+        "last_updated": "2025-07-18T18:57:04.941213"
+      },
+      "active_positions": [
+        {
+          "position_id": "ai_pos_001",
+          "symbol": "BTCUSDT",
+          "type": "BUY",
+          "size": 0.025,
+          "entry_price": 119234.5,
+          "current_price": 119480.0,
+          "unrealized_pnl": 6.11,
+          "unrealized_pnl_percentage": 0.21,
+          "entry_time": "2025-07-18T18:32:04.941217",
+          "duration": "0.4h",
+          "stop_loss": 118046.11,
+          "take_profit": 121130.77,
+          "confidence": 0.78,
+          "ai_prediction": "BULLISH",
+          "status": "active"
+        },
+        {
+          "position_id": "ai_pos_002",
+          "symbol": "BTCUSDT",
+          "type": "SELL",
+          "size": 0.018,
+          "entry_price": 119620.0,
+          "current_price": 119480.0,
+          "unrealized_pnl": 2.52,
+          "unrealized_pnl_percentage": 0.12,
+          "entry_time": "2025-07-18T18:42:04.941221",
+          "duration": "0.3h",
+          "stop_loss": 120810.4,
+          "take_profit": 117434.6,
+          "confidence": 0.85,
+          "ai_prediction": "BEARISH",
+          "status": "active"
+        }
+      ]
+    },
+    "/api/admin/ai-models": {
+      "models": [
+        {
+          "name": "Enhanced Ensemble",
+          "type": "ensemble",
+          "r2_score": 99.83,
+          "mape": 0.45,
+          "status": "active"
+        },
+        {
+          "name": "ElasticNet",
+          "type": "linear",
+          "r2_score": 99.99,
+          "mape": 0.42,
+          "status": "active",
+          "weight": 75.9
+        },
+        {
+          "name": "Random Forest",
+          "type": "tree",
+          "r2_score": -1.59,
+          "mape": 245.6,
+          "status": "inactive",
+          "weight": 14.4
+        }
+      ],
+      "ensemble_weights": {
+        "elastic_net": 75.9,
+        "random_forest": 14.4,
+        "gradient_boosting": 2.6,
+        "xgboost": 2.4,
+        "lightgbm": 4.7
+      }
+    },
+    "/api/admin/analytics-overview": {
+      "backtesting_summary": {
+        "total_strategies_tested": 5,
+        "best_performing_strategy": "Enhanced Ensemble",
+        "best_strategy_return": 25.64,
+        "avg_sharpe_ratio": 2.11,
+        "total_trades": 1247,
+        "win_rate": 68.3,
+        "max_drawdown": -2.01,
+        "current_balance": 10755.32
+      },
+      "live_performance": {
+        "current_portfolio_value": 10755.32,
+        "daily_return": 2.1,
+        "weekly_return": 7.55,
+        "monthly_return": 15.7,
+        "total_return": 25.64,
+        "active_trades": 3,
+        "today_pnl": 225.47,
+        "prediction_accuracy": 89.5,
+        "total_predictions_today": 247
+      },
+      "model_performance": {
+        "enhanced_ensemble_r2": 99.83,
+        "ensemble_mape": 0.45,
+        "model_accuracy": 89.5,
+        "last_updated": "2024-12-31T20:45:00Z"
+      },
+      "ai_vs_random_status": {
+        "ai_win_rate": 20.0,
+        "p_value": 0.286,
+        "statistical_significance": false
+      }
+    }
+  }
+}

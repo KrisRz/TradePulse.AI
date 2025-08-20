@@ -1,0 +1,117 @@
+# TradePulse.AI - Staging Environment Configuration Template
+# Cost-optimized settings for development and testing
+
+# ============================================================================
+# BASIC CONFIGURATION
+# ============================================================================
+
+aws_region   = "eu-west-2"
+environment  = "staging"
+project_name = "tradepulse"
+
+# ============================================================================
+# SECURITY CONFIGURATION - USE TEST VALUES ONLY!
+# ============================================================================
+
+# TEST API credentials (not for production!)
+binance_api_key    = "test_binance_api_key_staging"
+binance_secret_key = "test_binance_secret_key_staging"
+jwt_secret_key     = "staging-jwt-secret-key-for-testing-only-32chars"
+
+# ============================================================================
+# NOTIFICATION CONFIGURATION
+# ============================================================================
+
+alert_email_addresses = [
+  "dev-team@yourcompany.com"
+]
+
+cost_alert_email = "dev-team@yourcompany.com"
+
+# ============================================================================
+# COST-OPTIMIZED SETTINGS
+# ============================================================================
+
+# Smaller Lambda memory for cost savings
+lambda_memory_size     = 512   # Minimal for testing
+ai_lambda_memory_size  = 1024  # Reduced from production
+ml_lambda_memory_size  = 2048  # Reduced from production
+
+# Simplified networking
+enable_vpc           = false   # No VPC to save NAT Gateway costs
+enable_vpc_flow_logs = false   # Disabled for cost savings
+
+# Basic security (no WAF to save costs)
+enable_waf = false
+
+# Shorter retention periods
+log_retention_days       = 7     # Short retention for staging
+backup_retention_days    = 7     # Short backup retention
+
+# Reduced monitoring
+enable_detailed_monitoring = false
+enable_xray_tracing       = false
+
+# ============================================================================
+# TRADING CONFIGURATION (SAFE TEST MODE)
+# ============================================================================
+
+# Limited symbols for testing
+supported_symbols = [
+  "BTCUSDT",
+  "ETHUSDT"
+]
+
+# Limited intervals
+trading_intervals = ["1m", "5m", "1h"]
+
+# SAFETY: Never enable live trading in staging
+enable_live_trading     = false
+max_position_size_usd   = 100    # Small test amounts
+risk_management_enabled = true   # Always keep enabled
+
+# ============================================================================
+# FEATURE FLAGS (ENABLE FOR TESTING)
+# ============================================================================
+
+enable_advanced_analytics      = true
+enable_ml_continuous_learning  = false  # Disabled for cost savings
+enable_social_trading          = true   # Enable for testing
+enable_portfolio_showcase      = true
+enable_debug_mode              = true   # Enable debug in staging
+
+# ============================================================================
+# COST CONTROL
+# ============================================================================
+
+monthly_cost_alert_threshold = 100  # $100 alert threshold for staging
+cloudfront_price_class       = "PriceClass_100"  # Cheapest option
+
+# ============================================================================
+# SIMPLIFIED SCHEDULES FOR STAGING
+# ============================================================================
+
+eventbridge_schedules = {
+  # Less frequent data collection to save costs
+  health_check = {
+    description         = "Health check every 10 minutes"
+    schedule_expression = "rate(10 minutes)"
+    target_function    = "health_monitor"
+    input              = jsonencode({
+      action = "health_check"
+    })
+  }
+}
+
+# ============================================================================
+# DEVELOPMENT TAGS
+# ============================================================================
+
+additional_tags = {
+  "Owner"              = "Development-Team"
+  "Project"            = "TradePulse-AI-Staging"
+  "CostOptimized"      = "true"
+  "AutoShutdown"       = "enabled"
+  "Environment"        = "staging"
+  "Purpose"            = "development-testing"
+}

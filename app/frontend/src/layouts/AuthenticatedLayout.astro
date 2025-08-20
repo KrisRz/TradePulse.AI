@@ -1,0 +1,25 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { AuthProvider } from '../contexts/AuthContext';
+import SessionManager from '../components/auth/SessionManager';
+import ProtectedRoute from '../components/auth/ProtectedRoute';
+
+interface Props {
+  title: string;
+  requiredRole?: 'admin' | 'user';
+}
+
+const { title, requiredRole } = Astro.props;
+---
+
+<BaseLayout title={title}>
+  <div id="auth-wrapper">
+    <AuthProvider client:only="preact">
+      <SessionManager>
+        <ProtectedRoute requiredRole={requiredRole}>
+          <slot />
+        </ProtectedRoute>
+      </SessionManager>
+    </AuthProvider>
+  </div>
+</BaseLayout> 

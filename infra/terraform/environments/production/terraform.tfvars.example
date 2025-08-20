@@ -1,0 +1,325 @@
+# TradePulse.AI - Production Environment Configuration Template
+# Copy this file to terraform.tfvars and customize the values
+
+# ============================================================================
+# BASIC CONFIGURATION
+# ============================================================================
+
+aws_region   = "eu-west-2"
+environment  = "production"
+project_name = "tradepulse"
+
+# Optional: Custom domain configuration
+# domain_name = "tradepulse.ai"
+
+# ============================================================================
+# SECURITY CONFIGURATION - CRITICAL: REPLACE THESE VALUES!
+# ============================================================================
+
+# IMPORTANT: Replace with your actual Binance API credentials
+# Get these from https://www.binance.com/en/my/settings/api-management
+binance_api_key    = "YOUR_BINANCE_API_KEY_HERE"
+binance_secret_key = "YOUR_BINANCE_SECRET_KEY_HERE"
+
+# IMPORTANT: Generate a secure random JWT secret (at least 32 characters)
+# You can generate one using: openssl rand -base64 32
+jwt_secret_key = "ultra-secure-jwt-secret-key-change-me-to-random-string-2024"
+
+# ============================================================================
+# NOTIFICATION CONFIGURATION
+# ============================================================================
+
+# Email addresses for different types of alerts
+alert_email_addresses = [
+  "admin@yourcompany.com",
+  "devops@yourcompany.com"
+]
+
+trading_alert_email_addresses = [
+  "trading@yourcompany.com",
+  "alerts@yourcompany.com"
+]
+
+critical_alert_email_addresses = [
+  "critical@yourcompany.com",
+  "oncall@yourcompany.com"
+]
+
+cost_alert_email = "billing@yourcompany.com"
+
+# Optional: Discord webhook for notifications
+# discord_webhook_url = "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL"
+
+# Optional: Telegram bot token for notifications
+# telegram_bot_token = "YOUR_TELEGRAM_BOT_TOKEN"
+
+# ============================================================================
+# NETWORKING CONFIGURATION
+# ============================================================================
+
+vpc_cidr = "10.0.0.0/16"
+
+# Network access control - restrict as needed for security
+# For production, consider restricting to specific IP ranges
+allowed_cidr_blocks = ["0.0.0.0/0"]  # WARNING: This allows access from anywhere
+
+# Enable VPC for enhanced security
+enable_vpc           = true
+enable_vpc_flow_logs = true
+
+# Existing VPC adoption (set by you)
+vpc_adoption = "existing"
+vpc_id = "vpc-0316b2ae89ee27eb4"
+private_subnet_ids = [
+  "subnet-03f2e2e24d985fed1",
+  "subnet-0125e16947bc65e67",
+  "subnet-00d8b361dc64fb920"
+]
+lambda_security_group_id = "sg-02b03b717a1bfd994"
+
+# ============================================================================
+# COMPUTE CONFIGURATION
+# ============================================================================
+
+# Lambda function memory allocation (affects performance and cost)
+lambda_memory_size     = 1024  # Standard functions (128-10240 MB)
+ai_lambda_memory_size  = 2048  # AI/ML functions need more memory
+ml_lambda_memory_size  = 4096  # ML training functions need the most
+
+lambda_timeout          = 30   # Function timeout in seconds (3-900)
+max_lambda_concurrency  = 100  # Max concurrent executions
+
+# API Gateway throttling settings
+api_throttle_burst = 2000  # Burst capacity
+api_throttle_rate  = 1000  # Steady-state rate (requests/second)
+api_rate_limit     = 2000  # Rate limit per IP
+
+# ============================================================================
+# DATABASE CONFIGURATION
+# ============================================================================
+
+# DynamoDB settings
+enable_global_tables           = false  # Set to true for multi-region setup
+enable_point_in_time_recovery = true   # Recommended for production
+
+# ============================================================================
+# SECURITY SETTINGS
+# ============================================================================
+
+enable_waf = true  # Enable Web Application Firewall (recommended)
+
+# CORS settings for web applications
+cors_allowed_origins = [
+  "https://yourfrontend.com",
+  "https://tradepulse.ai"
+  # Add your actual frontend domains here
+]
+
+# ============================================================================
+# MONITORING AND LOGGING
+# ============================================================================
+
+log_retention_days       = 30     # CloudWatch log retention (1-3653 days)
+log_level               = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+enable_detailed_monitoring = true
+enable_xray_tracing     = true
+
+# Cost monitoring
+monthly_cost_alert_threshold = 500  # Alert when monthly cost exceeds this (USD)
+
+# ============================================================================
+# TRADING CONFIGURATION
+# ============================================================================
+
+# Cryptocurrency symbols to monitor and trade
+supported_symbols = [
+  "BTCUSDT",
+  "ETHUSDT", 
+  "ADAUSDT",
+  "SOLUSDT",
+  "DOTUSDT",
+  "LINKUSDT",
+  "AVAXUSDT",
+  "BNBUSDT",
+  "XRPUSDT",
+  "MATICUSDT"
+]
+
+# Time intervals for market analysis
+trading_intervals = ["1m", "5m", "15m", "1h", "4h", "1d"]
+
+# TRADING SAFETY SETTINGS - MODIFY WITH EXTREME CAUTION!
+enable_live_trading     = false  # IMPORTANT: Set to true only when ready to trade real money
+max_position_size_usd   = 1000   # Maximum position size per trade (USD)
+risk_management_enabled = true   # NEVER set to false - keeps your trading safe
+
+# ============================================================================
+# CONTENT DELIVERY
+# ============================================================================
+
+# CloudFront price class (affects global distribution and cost)
+# PriceClass_100: US, Canada, Europe, Asia
+# PriceClass_200: All locations except South America, Australia, New Zealand  
+# PriceClass_All: All edge locations globally
+cloudfront_price_class = "PriceClass_100"
+
+# ============================================================================
+# BACKUP AND DISASTER RECOVERY
+# ============================================================================
+
+backup_retention_days         = 30    # How long to keep backups (1-365 days)
+enable_cross_region_backup    = true  # Backup to another region for disaster recovery
+
+# ============================================================================
+# FEATURE FLAGS
+# ============================================================================
+
+enable_advanced_analytics      = true   # Advanced analytics and reporting
+enable_ml_continuous_learning  = true   # Continuous model improvement
+enable_social_trading          = false  # Social features (disabled by default)
+enable_portfolio_showcase      = true   # Portfolio showcase for marketing
+enable_api_versioning          = true   # API versioning support
+
+# Development features (should be false in production)
+enable_debug_mode              = false  # Debug logging and features
+enable_performance_testing     = false  # Performance testing endpoints
+
+# ============================================================================
+# COMPLIANCE AND GOVERNANCE
+# ============================================================================
+
+enable_compliance_logging     = true        # Audit logging for compliance
+data_residency_region         = "eu-west-2" # Primary region for data residency
+enable_encryption_at_rest     = true        # Encrypt all stored data
+enable_encryption_in_transit  = true        # Encrypt all data transmission
+
+# ============================================================================
+# EVENTBRIDGE SCHEDULES
+# ============================================================================
+
+eventbridge_schedules = {
+  # Collect market data every minute during trading hours
+  data_collection = {
+    description         = "Collect real-time market data"
+    schedule_expression = "rate(1 minute)"
+    target_function    = "data_collector"
+    input              = jsonencode({
+      action = "collect_market_data"
+      symbols = ["BTCUSDT", "ETHUSDT", "ADAUSDT"]
+    })
+  }
+  
+  # System health check every 5 minutes
+  health_check = {
+    description         = "Monitor system health and performance"
+    schedule_expression = "rate(5 minutes)"
+    target_function    = "health_monitor"
+    input              = jsonencode({
+      action = "comprehensive_health_check"
+    })
+  }
+  
+  # Update ML models once daily
+  model_update = {
+    description         = "Update and retrain ML models"
+    schedule_expression = "rate(24 hours)"
+    target_function    = "ml_model_updater"
+    input              = jsonencode({
+      action = "daily_model_update"
+      full_retrain = false
+    })
+  }
+  
+  # Monitor trading positions every 30 seconds
+  position_monitoring = {
+    description         = "Monitor active trading positions"
+    schedule_expression = "rate(30 seconds)"
+    target_function    = "position_monitor"
+    input              = jsonencode({
+      action = "monitor_all_positions"
+      check_stop_loss = true
+      check_take_profit = true
+    })
+  }
+  
+  # Generate performance reports weekly
+  weekly_report = {
+    description         = "Generate weekly performance and analytics report"
+    schedule_expression = "cron(0 9 ? * MON *)"  # Every Monday at 9 AM UTC
+    target_function    = "ai_signals"
+    input              = jsonencode({
+      action = "generate_weekly_report"
+      include_predictions = true
+    })
+  }
+}
+
+# ============================================================================
+# STORAGE LIFECYCLE MANAGEMENT
+# ============================================================================
+
+s3_lifecycle_rules = [
+  {
+    id                       = "standard_to_ia"
+    status                   = "Enabled"
+    transition_days          = 30
+    transition_storage_class = "STANDARD_IA"
+    expiration_days          = null
+  },
+  {
+    id                       = "ia_to_glacier"
+    status                   = "Enabled"
+    transition_days          = 90
+    transition_storage_class = "GLACIER"
+    expiration_days          = null
+  },
+  {
+    id                       = "glacier_to_deep_archive"
+    status                   = "Enabled"
+    transition_days          = 180
+    transition_storage_class = "DEEP_ARCHIVE"
+    expiration_days          = null
+  },
+  {
+    id                       = "delete_old_versions"
+    status                   = "Enabled"
+    transition_days          = 1
+    transition_storage_class = "STANDARD_IA"
+    expiration_days          = 365
+  }
+]
+
+# ============================================================================
+# ADDITIONAL RESOURCE TAGS
+# ============================================================================
+
+additional_tags = {
+  "Owner"                = "YourCompany-TradingTeam"
+  "Project"              = "AI-Trading-Platform"
+  "BusinessUnit"         = "Trading-Technology"
+  "CostCenter"           = "trading-platform"
+  "DataClassification"   = "confidential"
+  "BackupRequired"       = "true"
+  "MonitoringLevel"      = "comprehensive"
+  "ComplianceRequired"   = "true"
+  "DeploymentMethod"     = "terraform"
+  "MaintenanceWindow"    = "sunday-02:00-04:00-utc"
+  "DisasterRecovery"     = "enabled"
+  "SecurityLevel"        = "high"
+}
+
+# ============================================================================
+# NOTES FOR PRODUCTION DEPLOYMENT
+# ============================================================================
+
+# Before deploying to production:
+# 1. Replace ALL placeholder values above with real configuration
+# 2. Store sensitive values (API keys, secrets) securely
+# 3. Review and restrict network access (allowed_cidr_blocks)
+# 4. Test in staging environment first
+# 5. Set up monitoring alerts and test them
+# 6. Ensure backup and disaster recovery procedures are in place
+# 7. Review compliance and security settings
+# 8. Set enable_live_trading = false initially, enable only when ready
+# 9. Consider using terraform workspaces for environment separation
+# 10. Set up proper CI/CD pipeline with approval gates for production

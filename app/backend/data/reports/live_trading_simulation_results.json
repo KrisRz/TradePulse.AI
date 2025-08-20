@@ -1,0 +1,61 @@
+{
+  "simulation_config": {
+    "initial_balance": 1000.0,
+    "max_positions": 5,
+    "position_size_percentage": 0.1,
+    "stop_loss_percentage": 0.02,
+    "take_profit_percentage": 0.03,
+    "max_daily_loss": 0.05,
+    "simulation_duration_hours": 0.01,
+    "signal_frequency_seconds": 10,
+    "enable_slippage": true,
+    "slippage_percentage": 0.001,
+    "enable_fees": true,
+    "trading_fee_percentage": 0.001
+  },
+  "final_metrics": {
+    "start_time": "2025-07-18 18:08:47.252793",
+    "end_time": "2025-07-18 18:13:47.553218",
+    "initial_balance": 1000.0,
+    "current_balance": 999.4999,
+    "total_return": -0.5000999999999749,
+    "total_return_percentage": -0.050009999999997494,
+    "total_trades": 1,
+    "winning_trades": 0,
+    "losing_trades": 1,
+    "win_rate": 0.0,
+    "gross_profit": 0,
+    "gross_loss": 0.3999999999999977,
+    "profit_factor": 0.0,
+    "sharpe_ratio": -3740.054811363844,
+    "max_drawdown": 0.5000999999999749,
+    "max_drawdown_percentage": 0.050009999999997494,
+    "avg_trade_duration": 0.07777800138888889,
+    "largest_win": -0.3999999999999977,
+    "largest_loss": -0.3999999999999977,
+    "avg_win": 0,
+    "avg_loss": -0.3999999999999977,
+    "consecutive_wins": 0,
+    "consecutive_losses": 0
+  },
+  "completed_trades": [
+    {
+      "trade_id": "sim_trade_1752862427",
+      "position_id": "sim_pos_1752862147_0",
+      "symbol": "BTCUSDT",
+      "signal_type": "BUY",
+      "size": 0.0008512877728090002,
+      "entry_price": 117586.55909,
+      "exit_price": 117351.62091,
+      "entry_time": "2025-07-18 18:09:07.552157",
+      "exit_time": "2025-07-18 18:13:47.552974",
+      "pnl": -0.3999999999999977,
+      "pnl_percentage": -0.39960039960039734,
+      "duration": 0.07777800138888889,
+      "exit_reason": "Simulation ended",
+      "confidence": 0.8894298320668217,
+      "trading_costs": 0.19999999999999998
+    }
+  ],
+  "final_timestamp": "2025-07-18T18:13:47.553668"
+}

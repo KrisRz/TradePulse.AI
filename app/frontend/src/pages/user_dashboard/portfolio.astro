@@ -1,0 +1,214 @@
+---
+export const prerender = false;
+
+// Check if user is authenticated and NOT admin
+const isUser = true; // In real app, check auth from cookies/session
+const isAdmin = false; // In real app, check if user has admin role
+
+if (!isUser) {
+  return Astro.redirect('/auth/login');
+}
+
+// Redirect admin users to admin dashboard
+if (isAdmin) {
+  return Astro.redirect('/admin/dashboard');
+}
+---
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portfolio View - TradePulse.AI</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eff6ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Dark mode script -->
+  <script>
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  </script>
+</head>
+
+<body class="bg-gray-50 dark:bg-gray-900 min-h-screen">
+  <!-- Navigation Header -->
+  <nav class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center space-x-4">
+          <a href="/user_dashboard" class="text-blue-600 hover:text-blue-800 dark:text-blue-400">
+            ← Back to Dashboard
+          </a>
+          <div class="flex-shrink-0">
+            <h1 class="text-xl font-bold text-gray-900 dark:text-white">
+              💰 Portfolio View
+            </h1>
+          </div>
+        </div>
+        
+        <div class="flex items-center space-x-4">
+          <div class="text-sm text-gray-600 dark:text-gray-400">
+            👤 trader1@example.com
+          </div>
+          <a href="/auth/login" class="text-sm text-red-600 hover:text-red-800 dark:text-red-400">
+            Logout
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    
+    <!-- Portfolio Overview -->
+    <div class="px-4 py-6 sm:px-0">
+      <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+            Your Portfolio Performance
+          </h2>
+          
+          <!-- Portfolio Stats -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
+              <div class="text-blue-100 text-sm font-medium">Total Portfolio Value</div>
+              <div class="text-3xl font-bold">$10,000.00</div>
+              <div class="text-blue-100 text-sm mt-1">Virtual Trading Account</div>
+            </div>
+            
+            <div class="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-lg text-white">
+              <div class="text-green-100 text-sm font-medium">Total P&L</div>
+              <div class="text-3xl font-bold">+$1,250.75</div>
+              <div class="text-green-100 text-sm mt-1">+12.51% Return</div>
+            </div>
+            
+            <div class="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-lg text-white">
+              <div class="text-purple-100 text-sm font-medium">Win Rate</div>
+              <div class="text-3xl font-bold">72.3%</div>
+              <div class="text-purple-100 text-sm mt-1">AI-Assisted Trading</div>
+            </div>
+          </div>
+
+          <!-- Portfolio Breakdown -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Asset Allocation -->
+            <div class="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Asset Allocation</h3>
+              <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center">
+                    <div class="w-4 h-4 bg-orange-500 rounded mr-3"></div>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">Bitcoin (BTC)</span>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-semibold text-gray-900 dark:text-white">$7,500.00</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">75%</div>
+                  </div>
+                </div>
+                
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center">
+                    <div class="w-4 h-4 bg-blue-500 rounded mr-3"></div>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">Ethereum (ETH)</span>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-semibold text-gray-900 dark:text-white">$2,000.00</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">20%</div>
+                  </div>
+                </div>
+                
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center">
+                    <div class="w-4 h-4 bg-green-500 rounded mr-3"></div>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">USDT (Cash)</span>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-semibold text-gray-900 dark:text-white">$500.00</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">5%</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent Trades -->
+            <div class="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Trades</h3>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-600">
+                  <div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">BTC/USDT</div>
+                    <div class="text-xs text-green-600 dark:text-green-400">BUY • AI Signal</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-semibold text-green-600 dark:text-green-400">+$125.50</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">2h ago</div>
+                  </div>
+                </div>
+                
+                <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-600">
+                  <div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">ETH/USDT</div>
+                    <div class="text-xs text-blue-600 dark:text-blue-400">SELL • Manual</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-semibold text-green-600 dark:text-green-400">+$89.25</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">1d ago</div>
+                  </div>
+                </div>
+                
+                <div class="flex items-center justify-between py-2">
+                  <div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">BTC/USDT</div>
+                    <div class="text-xs text-green-600 dark:text-green-400">BUY • AI Signal</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-semibold text-red-600 dark:text-red-400">-$45.30</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">2d ago</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Performance Chart Placeholder -->
+          <div class="mt-8">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Portfolio Performance</h3>
+            <div class="bg-gray-100 dark:bg-gray-700 rounded-lg h-64 flex items-center justify-center">
+              <div class="text-center text-gray-500 dark:text-gray-400">
+                <div class="text-4xl mb-2">📈</div>
+                <div class="text-lg font-medium">Performance Chart</div>
+                <div class="text-sm">Real-time portfolio performance visualization</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

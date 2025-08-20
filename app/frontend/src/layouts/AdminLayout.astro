@@ -1,0 +1,341 @@
+---
+import BaseLayout from './BaseLayout.astro';
+
+export interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<BaseLayout title={title}>
+  <div class="admin-container h-screen flex bg-gray-50 dark:bg-gray-900">
+    <!-- Admin Sidebar Navigation -->
+    <aside class="admin-sidebar fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform -translate-x-full lg:translate-x-0 lg:static lg:inset-0 transition-transform duration-300 ease-in-out" id="admin-sidebar">
+      <!-- Sidebar Header -->
+      <div class="sidebar-header flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
+        <h1 class="text-xl font-bold text-gray-900 dark:text-white">
+          <span class="text-blue-600 dark:text-blue-400">Trade</span>Pulse.AI
+        </h1>
+        <button 
+          class="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700"
+          id="sidebar-close"
+          aria-label="Close sidebar"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Admin Navigation -->
+      <nav class="sidebar-nav flex-1 overflow-y-auto px-4 py-6" role="navigation" aria-label="Admin navigation">
+        <ul class="space-y-2">
+          <!-- Virtual Portfolio -->
+          <li>
+            <button 
+              class="nav-item w-full flex items-center px-4 py-3 text-left text-gray-700 dark:text-gray-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-colors active"
+              data-section="portfolio"
+              aria-label="Virtual Portfolio section"
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+              </svg>
+              <span class="font-medium">Virtual Portfolio</span>
+              <span class="ml-auto px-2 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full">+4.07%</span>
+            </button>
+          </li>
+
+          <!-- System Status -->
+          <li>
+            <button 
+              class="nav-item w-full flex items-center px-4 py-3 text-left text-gray-700 dark:text-gray-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              data-section="status"
+              aria-label="System Status section"
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+              </svg>
+              <span class="font-medium">System Status</span>
+              <span class="ml-auto w-2 h-2 bg-green-400 rounded-full" title="System healthy"></span>
+            </button>
+          </li>
+
+          <!-- User Management -->
+          <li>
+            <button 
+              class="nav-item w-full flex items-center px-4 py-3 text-left text-gray-700 dark:text-gray-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              data-section="users"
+              aria-label="User Management section"
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+              </svg>
+              <span class="font-medium">User Management</span>
+              <span class="ml-auto px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">156</span>
+            </button>
+          </li>
+
+          <!-- Real Trading -->
+          <li>
+            <button 
+              class="nav-item w-full flex items-center px-4 py-3 text-left text-gray-700 dark:text-gray-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              data-section="trading"
+              aria-label="Real Trading section"
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+              </svg>
+              <span class="font-medium">Real Trading</span>
+              <span class="ml-auto px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 rounded-full">5</span>
+            </button>
+          </li>
+
+          <!-- AI Models -->
+          <li>
+            <button 
+              class="nav-item w-full flex items-center px-4 py-3 text-left text-gray-700 dark:text-gray-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              data-section="models"
+              aria-label="AI Models section"
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+              </svg>
+              <span class="font-medium">AI Models</span>
+              <span class="ml-auto px-2 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-full">99.83%</span>
+            </button>
+          </li>
+
+          <!-- Notification System -->
+          <li>
+            <button 
+              class="nav-item w-full flex items-center px-4 py-3 text-left text-gray-700 dark:text-gray-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              data-section="notifications"
+              aria-label="Notification System section"
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19H6.5A2.5 2.5 0 014 16.5v-9A2.5 2.5 0 016.5 5h9A2.5 2.5 0 0118 7.5V11"></path>
+              </svg>
+              <span class="font-medium">Notifications</span>
+              <span class="ml-auto w-2 h-2 bg-red-400 rounded-full animate-pulse" title="New alerts"></span>
+            </button>
+          </li>
+
+          <!-- Money Trade (Future) -->
+          <li>
+            <button 
+              class="nav-item w-full flex items-center px-4 py-3 text-left text-gray-500 dark:text-gray-500 rounded-lg opacity-50 cursor-not-allowed"
+              disabled
+              aria-label="Money Trade section (Coming soon)"
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+              </svg>
+              <span class="font-medium">Money Trade</span>
+              <span class="ml-auto px-2 py-1 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full">Soon</span>
+            </button>
+          </li>
+
+          <!-- Analytics -->
+          <li>
+            <button 
+              class="nav-item w-full flex items-center px-4 py-3 text-left text-gray-700 dark:text-gray-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              data-section="analytics"
+              aria-label="Analytics section"
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+              </svg>
+              <span class="font-medium">Analytics</span>
+            </button>
+          </li>
+
+          <!-- System Control -->
+          <li>
+            <button 
+              class="nav-item w-full flex items-center px-4 py-3 text-left text-gray-700 dark:text-gray-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              data-section="settings"
+              aria-label="System Control section"
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              </svg>
+              <span class="font-medium">System Control</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- Admin User Info -->
+      <div class="sidebar-footer border-t border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center">
+          <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+            <span class="text-white text-sm font-medium">KG</span>
+          </div>
+          <div class="ml-3 flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-900 dark:text-white truncate">Kris Grzepka</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Admin</p>
+          </div>
+          <button 
+            class="ml-2 p-1 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            title="Logout"
+            id="admin-logout"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div class="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 lg:hidden hidden" id="sidebar-overlay"></div>
+
+    <!-- Main Content Area -->
+    <div class="main-content flex-1 flex flex-col lg:ml-0">
+      <!-- Mobile Header -->
+      <header class="lg:hidden flex items-center justify-between h-16 px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <button 
+          class="p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700"
+          id="sidebar-open"
+          aria-label="Open sidebar"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+        </button>
+        <h1 class="text-lg font-semibold text-gray-900 dark:text-white">Admin Dashboard</h1>
+        <div class="w-8 h-8"></div> <!-- Spacer -->
+      </header>
+
+      <!-- Content Area -->
+      <main class="content-area flex-1 overflow-hidden bg-gray-50 dark:bg-gray-900">
+        <slot />
+      </main>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .admin-container {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  
+  .nav-item.active {
+    @apply bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400;
+  }
+  
+  .sidebar-nav {
+    scrollbar-width: thin;
+    scrollbar-color: #e5e7eb transparent;
+  }
+  
+  .sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+  }
+  
+  .sidebar-nav::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .sidebar-nav::-webkit-scrollbar-thumb {
+    background-color: #e5e7eb;
+    border-radius: 2px;
+  }
+  
+  .dark .sidebar-nav::-webkit-scrollbar-thumb {
+    background-color: #374151;
+  }
+</style>
+
+<script>
+  // Admin Dashboard JavaScript
+  class AdminDashboard {
+    constructor() {
+      this.currentSection = 'portfolio';
+      this.init();
+    }
+
+    init() {
+      this.setupEventListeners();
+      this.setupMobileSidebar();
+      this.loadSection(this.currentSection);
+    }
+
+    setupEventListeners() {
+      // Navigation items
+      document.querySelectorAll('.nav-item:not([disabled])').forEach(item => {
+        item.addEventListener('click', (e) => {
+          const section = e.currentTarget.dataset.section;
+          if (section) {
+            this.loadSection(section);
+          }
+        });
+      });
+
+      // Logout button
+      document.getElementById('admin-logout')?.addEventListener('click', () => {
+        this.logout();
+      });
+    }
+
+    setupMobileSidebar() {
+      const sidebar = document.getElementById('admin-sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      const openBtn = document.getElementById('sidebar-open');
+      const closeBtn = document.getElementById('sidebar-close');
+
+      openBtn?.addEventListener('click', () => {
+        sidebar?.classList.remove('-translate-x-full');
+        overlay?.classList.remove('hidden');
+      });
+
+      const closeSidebar = () => {
+        sidebar?.classList.add('-translate-x-full');
+        overlay?.classList.add('hidden');
+      };
+
+      closeBtn?.addEventListener('click', closeSidebar);
+      overlay?.addEventListener('click', closeSidebar);
+    }
+
+    loadSection(section) {
+      // Update active state
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+      });
+      
+      const activeItem = document.querySelector(`[data-section="${section}"]`);
+      activeItem?.classList.add('active');
+
+      this.currentSection = section;
+      
+      // Dispatch custom event for section change
+      window.dispatchEvent(new CustomEvent('admin-section-change', {
+        detail: { section }
+      }));
+
+      console.log(`🎯 Loading admin section: ${section}`);
+    }
+
+    logout() {
+      if (confirm('Are you sure you want to logout?')) {
+        // Clear auth token
+        localStorage.removeItem('auth-token');
+        sessionStorage.removeItem('auth-token');
+        
+        // Redirect to login
+        window.location.href = '/auth/login';
+      }
+    }
+  }
+
+  // Initialize admin dashboard
+  document.addEventListener('DOMContentLoaded', () => {
+    window.adminDashboard = new AdminDashboard();
+  });
+</script> 

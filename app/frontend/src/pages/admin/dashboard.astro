@@ -1,0 +1,337 @@
+---
+export const prerender = false;
+
+// Import admin components with new clean structure - testing systematically
+import SystemStatusDashboard from '../../components/admin/system/SystemStatusDashboard.tsx';
+import VirtualPortfolioAdmin from '../../components/admin/portfolio/VirtualPortfolioAdmin.tsx';
+import SystemControlAdmin from '../../components/admin/system/SystemControlAdmin.tsx';
+import CommunicationCenter from '../../components/admin/communication/CommunicationCenter.tsx';
+// Temporarily disabled for testing:
+// import SignalLogsAdmin from '../../components/admin/signals/SignalLogsAdmin.tsx';
+// import UserManagementAdmin from '../../components/admin/users/UserManagementAdmin.tsx';
+// import RealTradingAdmin from '../../components/admin/portfolio/trading/RealTradingAdmin.tsx';
+// import NotificationSystemAdmin from '../../components/admin/notifications/NotificationSystemAdmin.tsx';
+import AnalyticsAdmin from '../../components/admin/analytics/AnalyticsAdmin.tsx';
+
+
+// Check if user is admin
+const isAdmin = true; // In real app, check auth from cookies/session
+
+if (!isAdmin) {
+  return Astro.redirect('/auth/login');
+}
+---
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard - TradePulse.AI</title>
+  
+  <!-- Tailwind CSS -->
+  <link rel="stylesheet" href="/src/styles/globals.css" />
+
+  <!-- Custom Admin Dashboard Styles -->
+  <style>
+    /* Custom scrollbar */
+    .admin-section::-webkit-scrollbar {
+      width: 8px;
+    }
+    .admin-section::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    .admin-section::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .admin-section::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    .dark .admin-section::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .dark .admin-section::-webkit-scrollbar-thumb {
+      background: #475569;
+    }
+    .dark .admin-section::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+
+    /* Enhanced animations and transitions */
+    .admin-section {
+      transition: all 0.3s ease-in-out;
+      max-height: calc(100vh - 200px);
+      overflow-y: auto;
+    }
+    
+    .section-tab {
+      position: relative;
+      transition: all 0.2s ease-in-out;
+    }
+    
+    .section-tab:hover {
+      transform: translateY(-1px);
+    }
+    
+    .metric-card {
+      transition: all 0.2s ease-in-out;
+    }
+    
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Professional gradients */
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .gradient-success {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+
+    /* Loading animation */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .loading-pulse {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Header enhancements */
+    .header-gradient {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    /* Status indicators */
+    .status-online {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+    
+    .status-warning {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+    
+    .status-error {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    /* Button enhancements */
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      transition: all 0.2s ease-in-out;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+    }
+
+    /* Card animations */
+    .card-enter {
+      animation: fadeInUp 0.5s ease-out;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+
+  <!-- Dark mode script -->
+  <script is:inline>
+    // Apply theme immediately to prevent FOUC
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  </script>
+</head>
+
+<body class="bg-gray-50 dark:bg-gray-900">
+  <div id="admin-dashboard" class="min-h-screen">
+    <!-- Header -->
+    <header class="bg-white dark:bg-gray-800 shadow border-b border-gray-200 dark:border-gray-700">
+      <div class="px-6 py-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-4">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+              🚀 TradePulse.AI Admin Dashboard
+            </h1>
+            <span class="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full text-sm font-medium">
+              Production Ready
+            </span>
+          </div>
+          <div class="flex items-center space-x-4">
+            <button id="dark-mode-toggle" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
+              <span class="dark:hidden">🌙</span>
+              <span class="hidden dark:inline">☀️</span>
+            </button>
+            <span class="text-sm text-gray-600 dark:text-gray-400">
+              Admin Panel
+            </span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <div class="px-6">
+        <div class="flex space-x-8">
+          <button data-section="virtual-portfolio" class="section-tab py-4 px-2 border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 font-medium text-sm transition-colors">
+            💰 Virtual Portfolio
+          </button>
+          <button data-section="system-status" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
+            🖥️ System Status
+          </button>
+          <button data-section="user-management" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
+            👥 User Management
+          </button>
+          <button data-section="trading-monitor" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
+            📈 Real Trading
+          </button>
+          <button data-section="notifications" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
+            🔔 Notifications
+          </button>
+          <button data-section="analytics" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
+            📈 Analytics
+          </button>
+          <button data-section="system-control" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
+            ⚙️ System Control
+          </button>
+          <button data-section="communication" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
+            💬 Communication
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="px-6 py-8">
+      <!-- Virtual Portfolio Section -->
+      <div id="virtual-portfolio-section" class="admin-section">
+        <VirtualPortfolioAdmin client:load />
+      </div>
+
+      <!-- System Status Section -->
+      <div id="system-status-section" class="admin-section hidden">
+        <SystemStatusDashboard client:load />
+      </div>
+
+      <!-- User Management Section -->
+      <!-- <div id="user-management-section" class="admin-section hidden">
+        <UserManagementAdmin client:load />
+      </div> -->
+
+      <!-- Real Trading Section -->
+      <!-- <div id="trading-monitor-section" class="admin-section hidden">
+        <RealTradingAdmin client:load />
+      </div> -->
+
+      <!-- Notifications Section -->
+      <!-- <div id="notifications-section" class="admin-section hidden">
+        <NotificationSystemAdmin client:load />
+      </div> -->
+
+      <!-- Analytics Section -->
+      <div id="analytics-section" class="admin-section hidden">
+        <AnalyticsAdmin client:load />
+      </div>
+
+      <!-- System Control Section -->
+      <div id="system-control-section" class="admin-section hidden">
+        <SystemControlAdmin client:load />
+      </div>
+
+      <!-- Communication Center Section -->
+      <div id="communication-section" class="admin-section hidden">
+        <CommunicationCenter client:load />
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+      <div class="px-6 py-4">
+        <div class="flex items-center justify-between">
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            TradePulse.AI © 2024 - Professional Trading Platform
+          </p>
+          <div class="flex items-center space-x-4">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+              ✅ All Systems Operational
+            </span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- JavaScript for tab functionality -->
+  <script>
+    console.log('🚀 Admin Dashboard JavaScript loaded');
+    
+    // Dark mode toggle
+    document.getElementById('dark-mode-toggle')?.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      console.log('🌙 Dark mode toggled:', localStorage.theme);
+    });
+
+    // Tab functionality
+    const tabs = document.querySelectorAll('.section-tab');
+    const sections = document.querySelectorAll('.admin-section');
+    
+    console.log('📋 Found tabs:', tabs.length, 'sections:', sections.length);
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => {
+        const sectionName = tab.getAttribute('data-section');
+        console.log(`🔄 Switching to tab: ${sectionName}`);
+        
+        // Update tab styles
+        tabs.forEach(t => {
+          t.classList.remove('border-blue-600', 'text-blue-600', 'dark:text-blue-400', 'dark:border-blue-400');
+          t.classList.add('border-transparent', 'text-gray-600', 'dark:text-gray-400');
+        });
+        
+        tab.classList.remove('border-transparent', 'text-gray-600', 'dark:text-gray-400');
+        tab.classList.add('border-blue-600', 'text-blue-600', 'dark:text-blue-400', 'dark:border-blue-400');
+        
+        // Show/hide sections
+        sections.forEach(s => s.classList.add('hidden'));
+        const targetSection = document.getElementById(`${sectionName}-section`);
+        if (targetSection) {
+          targetSection.classList.remove('hidden');
+          console.log(`✅ Switched to section: ${sectionName}`);
+        } else {
+          console.error(`❌ Section not found: ${sectionName}-section`);
+        }
+      });
+    });
+    
+    // Log component loading status
+    setTimeout(() => {
+      console.log('🔍 Component loading status check...');
+      const virtualPortfolio = document.querySelector('#virtual-portfolio-section');
+      if (virtualPortfolio) {
+        console.log('📊 Virtual Portfolio section found');
+        const loadingText = virtualPortfolio.textContent?.includes('Loading');
+        console.log('⏳ Still loading?', loadingText);
+      }
+    }, 2000);
+  </script>
+</body>
+</html> 

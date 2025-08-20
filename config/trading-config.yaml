@@ -1,0 +1,122 @@
+# TradePulse.AI - Trading Configuration
+# Core trading parameters for AI system
+# These are the only parameters that make sense to configure for trading behavior
+
+version: "1.0.0"
+config_version: "1.0.0"
+
+# ============================================================================
+# SIGNAL PROCESSING CONFIGURATION
+# ============================================================================
+signal_processing:
+  # Core timing - matches hardcoded values in main.py
+  signal_interval_seconds: 180          # 3 minutes for aggressive day trading
+  ai_processing_timeout_seconds: 60.0   # AI model processing timeout
+  connection_timeout_seconds: 5.0       # HTTP connection timeout
+  
+  # Error handling and recovery
+  max_consecutive_errors: 5             # Max errors before recovery mode
+  retry_sleep_seconds: 20               # Sleep between retries
+  recovery_mode_multiplier: 1.5         # Interval multiplier in recovery
+  max_retry_interval_seconds: 600       # Maximum retry interval (10 min)
+  
+  # Performance targets
+  signals_per_hour_expected: 20         # Expected signals per hour (60/3)
+  target_move_usd: 500.0               # Target Bitcoin move size ($500+)
+
+# ============================================================================
+# TRADING ENGINE CONFIGURATION
+# ============================================================================
+trading_engine:
+  # Entry thresholds (optimized for Bitcoin trading)
+  min_confidence_threshold: 0.45       # Minimum AI confidence (0.0-1.0)
+  consensus_threshold: 0.35            # Minimum consensus between models (0.0-1.0)
+  
+  # Position sizing (risk management)
+  max_position_size_percentage: 20.0   # 20% maximum position size
+  min_position_size_percentage: 3.0    # 3% minimum position size
+  
+  # Risk management (automatic stops)
+  stop_loss_percentage: 2.0            # 2% stop loss
+  take_profit_percentage: 3.0          # 3% take profit
+  max_hold_time_hours: 24              # 24 hour maximum hold time
+  
+  # Trading controls
+  max_daily_positions: 20              # Maximum positions per day
+  micro_swing_threshold: 0.002         # Micro swing detection (0.2%)
+  
+  # AI Model weights
+  pattern_weight: 0.3                  # 30% weight for pattern analysis
+  pattern_min_confidence: 0.25         # Minimum pattern confidence
+  pattern_analysis_enabled: false      # Disabled for stability
+
+# ============================================================================
+# RISK MANAGEMENT
+# ============================================================================
+risk_management:
+  # Portfolio limits
+  max_total_exposure: 0.8              # Max 80% of portfolio exposed
+  max_correlation_exposure: 0.4        # Max 40% in correlated assets
+  
+  # Position limits
+  max_single_position: 0.2             # Max 20% per position
+  min_position_value: 100.0            # Minimum $100 position
+  
+  # Drawdown controls
+  max_daily_drawdown: 0.05             # 5% daily drawdown limit
+  max_weekly_drawdown: 0.15            # 15% weekly drawdown limit
+  
+  # Emergency stops
+  emergency_stop_enabled: true         # Enable emergency position closure
+  emergency_stop_threshold: 0.25       # 25% portfolio loss triggers emergency
+
+# ============================================================================
+# PERFORMANCE MONITORING
+# ============================================================================
+performance:
+  # Metrics tracking
+  track_signal_accuracy: true          # Track signal prediction accuracy
+  track_trade_performance: true        # Track individual trade performance
+  track_model_performance: true        # Track AI model performance
+  
+  # Performance targets
+  target_win_rate: 0.60               # Target 60% win rate
+  target_profit_factor: 1.5           # Target 1.5 profit factor
+  target_sharpe_ratio: 1.2            # Target Sharpe ratio
+  
+  # Optimization
+  enable_performance_optimization: true   # Auto-adjust parameters based on performance
+  optimization_interval_hours: 168       # Weekly optimization cycle
+  min_trades_for_optimization: 50        # Minimum trades before optimization
+
+# ============================================================================
+# ENVIRONMENT OVERRIDES
+# ============================================================================
+# These can be overridden by environment variables:
+# - For development: Lower thresholds, smaller positions, more logging
+# - For production: Higher thresholds, larger positions, optimized performance
+# - For testing: Very low thresholds, tiny positions, fast execution
+
+environments:
+  development:
+    signal_processing:
+      signal_interval_seconds: 60       # 1 minute for faster testing
+    trading_engine:
+      min_confidence_threshold: 0.35   # Lower threshold for more signals
+      max_position_size_percentage: 5.0  # Smaller positions for safety
+      max_daily_positions: 5           # Fewer positions for testing
+    risk_management:
+      max_single_position: 0.05        # Max 5% per position in dev
+      min_position_value: 10.0         # $10 minimum for testing
+
+  testing:
+    signal_processing:
+      signal_interval_seconds: 10      # 10 seconds for unit tests
+      ai_processing_timeout_seconds: 5.0
+    trading_engine:
+      min_confidence_threshold: 0.20   # Very low threshold for testing
+      max_position_size_percentage: 1.0  # 1% maximum in tests
+      max_daily_positions: 2           # Very few positions for tests
+    risk_management:
+      max_single_position: 0.01        # 1% max per position
+      min_position_value: 1.0          # $1 minimum for testing

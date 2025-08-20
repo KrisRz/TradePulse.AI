@@ -1,0 +1,7 @@
+# Assets folder - Processed images that need build-time optimization
+# Images that need automatic optimization, format generation, responsive variants
+
+# Examples:
+# hero-background.jpg (will be optimized)
+# component-images/ (imported in components)
+# responsive-images/ (multiple sizes generated) 
