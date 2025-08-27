@@ -97,6 +97,11 @@ class ProfessionalPosition:
 	def position_value(self) -> Decimal:
 		"""Current position value"""
 		return self.current_price * self.size
+		
+	@property
+	def current_value(self) -> Decimal:
+		"""Current position value - alias for position_value (required by risk manager)"""
+		return self.position_value
 	
 	@property
 	def risk_amount(self) -> Decimal:
@@ -339,6 +344,31 @@ class ProfessionalPortfolio:
 				ai_confidence=position.ai_confidence
 			)
 			
+			# PHASE 4.3: Track trade exit for performance learning
+			try:
+				from app.backend.services.trading_performance_tracker import get_trading_performance_tracker
+				performance_tracker = await get_trading_performance_tracker()
+				
+				# Create trade ID from position for tracking
+				trade_id = f"trade_{position_id.split('_')[-1]}_{position.symbol}" if '_' in position_id else f"trade_{position_id}_{position.symbol}"
+				
+				exit_data = {
+					"exit_price": float(position.exit_price),
+					"reason": reason,
+					"confidence": 1.0  # High confidence for completed exit
+				}
+				
+				exit_analysis = {
+					"exit_reason": reason,
+					"pnl": float(realized_pnl),
+					"duration_minutes": (position.exit_time - position.entry_time).total_seconds() / 60
+				}
+				
+				await performance_tracker.track_trade_exit(trade_id, exit_data, exit_analysis)
+				
+			except Exception as e:
+				logger.warning(f"Performance tracking failed for position {position_id}: {e}")
+			
 			return realized_pnl
 			
 		except Exception as e:
@@ -528,12 +558,51 @@ class ProfessionalPortfolio:
 				"risk_score": float(metrics.risk_score),
 				"consecutive_losses": self.consecutive_losses,
 				"daily_trades": self.daily_trades,
-				"max_daily_trades": self.max_daily_trades
+				"max_daily_trades": self.max_daily_trades,
+				"daily_pnl_percentage": self.get_daily_pnl_percentage()
 			},
 			"open_positions": len(self.positions),
 			"timestamp": metrics.timestamp.isoformat(),
 			"status": "active"
 		}
+		
+	@property
+	def total_value(self) -> Decimal:
+		"""Total portfolio value - REQUIRED by BRAIN controller"""
+		try:
+			position_value = sum(
+				pos.current_value for pos in self.positions.values() 
+				if pos.status == PositionStatus.OPEN
+			)
+			return self.cash_balance + position_value
+		except Exception as e:
+			logger.error(f"Total value calculation failed: {e}")
+			return self.cash_balance
+		
+	def get_daily_pnl(self) -> Decimal:
+		"""Get daily P&L amount - REQUIRED by BRAIN controller"""
+		try:
+			current_value = self.total_value
+			daily_pnl = current_value - self.daily_starting_balance
+			return daily_pnl
+		except Exception as e:
+			logger.error(f"Daily P&L calculation failed: {e}")
+			return Decimal('0.0')
+			
+	def get_daily_pnl_percentage(self) -> float:
+		"""Get daily P&L as percentage of starting balance - REQUIRED by emergency controls"""
+		try:
+			current_value = float(self.cash_balance) + sum(
+				float(pos.current_value) for pos in self.positions.values() 
+				if pos.status == PositionStatus.OPEN
+			)
+			
+			daily_pnl_pct = (current_value - float(self.daily_starting_balance)) / float(self.daily_starting_balance)
+			return daily_pnl_pct
+			
+		except Exception as e:
+			logger.error(f"Daily P&L calculation failed: {e}")
+			return 0.0
 
 # Global portfolio management
 _professional_portfolios: Dict[str, ProfessionalPortfolio] = {}

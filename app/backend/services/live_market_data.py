@@ -44,50 +44,94 @@ class LiveMarketDataService:
 		"""Pre-populate cache with recent DB data for LSTM performance"""
 		try:
 			from app.backend.core.database import DynamoDBClient
+			from app.backend.core.config import get_settings
 			
 			logger.info("🔄 Pre-populating cache from DB for LSTM...")
 			
-			# Get recent candles from DB (last 200 for LSTM)
-			db_client = DynamoDBClient()
-			candles = db_client.scan_table('tradepulse-live_candles-production')
+			# Use correct table name based on environment
+			settings = get_settings()
+			if settings.is_development:
+				table_name = 'live_candles'
+			else:
+				table_name = f'tradepulse-live_candles-{settings.ENVIRONMENT}'
+			
+			# Get recent candles from DB
+			db_client = DynamoDBClient(local_development=settings.is_development)
+			candles = db_client.scan_table(table_name)
 			
 			if not candles:
-				logger.warning("No candles in DB - cache will populate from live stream")
+				logger.warning(f"No candles in DB table '{table_name}' - cache will populate from live stream")
 				return
 				
-			# Filter and sort recent 1m candles
-			btc_1m_candles = [
-				c for c in candles 
-				if c.get('symbol') == 'BTCUSDT' and c.get('interval') == '1m'
-			]
+			logger.info(f"📊 Found {len(candles)} total candles in DB")
+			
+			# Filter and sort recent 1m candles (handle both data formats)
+			btc_1m_candles = []
+			for c in candles:
+				# Check if it's BTCUSDT and has interval (new format) or is assumed 1m (old format)
+				if c.get('symbol') == 'BTCUSDT':
+					# New format has explicit interval
+					if c.get('interval') == '1m':
+						btc_1m_candles.append(c)
+					# Old format without interval - assume it's 1m if timestamp looks right
+					elif not c.get('interval') and c.get('timestamp'):
+						btc_1m_candles.append(c)
+			
+			if not btc_1m_candles:
+				logger.warning("No BTCUSDT 1m candles found in DB")
+				return
 			
 			# Sort by timestamp (most recent last)
-			btc_1m_candles.sort(key=lambda x: x.get('timestamp', ''))
+			btc_1m_candles.sort(key=lambda x: int(x.get('timestamp', 0)))
 			
-			# Take last 800 candles for enterprise LSTM (3x more data)
-			recent_candles = btc_1m_candles[-800:]
+			# Take last 800 candles for enterprise LSTM (target: 800+)
+			recent_candles = btc_1m_candles[-800:] if len(btc_1m_candles) > 800 else btc_1m_candles
 			
 			if recent_candles:
 				# Initialize cache
 				if '1m' not in self.candle_history:
 					self.candle_history['1m'] = deque(maxlen=self.max_history)
 				
-				# Convert DB format to cache format
+				# Convert DB format to cache format (handle both formats)
+				loaded_count = 0
 				for db_candle in recent_candles:
-					cache_candle = {
-						"symbol": db_candle.get("symbol", "BTCUSDT"),
-						"interval": "1m", 
-						"open": float(db_candle.get("open", 0)),
-						"high": float(db_candle.get("high", 0)),
-						"low": float(db_candle.get("low", 0)),
-						"close": float(db_candle.get("close", 0)),
-						"volume": float(db_candle.get("volume", 0)),
-						"is_closed": True,
-						"timestamp": db_candle.get("timestamp", "")
-					}
-					self.candle_history['1m'].append(cache_candle)
+					try:
+						# Handle both data formats
+						if 'open' in db_candle:
+							# New format: open, high, low, close
+							open_price = float(db_candle.get("open", 0))
+							high_price = float(db_candle.get("high", 0))
+							low_price = float(db_candle.get("low", 0))
+							close_price = float(db_candle.get("close", 0))
+						else:
+							# Old format: open_price, high_price, low_price, close_price
+							open_price = float(db_candle.get("open_price", 0))
+							high_price = float(db_candle.get("high_price", 0))
+							low_price = float(db_candle.get("low_price", 0))
+							close_price = float(db_candle.get("close_price", 0))
+						
+						cache_candle = {
+							"symbol": db_candle.get("symbol", "BTCUSDT"),
+							"interval": "1m", 
+							"open": open_price,
+							"high": high_price,
+							"low": low_price,
+							"close": close_price,
+							"volume": float(db_candle.get("volume", 0)),
+							"is_closed": True,
+							"timestamp": db_candle.get("timestamp", "")
+						}
+						self.candle_history['1m'].append(cache_candle)
+						loaded_count += 1
+					except Exception as e:
+						logger.warning(f"Skipped malformed candle: {e}")
+						continue
 				
-				logger.info(f"✅ Cache populated: {len(recent_candles)} candles from DB")
+				logger.info(f"✅ Cache populated: {loaded_count} candles from DB (target: 800+)")
+				if loaded_count >= 800:
+					logger.info("🎯 TARGET ACHIEVED: 800+ candles loaded for LSTM models!")
+				else:
+					logger.warning(f"⚠️ Only {loaded_count} candles loaded, target was 800+")
 			else:
 				logger.warning("No recent 1m candles found in DB")
 				

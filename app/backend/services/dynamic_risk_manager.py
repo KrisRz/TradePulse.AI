@@ -660,7 +660,7 @@ class DynamicRiskManager:
             base_size = float(portfolio.cash_balance) * 0.12  # 12% base
             
             # Adjust for signal type
-            if hasattr(signal, 'get') and signal.get("type") == "exploratory":
+            if hasattr(signal, 'signal_type') and signal.signal_type == "exploratory":
                 multiplier = 0.25  # Small probing positions
             elif hasattr(signal, 'confidence') and signal.confidence > 0.8:
                 multiplier = 1.2   # Larger positions for high confidence
@@ -677,6 +677,11 @@ class DynamicRiskManager:
             logger.error(f"Position size calculation failed: {e}")
             # Return conservative fallback
             return float(portfolio.cash_balance) * 0.05  # 5% conservative size
+            
+    async def position_size(self, signal, risk_ctx, portfolio, tick) -> Decimal:
+        """PHASE 1A: Position size calculation - alias for trading loop compatibility"""
+        size_float = await self.calculate_position_size(signal, risk_ctx, portfolio, tick)
+        return Decimal(str(size_float))
             
     async def assess_in_position(self, portfolio, tick):
         """PHASE 1A: In-position risk management - trailing stops, VaR monitoring"""

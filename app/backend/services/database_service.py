@@ -21,6 +21,43 @@ class DatabaseService:
     
     def __init__(self):
         self.client = DynamoDBClient()
+        
+    async def put_item(self, table_name: str, item: Dict[str, Any]) -> bool:
+        """Put item into DynamoDB table - REQUIRED by emergency controls"""
+        try:
+            from decimal import Decimal
+            # Convert float values to Decimal for DynamoDB compatibility
+            converted_item = self._convert_floats_to_decimals(item)
+            
+            success = self.client.put_item(table_name, converted_item)
+            if success:
+                logger.info(f"✅ Item saved to {table_name}")
+                return True
+            else:
+                logger.error(f"❌ Failed to save item to {table_name}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error saving to {table_name}: {e}")
+            return False
+            
+    def _convert_floats_to_decimals(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert float values to Decimal for DynamoDB compatibility"""
+        from decimal import Decimal
+        converted = {}
+        for key, value in item.items():
+            if isinstance(value, float):
+                converted[key] = Decimal(str(value))
+            elif isinstance(value, dict):
+                converted[key] = self._convert_floats_to_decimals(value)
+            elif isinstance(value, list):
+                converted[key] = [
+                    Decimal(str(v)) if isinstance(v, float) else v 
+                    for v in value
+                ]
+            else:
+                converted[key] = value
+        return converted
     
     # ===========================================
     # VIRTUAL PORTFOLIO OPERATIONS

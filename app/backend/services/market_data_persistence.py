@@ -120,16 +120,20 @@ async def write_decisions(entry_decision, exit_decision, risk_assessment, signal
         settings = get_settings()
         client = DynamoDBClient(local_development=settings.is_development)
         
+        # Add day partition key for proper DynamoDB structure
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        
         decision_item = {
+            "day": today,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "symbol": "BTCUSDT",
             "signal_action": signal.action if signal else "none",
-            "signal_confidence": float(signal.confidence) if signal else 0.0,
+            "signal_confidence": Decimal(str(signal.confidence)) if signal else Decimal('0.0'),
             "entry_decision": entry_decision.get('should_enter', False) if entry_decision else False,
             "entry_reason": entry_decision.get('reasoning', 'none') if entry_decision else "none",
             "exit_decision": exit_decision.get('should_exit', False) if exit_decision else False,
             "exit_reason": exit_decision.get('reasoning', 'none') if exit_decision else "none",
-            "risk_score": float(getattr(risk_assessment, 'risk_score', 0.0)) if risk_assessment else 0.0,
+            "risk_score": Decimal(str(getattr(risk_assessment, 'risk_score', 0.0))) if risk_assessment else Decimal('0.0'),
             "risk_block": getattr(risk_assessment, 'block_reason', None) if risk_assessment else None
         }
         

@@ -447,7 +447,9 @@ class EmergencyControlSystem:
                 )
             
             # Check drawdown breaker
-            max_drawdown = portfolio.get_max_drawdown()
+            # Use daily P&L percentage instead of max_drawdown method
+            daily_pnl_pct = portfolio.get_daily_pnl_percentage()
+            max_drawdown = abs(min(daily_pnl_pct, 0.0))  # Convert negative P&L to positive drawdown
             drawdown_config = self.breaker_configs[CircuitBreakerType.DRAWDOWN]
             
             if max_drawdown > drawdown_config.threshold:
@@ -602,7 +604,7 @@ class EmergencyControlSystem:
                 "resolution_timestamp": int(event.resolution_timestamp.timestamp()) if event.resolution_timestamp else None
             }
             
-            self.db_service.put_item("emergency_events", event_data)
+            await self.db_service.put_item("emergency_events", event_data)
             
         except Exception as e:
             logger.error(f"Failed to save emergency event: {e}")
@@ -628,7 +630,9 @@ class EmergencyControlSystem:
                 "last_updated": int(datetime.now(timezone.utc).timestamp())
             }
             
-            self.db_service.put_item("emergency_state", state_data)
+            # Add unique ID for DynamoDB
+            state_data["id"] = "emergency_state_global"
+            await self.db_service.put_item("emergency_state", state_data)
             
         except Exception as e:
             logger.error(f"Failed to update emergency state: {e}")

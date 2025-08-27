@@ -32,6 +32,7 @@ from app.backend.core.runtime_config import runtime_config_store
 from app.backend.services.dynamic_risk_manager import DynamicRiskManager
 from app.backend.services.emergency_controls import EmergencyControlSystem
 from app.backend.services.market_data_persistence import load_recent, write_decisions
+from app.backend.services.trading_performance_tracker import get_trading_performance_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,9 @@ class DayTradingEngine:
         self.risk_manager = None
         self.emergency_system = None
         
+        # PHASE 4.3: Performance tracking and learning
+        self.performance_tracker = None
+        
         # Trading state
         self.is_running = False
         self.analysis_task = None
@@ -111,7 +115,7 @@ class DayTradingEngine:
                 mode=TradingMode.DAY_TRADING,
                 analysis_interval=15,       # 15 seconds (day trading default)
                 position_duration=1800,    # 30 minutes average
-                confidence_threshold=0.65,
+                confidence_threshold=0.25,  # PROFESSIONAL FIX: Lower threshold for active trading
                 max_positions=5,
                 position_size_pct=0.05,    # 5% per position
                 stop_loss_pct=0.015,       # 1.5%
@@ -158,6 +162,11 @@ class DayTradingEngine:
             self.emergency_system = EmergencyControlSystem()
             await self.emergency_system.initialize()
             await self.emergency_system.start_monitoring()
+            
+            # PHASE 4.3: Initialize performance tracking and learning
+            logger.info("📊 Initializing performance tracking system...")
+            self.performance_tracker = await get_trading_performance_tracker()
+            await self.performance_tracker.start_tracking()
             
             # Detect current trading session
             self.current_session = self._detect_current_session()
@@ -434,8 +443,15 @@ class DayTradingEngine:
             
             logger.info(f"🎯 Signal: {signal.action} conf={signal.confidence:.2f} → {adjusted_confidence:.2f} (session={self.current_session.value})")
             
+            # PROFESSIONAL FIX: Lower threshold for exploratory signals
+            effective_threshold = config.confidence_threshold
+            if hasattr(signal, 'signal_type') and signal.signal_type == "exploratory":
+                effective_threshold = 0.20  # PROFESSIONAL FIX: Much lower threshold for exploratory signals
+                
+            logger.info(f"🔍 THRESHOLD CHECK: {adjusted_confidence:.2f} > {effective_threshold:.2f} ? signal_type={getattr(signal, 'signal_type', 'primary')}")
+            
             # Check threshold and action type
-            if adjusted_confidence > config.confidence_threshold and signal.action in ["BUY", "SELL"]:
+            if adjusted_confidence > effective_threshold and signal.action in ["BUY", "SELL"]:
                 
                 # Check position limits
                 active_positions = len(portfolio.get_active_positions())
@@ -485,6 +501,18 @@ class DayTradingEngine:
                     
                     self.positions_opened += 1
                     logger.info(f"✅ POSITION OPENED: {position_id} ({signal.action}) conf={adjusted_confidence:.1%}")
+                    
+                    # PHASE 4.3: Track trade execution for performance learning
+                    if self.performance_tracker:
+                        position_data = {
+                            "symbol": signal.symbol,
+                            "entry_price": tick.get("price", 0),
+                            "position_size": position_size,
+                            "position_id": position_id
+                        }
+                        trade_id = await self.performance_tracker.track_trade_execution(
+                            position_data, entry_decision, signal
+                        )
                     
                     # (G) In-position risk management
                     if self.risk_manager:

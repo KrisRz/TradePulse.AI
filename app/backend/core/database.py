@@ -24,22 +24,25 @@ class DynamoDBClient:
     
     def __init__(self, local_development: Optional[bool] = None):
         if local_development is None:
-            local_development = settings.ENVIRONMENT == 'dev'  # Changed from 'development' to 'dev'
+            # CRITICAL FIX: Use is_development property instead of string comparison
+            local_development = settings.is_development
         self.dynamodb: Any
         if local_development:
             try:
-                # Local DynamoDB on port 8000
+                # Local DynamoDB with configurable endpoint
+                endpoint_url = settings.DYNAMODB_ENDPOINT or 'http://localhost:8000'
                 self.dynamodb = boto3.resource(
                     'dynamodb',
-                    endpoint_url='http://localhost:8000',
+                    endpoint_url=endpoint_url,
                     region_name='us-east-1',
                     aws_access_key_id='dummy',
                     aws_secret_access_key='dummy'
                 )
                 # Test connection
                 self.dynamodb.meta.client.list_tables()
-                logger.info("Using DynamoDB Local on port 8000")
-            except EndpointConnectionError:
+                logger.info(f"Using DynamoDB Local on {endpoint_url}")
+            except Exception as e:
+                logger.error(f"DynamoDB Local connection failed: {e}")
                 logger.warning("DynamoDB Local not available, falling back to AWS DynamoDB")
                 self.dynamodb = boto3.resource(
                     'dynamodb',

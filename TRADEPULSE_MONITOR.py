@@ -715,6 +715,10 @@ class TradePulseMonitor:
                 else:
                     logger.warning(f"⚠️ Could not verify trading engine: HTTP {response.status}")
             
+            # Step 6: Initialize Phase 4.2/4.3 Advanced Systems
+            logger.info("🧠 Initializing Phase 4.2/4.3 Advanced Systems...")
+            await self._initialize_advanced_systems()
+            
             logger.info("🚀 Professional autonomous trading engine ready!")
             logger.info("💡 The AI will analyze markets every 15 seconds - admin can control via dashboard")
             logger.info("🎛️ Trading controls available at: http://localhost:4321/admin/dashboard")
@@ -722,6 +726,76 @@ class TradePulseMonitor:
         except Exception as e:
             logger.error(f"❌ Failed to configure professional trading: {e}")
             logger.warning("⚠️ Trading engine may need manual configuration")
+    
+    async def _initialize_advanced_systems(self):
+        """Initialize Phase 4.2/4.3 advanced systems"""
+        try:
+            logger.info("🧠 Starting Session-Aware Trading Engine...")
+            
+            # Test session-aware engine initialization
+            test_script = '''
+import sys
+sys.path.append("/Applications/Projects/TradePulse.AI")
+import asyncio
+
+async def init_advanced():
+    try:
+        # Initialize session-aware engine
+        from app.backend.services.session_aware_trading_engine import get_session_aware_trading_engine
+        session_engine = await get_session_aware_trading_engine()
+        
+        if not session_engine.is_running:
+            result = await session_engine.start()
+            print(f"✅ Session-aware engine: {result['status']}")
+        
+        # Initialize performance tracker
+        from app.backend.services.trading_performance_tracker import get_trading_performance_tracker
+        tracker = await get_trading_performance_tracker()
+        
+        if not tracker.is_tracking:
+            await tracker.start_tracking()
+            print(f"✅ Performance tracker: active")
+        
+        # Initialize session monitoring
+        from app.backend.services.session_monitoring_analytics import get_session_monitoring_analytics
+        monitoring = await get_session_monitoring_analytics()
+        
+        if not monitoring.is_running:
+            await monitoring.start()
+            print(f"✅ Session monitoring: active")
+        
+        print("🎯 Advanced systems initialized successfully")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Advanced systems failed: {e}")
+        return False
+
+success = asyncio.run(init_advanced())
+'''
+            
+            # Run initialization script
+            process = await asyncio.create_subprocess_exec(
+                sys.executable, '-c', test_script,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self.project_root
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode == 0:
+                logger.info("✅ Phase 4.2/4.3 systems initialized:")
+                for line in stdout.decode().strip().split('\n'):
+                    if line.strip():
+                        logger.info(f"   {line}")
+            else:
+                logger.warning(f"⚠️ Advanced systems initialization issues:")
+                if stderr:
+                    logger.warning(f"   {stderr.decode()}")
+                    
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize advanced systems: {e}")
     
     async def check_service_health(self, service_name: str) -> Dict[str, Any]:
         """Check health of a specific service"""
