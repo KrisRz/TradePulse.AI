@@ -7,7 +7,9 @@
     "dev": "astro dev --port ${PORT:-4321}",
     "start": "astro dev --port ${PORT:-4321}",
     "build": "astro build",
+    "build:prod": "NODE_ENV=production astro build",
     "preview": "astro preview",
+    "serve": "astro preview --port ${PORT:-4321} --host 0.0.0.0",
     "astro": "astro",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -21,7 +23,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:install": "playwright install",
     "test:a11y": "node scripts/accessibility-audit.mjs",
-    "test:a11y:storybook": "pnpm storybook --ci & wait-on http://localhost:6006 && npx storybook-test-runner --stories-json",
+    "test:a11y:storybook": "npm run storybook -- --ci & wait-on http://localhost:6006 && npx storybook-test-runner --stories-json",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx,.astro",
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx,.astro --fix",
     "lint:a11y": "eslint . --ext .jsx,.tsx --rule 'jsx-a11y/*: error'",
@@ -33,7 +35,7 @@
     "serve-storybook": "npx http-server storybook-static"
   },
   "dependencies": {
-    "@astrojs/node": "^8.3.4",
+    "@astrojs/node": "^9.4.3",
     "@astrojs/partytown": "^2.1.4",
     "@astrojs/preact": "^3.5.3",
     "@astrojs/tailwind": "^5.1.2",
@@ -41,7 +43,8 @@
     "@tailwindcss/aspect-ratio": "^0.4.2",
     "@tailwindcss/forms": "^0.5.9",
     "@tailwindcss/typography": "^0.5.15",
-    "astro": "^4.16.14",
+    "astro": "^5.13.5",
+    "chart.js": "^4.5.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "lightningcss": "^1.30.1",
@@ -52,7 +55,7 @@
     "recharts": "^2.13.3",
     "tailwindcss": "^3.4.14",
     "vite-bundle-analyzer": "^1.1.0",
-    "vite-plugin-pwa": "^0.20.5",
+    "vite-plugin-pwa": "^1.0.3",
     "workbox-webpack-plugin": "^7.3.0"
   },
   "devDependencies": {

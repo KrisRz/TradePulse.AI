@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'preact/hooks';
-import { PieChart, TrendingUp, DollarSign, Activity } from 'lucide-preact';
+import { useState } from 'preact/hooks';
+import { BarChart3, TrendingUp, DollarSign, Activity } from 'lucide-preact';
+import { TradingViewChart } from '../../shared/charts';
 
 interface Asset {
   symbol: string;
@@ -23,7 +24,7 @@ interface Trade {
 
 export default function UserPortfolioView() {
   const [assets, setAssets] = useState<Asset[]>([
-    { symbol: 'BTC', name: 'Bitcoin', value: 7500, percentage: 75, change24h: 2.5, color: 'bg-orange-500' },
+    { symbol: 'BTC', name: 'DollarSign', value: 7500, percentage: 75, change24h: 2.5, color: 'bg-orange-500' },
     { symbol: 'ETH', name: 'Ethereum', value: 2000, percentage: 20, change24h: -1.2, color: 'bg-blue-500' },
     { symbol: 'USDT', name: 'Tether', value: 500, percentage: 5, change24h: 0.0, color: 'bg-green-500' }
   ]);
@@ -104,7 +105,7 @@ export default function UserPortfolioView() {
           {/* Asset Allocation */}
           <div class="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-              <PieChart class="h-5 w-5 mr-2" />
+              <BarChart3 class="h-5 w-5 mr-2" />
               Asset Allocation
             </h3>
             <div class="space-y-4">
@@ -183,19 +184,29 @@ export default function UserPortfolioView() {
         </div>
       </div>
 
-      {/* Performance Chart Placeholder */}
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-          <TrendingUp class="h-5 w-5 mr-2" />
-          Portfolio Performance
-        </h3>
-        <div class="bg-gray-100 dark:bg-gray-700 rounded-lg h-64 flex items-center justify-center">
-          <div class="text-center text-gray-500 dark:text-gray-400">
-            <div class="text-4xl mb-2">📈</div>
-            <div class="text-lg font-medium">Performance Chart</div>
-            <div class="text-sm">Real-time portfolio performance visualization</div>
+      {/* Live Market Chart */}
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                <TrendingUp class="h-5 w-5 mr-2" />
+                Live Market Analysis
+              </h3>
+              <p class="text-sm text-gray-600 dark:text-gray-400">Real-time BTC/USDT market data</p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span class="text-xs text-green-600 dark:text-green-400 font-medium">LIVE</span>
+            </div>
           </div>
         </div>
+        <TradingViewChart 
+          symbol="BTCUSDT" 
+          defaultInterval="1h" 
+          height={400} 
+          showToolbar={true} 
+        />
       </div>
     </div>
   );

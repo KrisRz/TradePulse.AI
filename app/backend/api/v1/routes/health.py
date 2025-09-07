@@ -13,24 +13,111 @@ from botocore.exceptions import ClientError
 
 from app.backend.core.config import get_settings
 from app.backend.core.logging import get_logger
-from app.backend.services import MarketDataService
+from app.backend.core.health import get_health_checker, HealthStatus
+from app.backend.core.environments import get_config
+from app.backend.services.live_market_data import LiveMarketDataService as MarketDataService
 
 router = APIRouter()
 logger = get_logger(__name__)
 settings = get_settings()
+config = get_config()
 
-# Initialize market data service
+# Initialize services
 market_data_service = MarketDataService()
+health_checker = get_health_checker()
 
 
 @router.get("/health")
 async def health_check() -> Dict[str, Any]:
-    """Health check endpoint"""
-    return {
-        "status": "operational",
-        "timestamp": datetime.utcnow().isoformat(),
-        "service": "TradePulse.AI Enterprise Backend"
-    }
+    """Comprehensive health check endpoint"""
+    try:
+        system_health = await health_checker.run_all_checks()
+        
+        # Return appropriate HTTP status based on health
+        if system_health.status == HealthStatus.UNHEALTHY:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=system_health.to_dict()
+            )
+        
+        return system_health.to_dict()
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "error",
+                "message": f"Health check failed: {str(e)}",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
+
+
+@router.get("/health/live")
+async def liveness_probe() -> Dict[str, Any]:
+    """Kubernetes liveness probe - simple check that service is running"""
+    try:
+        return await health_checker.liveness_check()
+    except Exception as e:
+        logger.error(f"Liveness check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"status": "error", "message": str(e)}
+        )
+
+
+@router.get("/health/ready")
+async def readiness_probe() -> Dict[str, Any]:
+    """Kubernetes readiness probe - check if service is ready to handle requests"""
+    try:
+        readiness_result = await health_checker.readiness_check()
+        
+        if readiness_result["status"] == "not_ready":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=readiness_result
+            )
+        
+        return readiness_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Readiness check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"status": "error", "message": str(e)}
+        )
+
+
+@router.get("/health/{component}")
+async def component_health_check(component: str) -> Dict[str, Any]:
+    """Check health of a specific component"""
+    try:
+        result = await health_checker.run_check(component)
+        
+        if result.status == HealthStatus.UNHEALTHY:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=result.to_dict()
+            )
+        
+        return result.to_dict()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Component health check failed for {component}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "component": component,
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
 
 @router.get("/live/bitcoin-price")
 async def get_real_live_bitcoin_price() -> Dict[str, Any]:
@@ -272,4 +359,30 @@ async def check_real_market_data_health() -> Dict[str, Any]:
             "message": "Real Binance API connectivity failed",
             "error": str(e),
             "last_check": datetime.utcnow().isoformat()
+        }
+
+
+@router.get("/health/database/stats")
+async def get_database_connection_stats():
+    """Get DynamoDB connection pool statistics and performance metrics"""
+    try:
+        from app.backend.core.connection_manager import get_connection_manager
+        
+        connection_manager = await get_connection_manager()
+        stats = connection_manager.dynamodb.get_connection_stats()
+        
+        return {
+            "status": "success",
+            "database_type": "DynamoDB Local",
+            "connection_stats": stats,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error("database_stats_error", error=str(e))
+        return {
+            "status": "error",
+            "message": "Failed to retrieve database statistics",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
         } 

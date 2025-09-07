@@ -1,0 +1,12 @@
+{
+  "scaler_type": "log_minmax",
+  "feature_name": "volume",
+  "parameters": {
+    "min": 0.0,
+    "max": 10.0,
+    "scale": 10.0
+  },
+  "training_commit": "default_v1.0.0",
+  "created_at": "2025-09-02T15:19:43.506550+00:00",
+  "checksum": "8543a23e64c98bf0de420aef481a6881e1de4108bb97f3088017b2059bd867a8"
+}

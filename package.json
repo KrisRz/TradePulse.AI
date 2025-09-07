@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "lightweight-charts": "^5.0.8",
+    "preact": "^10.27.1"
+  },
+  "devDependencies": {
+    "@astrojs/preact": "^4.1.0"
+  }
+}

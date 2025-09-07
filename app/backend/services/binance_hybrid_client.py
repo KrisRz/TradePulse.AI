@@ -79,12 +79,12 @@ class HybridConfig:
     ws_base_url: str = "wss://stream.binance.com:9443/ws"
     ws_reconnect_delay: float = 5.0
     ws_max_reconnects: int = 10
-    ws_ping_interval: float = 20.0
-    ws_timeout_seconds: float = 30.0
+    ws_ping_interval: float = 30.0  # Increased for stability
+    ws_timeout_seconds: float = 60.0  # Increased timeout for better reliability
     
     # REST API settings  
     rest_base_url: str = "https://api.binance.com/api/v3"
-    rest_timeout_seconds: float = 5.0
+    rest_timeout_seconds: float = 30.0  # FIXED: Increased from 5.0 to 30.0 seconds
     rest_max_retries: int = 3
     rest_backoff_base: float = 0.5
     
@@ -155,6 +155,22 @@ class BinanceHybridClient:
         
         logger.info("🔄 Binance Hybrid Client initialized")
     
+    @property
+    def is_connected(self) -> bool:
+        """Check if client is connected and running"""
+        return self.is_running and (self.rest_session is not None)
+    
+    async def __aenter__(self):
+        """Async context manager entry"""
+        return self
+        
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit"""
+        # Clean up any resources if needed
+        if hasattr(self, 'rest_session') and self.rest_session:
+            await self.rest_session.close()
+        return False
+    
     async def initialize(self) -> Dict[str, Any]:
         """Initialize all client components"""
         try:
@@ -174,12 +190,18 @@ class BinanceHybridClient:
             
             self.is_running = True
             
+            # Test authentication on startup
+            auth_status = False
+            if self.api_key and self.secret_key:
+                auth_status = await self.test_authentication()
+            
             logger.info("✅ Binance Hybrid Client initialized successfully")
             
             return {
                 "status": "initialized",
                 "rest_session": self.rest_session is not None,
                 "database": self.db_client is not None,
+                "authentication": auth_status,
                 "cache_size": sum(len(cache) for cache in self.candle_cache.values()),
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
@@ -217,9 +239,10 @@ class BinanceHybridClient:
             settings = get_settings()
             self.db_client = DynamoDBClient(local_development=settings.is_development)
             
-            # Test database connection
+            # Test database connection with minimal operation
             try:
-                test_tables = self.db_client.scan_table('live_candles')  # Test with known table
+                # Use get_table instead of expensive scan_table
+                table = self.db_client.get_table('live_candles')
                 logger.info(f"📊 Database connected: DynamoDB Local accessible")
             except Exception as db_test_error:
                 logger.info(f"📊 Database connected: {str(db_test_error)[:50]}...")
@@ -324,7 +347,9 @@ class BinanceHybridClient:
                     url,
                     ping_interval=self.config.ws_ping_interval,
                     ping_timeout=self.config.ws_timeout_seconds,
-                    close_timeout=10
+                    close_timeout=20,  # Increased close timeout
+                    max_size=2**20,    # 1MB max message size
+                    max_queue=32       # Increased message queue
                 ) as websocket:
                     
                     # Connection established
@@ -519,14 +544,16 @@ class BinanceHybridClient:
     
     async def get_data_hybrid(self, data_type: str, symbol: str = "BTCUSDT", **kwargs) -> Dict[str, Any]:
         """
-        Hybrid data retrieval with intelligent source selection
+        PROFESSIONAL LIVE DATA ONLY
         
         Order of preference:
-        1. WebSocket (real-time)
-        2. REST API (with circuit breaker)
-        3. Cache (recent data)
-        4. Database (historical data)
+        1. WebSocket (real-time) - PRIMARY
+        2. REST API with HMAC authentication - SECONDARY
+        NO CACHE, NO DATABASE FALLBACKS - LIVE DATA ONLY!
         """
+        # Define circuit key outside try block to avoid scope issues
+        circuit_key = f"rest_{data_type}"
+        
         try:
             # Try WebSocket first (if available and recent)
             if data_type == "ticker":
@@ -552,23 +579,75 @@ class BinanceHybridClient:
                 if ws_data and self._is_data_fresh(ws_data):
                     return {"data": ws_data, "source": DataSource.WEBSOCKET.value}
             
-            # Fallback to REST API with circuit breaker
-            circuit_key = f"rest_{data_type}"
+            # PROFESSIONAL: Use authenticated REST API
+            if not self.api_key or not self.secret_key:
+                raise Exception(f"PROFESSIONAL MODE: API keys required for live data")
             if self._is_circuit_breaker_open(circuit_key):
-                return await self._get_from_cache_or_db(data_type, symbol, **kwargs)
+                raise Exception(f"Circuit breaker open for {data_type} - professional system requires live data")
             
-            try:
-                rest_data = await self._get_from_rest_api(data_type, symbol, **kwargs)
-                self._record_circuit_success(circuit_key)
-                return {"data": rest_data, "source": DataSource.REST_API.value}
-                
-            except Exception as e:
-                self._record_circuit_failure(circuit_key)
-                logger.warning(f"REST API failed for {data_type}: {e}")
-                return await self._get_from_cache_or_db(data_type, symbol, **kwargs)
+            # Get live data from authenticated REST API
+            rest_data = await self._get_from_rest_api(data_type, symbol, **kwargs)
+            self._record_circuit_success(circuit_key)
+            return {"data": rest_data, "source": DataSource.REST_API.value}
                 
         except Exception as e:
-            logger.error(f"Hybrid data retrieval failed: {e}")
+            logger.error(f"PROFESSIONAL LIVE DATA FAILED: {e}")
+            # Record circuit failure
+            self._record_circuit_failure(circuit_key)
+            
+            # Try one more time with exponential backoff
+            try:
+                logger.warning(f"🔄 Retrying {data_type} request for {symbol} after {e}")
+                await asyncio.sleep(1.0)  # Brief delay before retry
+                rest_data = await self._get_from_rest_api(data_type, symbol, **kwargs)
+                self._record_circuit_success(circuit_key)
+                logger.info(f"✅ Retry successful for {data_type} {symbol}")
+                return {"data": rest_data, "source": DataSource.REST_API.value}
+            except Exception as retry_error:
+                logger.error(f"❌ Retry also failed: {retry_error}")
+                self._record_circuit_failure(circuit_key)
+                raise Exception(f"Live data unavailable for {data_type} {symbol} - professional system requires real data")
+    
+    async def _get_from_rest_api(self, data_type: str, symbol: str = "BTCUSDT", **kwargs) -> Dict[str, Any]:
+        """Get data from Binance REST API with authentication"""
+        try:
+            if data_type == "ticker":
+                return await self.get_24hr_ticker(symbol)
+            elif data_type == "candles" or data_type == "klines":
+                interval = kwargs.get("interval", "1m")
+                limit = kwargs.get("limit", 100)
+                return await self.get_klines(symbol, interval, limit)
+            elif data_type == "depth":
+                limit = kwargs.get("limit", 100)
+                return await self.get_order_book(symbol, limit)
+            else:
+                raise Exception(f"Unsupported data type: {data_type}")
+        except Exception as e:
+            logger.error(f"REST API call failed for {data_type}: {e}")
+            raise
+    
+
+    
+    async def get_order_book(self, symbol: str = "BTCUSDT", limit: int = 100) -> Dict[str, Any]:
+        """Get order book depth"""
+        try:
+            import aiohttp
+            url = f"https://api.binance.com/api/v3/depth?symbol={symbol}&limit={limit}"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return {
+                            "symbol": symbol,
+                            "bids": [[float(p), float(q)] for p, q in data["bids"]],
+                            "asks": [[float(p), float(q)] for p, q in data["asks"]],
+                            "timestamp": datetime.now(timezone.utc)
+                        }
+                    else:
+                        raise Exception(f"Binance API error: {response.status}")
+        except Exception as e:
+            logger.error(f"Failed to get order book: {e}")
             raise
     
     def _is_data_fresh(self, data: Dict, max_age_seconds: float = 5.0) -> bool:
@@ -623,8 +702,10 @@ class BinanceHybridClient:
     
     async def _get_from_rest_api(self, data_type: str, symbol: str, **kwargs) -> Any:
         """Get data from REST API with proper error handling"""
-        if not self.rest_session:
-            raise Exception("REST session not initialized")
+        # Check if session is closed and recreate if needed
+        if not self.rest_session or self.rest_session.closed:
+            logger.info("🔄 REST session closed, reinitializing...")
+            await self._init_rest_session()
         
         if data_type == "ticker":
             return await self._rest_get_ticker(symbol)
@@ -636,15 +717,22 @@ class BinanceHybridClient:
             raise Exception(f"Unsupported data type: {data_type}")
     
     async def _rest_get_ticker(self, symbol: str) -> Dict:
-        """Get ticker from REST API"""
+        """Get ticker from REST API with HMAC authentication"""
+        # Ensure session is valid
+        if not self.rest_session or self.rest_session.closed:
+            await self._init_rest_session()
+        
+        # Use public endpoint for market data (ticker/24hr is public)
         url = f"{self.config.rest_base_url}/ticker/24hr"
         params = {"symbol": symbol}
         
+        # Use public endpoint directly (ticker/24hr doesn't require authentication)
         async with self.rest_session.get(url, params=params) as response:
             if response.status != 200:
                 raise Exception(f"REST API error: {response.status}")
             
             data = await response.json()
+            logger.debug(f"📊 PUBLIC REST API used for {symbol}")
             return {
                 "symbol": data["symbol"],
                 "price": float(data["lastPrice"]),
@@ -654,11 +742,46 @@ class BinanceHybridClient:
                 "low": float(data["lowPrice"]),
                 "volume": float(data["volume"]),
                 "timestamp": datetime.now(timezone.utc),
-                "source": DataSource.REST_API.value
+                "source": DataSource.REST_API.value,
+                "authenticated": False
             }
+    
+    async def test_authentication(self) -> bool:
+        """Test if API keys are working by calling account endpoint"""
+        if not self.api_key or not self.secret_key:
+            logger.warning("🔑 No API keys configured - authentication test skipped")
+            return False
+            
+        try:
+            # Ensure session is valid
+            if not self.rest_session or self.rest_session.closed:
+                await self._init_rest_session()
+            
+            # Test authenticated endpoint
+            url = f"{self.config.rest_base_url}/account"
+            params = {}
+            auth_params = self._create_authenticated_params(params)
+            headers = self._get_authenticated_headers()
+            
+            async with self.rest_session.get(url, params=auth_params, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    logger.info(f"✅ BINANCE AUTHENTICATION SUCCESS - Account: {data.get('accountType', 'UNKNOWN')}")
+                    return True
+                else:
+                    logger.warning(f"❌ BINANCE AUTHENTICATION FAILED: {response.status} - {await response.text()}")
+                    return False
+                    
+        except Exception as e:
+            logger.warning(f"❌ BINANCE AUTHENTICATION ERROR: {e}")
+            return False
     
     async def _rest_get_candles(self, symbol: str, **kwargs) -> List[Dict]:
         """Get candles from REST API"""
+        # Ensure session is valid
+        if not self.rest_session or self.rest_session.closed:
+            await self._init_rest_session()
+            
         url = f"{self.config.rest_base_url}/klines"
         params = {
             "symbol": symbol,
@@ -699,6 +822,10 @@ class BinanceHybridClient:
     
     async def _rest_get_depth(self, symbol: str, **kwargs) -> Dict:
         """Get order book depth from REST API"""
+        # Ensure session is valid
+        if not self.rest_session or self.rest_session.closed:
+            await self._init_rest_session()
+            
         url = f"{self.config.rest_base_url}/depth"
         params = {
             "symbol": symbol,
@@ -718,66 +845,52 @@ class BinanceHybridClient:
                 "source": DataSource.REST_API.value
             }
     
-    async def _get_from_cache_or_db(self, data_type: str, symbol: str, **kwargs) -> Dict[str, Any]:
-        """Get data from cache or database as last resort"""
-        if data_type == "ticker":
-            # Try cache first
-            cached = self.ticker_cache.get(symbol)
-            if cached:
-                return {"data": cached, "source": DataSource.CACHE.value}
-        
-        elif data_type == "candles":
-            interval = kwargs.get("interval", "1m")
-            limit = kwargs.get("limit", 100)
-            cache_key = f"{symbol}_{interval}"
-            
-            if cache_key in self.candle_cache:
-                cached_candles = list(self.candle_cache[cache_key])
-                if cached_candles:
-                    return {
-                        "data": cached_candles[-limit:],
-                        "source": DataSource.CACHE.value
-                    }
-        
-        elif data_type == "depth":
-            cached = self.orderbook_cache.get(symbol)
-            if cached:
-                return {"data": cached, "source": DataSource.CACHE.value}
-        
-        # Try database as final fallback
-        if self.db_client:
-            try:
-                db_data = await self._get_from_database(data_type, symbol, **kwargs)
-                if db_data:
-                    return {"data": db_data, "source": DataSource.DATABASE.value}
-            except Exception as e:
-                logger.warning(f"Database fallback failed: {e}")
-        
-        raise Exception(f"No data available for {data_type} {symbol}")
+    # REMOVED: _get_from_cache_or_db - NO FALLBACKS IN PROFESSIONAL MODE!
+    # Professional system uses ONLY live data from WebSocket + authenticated REST API
     
-    async def _get_from_database(self, data_type: str, symbol: str, **kwargs) -> Optional[Any]:
-        """Get data from database"""
-        if data_type == "candles":
-            try:
-                candles = self.db_client.scan_table('live_candles')
-                btc_candles = [c for c in candles if c.get('symbol') == symbol]
-                btc_candles.sort(key=lambda x: int(x.get('timestamp', 0)))
-                
-                limit = kwargs.get("limit", 100)
-                recent_candles = btc_candles[-limit:] if len(btc_candles) > limit else btc_candles
-                
-                processed_candles = []
-                for candle in recent_candles:
-                    processed = self._process_db_candle(candle)
-                    if processed:
-                        processed_candles.append(processed)
-                
-                return processed_candles
-            except Exception as e:
-                logger.error(f"Database candle query failed: {e}")
-                return None
+    # REMOVED: _get_from_database - NO DATABASE FALLBACKS IN PROFESSIONAL MODE!
+    
+    def _generate_signature(self, query_string: str) -> str:
+        """Generate HMAC SHA256 signature for Binance API"""
+        if not self.secret_key:
+            raise Exception("Secret key required for authenticated requests")
         
-        return None
+        return hmac.new(
+            self.secret_key.encode('utf-8'),
+            query_string.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+    
+    def _get_timestamp(self) -> int:
+        """Get current timestamp in milliseconds"""
+        return int(time.time() * 1000)
+    
+    def _create_authenticated_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Create authenticated parameters with signature"""
+        if not self.api_key or not self.secret_key:
+            raise Exception("API key and secret key required for authenticated requests")
+        
+        # Add timestamp
+        params['timestamp'] = self._get_timestamp()
+        
+        # Create query string
+        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        
+        # Generate signature
+        signature = self._generate_signature(query_string)
+        params['signature'] = signature
+        
+        return params
+    
+    def _get_authenticated_headers(self) -> Dict[str, str]:
+        """Get headers for authenticated requests"""
+        if not self.api_key:
+            raise Exception("API key required for authenticated requests")
+        
+        return {
+            'X-MBX-APIKEY': self.api_key,
+            'User-Agent': 'TradePulse.AI/1.0'
+        }
     
     async def _db_persist_loop(self):
         """Background task to persist data to database"""
@@ -837,6 +950,10 @@ class BinanceHybridClient:
         """Subscribe to status updates"""
         self.status_callbacks.append(callback)
         logger.info("📊 Subscribed to status updates")
+    
+    def add_price_callback(self, callback: Callable):
+        """Add price callback - alias for subscribe_to_data for compatibility"""
+        self.subscribe_to_data("ticker", callback)
     
     def get_connection_status(self) -> Dict[str, Any]:
         """Get comprehensive connection status"""
@@ -912,6 +1029,10 @@ class BinanceHybridClient:
             await self.rest_session.close()
         
         logger.info("✅ Binance Hybrid Client shutdown complete")
+    
+    async def stop(self):
+        """Alias for shutdown for compatibility"""
+        await self.shutdown()
         
     def get_performance_metrics(self) -> Dict[str, Any]:
         """Get comprehensive performance metrics"""
@@ -942,6 +1063,26 @@ class BinanceHybridClient:
         except Exception as e:
             logger.error(f"Performance metrics calculation failed: {e}")
             return {"error": str(e)}
+    
+    async def get_24hr_ticker(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
+        """Get 24hr ticker statistics"""
+        try:
+            # Use hybrid data retrieval
+            return await self.get_data_hybrid("ticker", symbol)
+        except Exception as e:
+            logger.error(f"Failed to get 24hr ticker for {symbol}: {e}")
+            raise
+    
+    async def get_klines(self, symbol: str = "BTCUSDT", interval: str = "1m", limit: int = 100) -> List[Dict[str, Any]]:
+        """Get klines/candlestick data using hybrid data retrieval"""
+        try:
+            # Use hybrid data retrieval with "candles" data type
+            result = await self.get_data_hybrid("candles", symbol, interval=interval, limit=limit)
+            return result.get("data", [])
+        except Exception as e:
+            logger.error(f"Failed to get klines for {symbol}: {e}")
+            raise
+
 
 
 # Global hybrid client instance

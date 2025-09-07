@@ -1,0 +1,24 @@
+# Basic configuration
+app_name          = "tradepulse"
+env               = "dev"
+region            = "eu-west-2"
+
+# Lambda configuration
+lambda_zip_path   = "../../backend/dist/backend.zip"
+model_version     = "v1.0.0"
+
+# Frontend configuration
+create_cloudfront = true
+root_domain       = "tradepulse.ai"
+app_subdomain     = "dev"
+
+# Alert configuration
+alert_emails = [
+  "admin@tradepulse.ai",
+  "alerts@tradepulse.ai"
+]
+
+# Secret configuration (set these in your actual terraform.tfvars file)
+# binance_api_key    = "your_binance_api_key_here"
+# binance_secret_key = "your_binance_secret_key_here" 
+# jwt_secret_key     = "your_jwt_secret_key_here"

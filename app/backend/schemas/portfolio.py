@@ -333,19 +333,35 @@ class VirtualPortfolio(BaseModel):
         json_encoders = {
             Decimal: lambda v: float(v),
             datetime: lambda v: v.isoformat()
+        }
+
+class VirtualTrade(BaseModel):
+    """Virtual Trade model for tracking individual trades"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    position_id: Optional[str] = None
+    symbol: str = Field(default="BTCUSDT")
+    side: str = Field(default="BUY")  # BUY or SELL
+    quantity: Decimal = Field(default=Decimal('0.00'))
+    price: Decimal = Field(default=Decimal('0.00'))
+    total_value: Decimal = Field(default=Decimal('0.00'))
+    commission: Decimal = Field(default=Decimal('0.00'))
+    pnl: Optional[Decimal] = Field(default=None)
+    pnl_percentage: Optional[float] = Field(default=None)
+    status: str = Field(default="FILLED")  # PENDING, FILLED, CANCELLED
+    trade_type: str = Field(default="MARKET")  # MARKET, LIMIT
+    confidence: Optional[float] = Field(default=None)
+    strategy: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    executed_at: Optional[datetime] = Field(default=None)
+    
+    class Config:
+        json_encoders = {
+            Decimal: lambda v: float(v),
+            datetime: lambda v: v.isoformat()
         } 
 
-# Add missing classes at the end
-class VirtualTrade(BaseModel):
-    """Virtual Trade model"""
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    symbol: str = "BTCUSDT"
-    side: str = "BUY"
-    quantity: Decimal = Decimal('0.00547')
-    price: Decimal = Decimal('0.00')
-    status: str = "COMPLETED"
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
+# Request/Response Models
 class PortfolioRequest(BaseModel):
     """Portfolio request model"""
     user_id: str
@@ -378,20 +394,4 @@ class PositionResponse(BaseModel):
 class TradeResponse(BaseModel):
     """Trade response model"""
     success: bool = True
-    data: dict = {}
-
-class Trade(BaseModel):
-    """Trade model"""
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    symbol: str = "BTCUSDT"
-    side: str = "BUY"
-    quantity: Decimal = Decimal('0.00547')
-    price: Decimal = Decimal('0.00')
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class PortfolioSummary(BaseModel):
-    """Portfolio summary model"""
-    total_value: Decimal = Decimal('10000.00')
-    available_cash: Decimal = Decimal('10000.00')
-    active_positions: int = 0
-    total_pnl: Decimal = Decimal('0.00') 
+    data: dict = {} 

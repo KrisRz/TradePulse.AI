@@ -1,15 +1,5 @@
-import { useState, useEffect } from 'preact/hooks';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  Percent, 
-  Shield, 
-  AlertTriangle,
-  Calculator,
-  Clock,
-  Target
-} from 'lucide-preact';
+import { useState } from 'preact/hooks';
+import { TrendingUp, DollarSign, Hash, Shield, AlertTriangle, Clock } from 'lucide-preact';
 
 interface OrderFormData {
   symbol: string;
@@ -23,6 +13,8 @@ interface OrderFormData {
   postOnly: boolean;
   clientOrderId?: string;
 }
+
+type OrderFormValue = string | number | boolean;
 
 interface OrderFormProps {
   symbol?: string;
@@ -71,7 +63,7 @@ export default function OrderForm({
     setEstimatedFees(fees);
   }, [formData.quantity, formData.price, formData.type, currentPrice]);
 
-  const handleInputChange = (field: keyof OrderFormData, value: any) => {
+  const handleInputChange = (field: keyof OrderFormData, value: OrderFormValue) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -227,7 +219,7 @@ export default function OrderForm({
             placeholder="0.00000"
             disabled={disabled}
           />
-          <Calculator className="absolute right-3 top-2.5 w-4 h-4 text-gray-400" />
+          <Hash className="absolute right-3 top-2.5 w-4 h-4 text-gray-400" />
         </div>
         {errors.quantity && (
           <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.quantity}</p>

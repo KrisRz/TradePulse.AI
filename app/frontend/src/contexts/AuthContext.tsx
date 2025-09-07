@@ -1,5 +1,6 @@
 import { createContext } from 'preact';
-import { useContext, useEffect, useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
+import { useContext } from 'preact/compat';
 import { authStore } from '../lib/auth-store';
 import type { User, AuthState, LoginRequest, RegisterRequest } from '../types/auth';
 
@@ -34,7 +35,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Subscribe to auth store changes
   useEffect(() => {
     const updateAuthState = () => {
-      setAuthState(authStore.authState);
+      if (authStore.authState?.value) {
+        setAuthState(authStore.authState.value);
+      }
     };
 
     // Initial state
@@ -43,9 +46,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Set up periodic token refresh
     let refreshInterval: number | null = null;
 
-    if (authStore.isAuthenticated.value) {
+    if (authStore.isAuthenticated?.value) {
       refreshInterval = setInterval(async () => {
-        if (authStore.isAuthenticated.value) {
+        if (authStore.isAuthenticated?.value) {
           try {
             await authStore.refreshUser();
           } catch (error) {
@@ -56,28 +59,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }, TOKEN_REFRESH_INTERVAL);
     }
 
-    // Set up listeners for auth store changes
-    const unsubscribeUser = authStore.user.subscribe(updateAuthState);
-    const unsubscribeToken = authStore.token.subscribe(updateAuthState);
-    const unsubscribeLoading = authStore.isLoading.subscribe(updateAuthState);
-    const unsubscribeError = authStore.error.subscribe(updateAuthState);
+    // Set up listeners for auth store changes - with safety checks
+    const unsubscribeUser = authStore.user?.subscribe?.(updateAuthState);
+    const unsubscribeToken = authStore.token?.subscribe?.(updateAuthState);
+    const unsubscribeLoading = authStore.isLoading?.subscribe?.(updateAuthState);
+    const unsubscribeError = authStore.error?.subscribe?.(updateAuthState);
 
     // Cleanup
     return () => {
       if (refreshInterval) {
         clearInterval(refreshInterval);
       }
-      unsubscribeUser();
-      unsubscribeToken();
-      unsubscribeLoading();
-      unsubscribeError();
+      unsubscribeUser?.();
+      unsubscribeToken?.();
+      unsubscribeLoading?.();
+      unsubscribeError?.();
     };
   }, []);
 
   // Session management - check token validity on app start
   useEffect(() => {
     const checkTokenValidity = async () => {
-      if (authStore.token.value) {
+      if (authStore.token?.value) {
         try {
           await authStore.refreshUser();
         } catch (error) {
@@ -105,13 +108,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const contextValue: AuthContextType = {
     ...authState,
-    login: authStore.login,
-    register: authStore.register,
-    logout: authStore.logout,
-    refreshUser: authStore.refreshUser,
-    clearError: authStore.clearError,
-    isAdmin: authStore.isAdmin,
-    isUser: authStore.isUser,
+    login: async (credentials: LoginRequest) => {
+      const result = await authStore.login(credentials.email, credentials.password);
+      return result.success;
+    },
+    register: async (userData: RegisterRequest) => {
+      const result = await authStore.register(userData.username, userData.email, userData.password);
+      return result.success;
+    },
+    logout: async () => {
+      authStore.logout();
+    },
+    refreshUser: async () => {
+      await authStore.refreshUser();
+    },
+    clearError: () => {
+      authStore.clearError();
+    },
+    isAdmin: authStore.isAdmin || false,
+    isUser: authStore.isUser || false,
   };
 
   return (
@@ -129,4 +144,4 @@ export function useAuth(): AuthContextType {
   return context;
 }
 
-export default AuthContext; 
+export default AuthContext;

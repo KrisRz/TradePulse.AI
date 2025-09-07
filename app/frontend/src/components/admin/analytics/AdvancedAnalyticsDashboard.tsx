@@ -4,12 +4,7 @@ Comprehensive enterprise analytics with real-time metrics and insights
 */
 
 import { useState, useEffect } from 'preact/hooks';
-import { 
-  TrendingUp, TrendingDown, Users, Mail, Shield, DollarSign,
-  Calendar, RefreshCw, Download, AlertTriangle, CheckCircle,
-  Activity, BarChart3, PieChart, LineChart, Eye, Clock,
-  Globe, Lock, CreditCard, Target, Zap, Bell
-} from 'lucide-preact';
+import { TrendingUp, Users, Mail, Shield, DollarSign, RefreshCw, Download, AlertTriangle, CheckCircle, Activity, BarChart3, Clock, Bell } from 'lucide-preact';
 
 interface AnalyticsData {
   executive_summary: {
@@ -270,7 +265,7 @@ export default function AdvancedAnalyticsDashboard() {
           <div className="flex items-center space-x-3">
             <select
               value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(parseInt(e.target.value))}
+              onChange={(e) => setSelectedPeriod(parseInt((e.target as HTMLInputElement).value))}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
             >
               <option value={7}>Last 7 days</option>
@@ -413,7 +408,7 @@ export default function AdvancedAnalyticsDashboard() {
         <div className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-              <LineChart className="w-5 h-5 mr-2" />
+              <BarChart3 className="w-5 h-5 mr-2" />
               User Growth Trends
             </h3>
             <span className="text-sm text-gray-500">Last {selectedPeriod} days</span>

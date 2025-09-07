@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'preact/hooks';
-import { Activity, TrendingUp, TrendingDown, Clock, Target, Brain } from 'lucide-preact';
+import { useState } from 'preact/hooks';
+import { Activity, TrendingUp, Clock, Brain } from 'lucide-preact';
 
 interface TradingSignal {
   id: string;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { Signal, SignalType } from '@/types/signals';
 import { SignalCard } from './SignalCard';
 import { Play, Pause, Download, Filter, RefreshCw } from 'lucide-preact';
@@ -252,7 +252,7 @@ export function SignalFeed({
             {/* Filter */}
             <select
               value={filter}
-              onChange={(e) => setFilter(e.target.value as SignalType | 'ALL')}
+              onChange={(e) => setFilter((e.target as HTMLInputElement).value as SignalType | 'ALL')}
               className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md 
                          bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-blue-500"
             >

@@ -1,0 +1,12 @@
+{
+  "scaler_type": "minmax",
+  "feature_name": "bb_position",
+  "parameters": {
+    "min": 0.0,
+    "max": 1.0,
+    "scale": 1.0
+  },
+  "training_commit": "default_v1.0.0",
+  "created_at": "2025-09-02T15:19:43.506952+00:00",
+  "checksum": "ba1c364f79cc79966e5d6ce4f0abfbab946d08d3d861d7d086a08bac1d91f2b8"
+}

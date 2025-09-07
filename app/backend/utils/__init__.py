@@ -2,9 +2,7 @@
 TradePulse.AI Utilities Package
 """
 
-from .dependencies import get_current_user, User
+# Note: dependencies.py creates circular imports, so we don't import it here
+# Import dependencies directly where needed to avoid circular import issues
 
-__all__ = [
-    "get_current_user",
-    "User"
-]
+__all__ = []

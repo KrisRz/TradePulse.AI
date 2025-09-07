@@ -31,6 +31,7 @@ class User(BaseModel):
     username: str
     role: str
     is_active: bool = True
+    is_admin: bool = False
 
 # Database Dependencies
 async def get_db() -> Generator:
@@ -54,7 +55,8 @@ async def get_current_user(
                 id="admin",
                 email="admin@tradepulse.ai",
                 username="admin",
-                role="admin"
+                role="admin",
+                is_admin=True
             )
         else:
             raise HTTPException(
@@ -70,7 +72,8 @@ async def get_current_user(
             id="enterprise_admin",
             email="admin@tradepulse.ai",
             username="enterprise_admin",
-            role="admin"
+            role="admin",
+            is_admin=True
         )
     
     # Regular user validation would go here
@@ -85,14 +88,18 @@ async def get_current_user(
 
 def require_admin_role(current_user: User = Depends(get_current_user)) -> User:
     """Ensure user has admin role"""
-    if current_user.role != "admin":
-        # Allow in development
-        if settings.ENVIRONMENT != "development":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admin role required"
-            )
-    return current_user
+    # Always allow admin users and development mode
+    if current_user.role == "admin" or settings.ENVIRONMENT == "development":
+        return current_user
+    
+    # Check if user has admin flag from JWT
+    if hasattr(current_user, 'is_admin') and current_user.is_admin:
+        return current_user
+        
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Admin role required"
+    )
 
 
 # Service Dependencies

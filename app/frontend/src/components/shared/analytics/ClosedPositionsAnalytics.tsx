@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
-  Archive, BarChart3, TrendingUp, TrendingDown, Download, Filter, Calendar,
-  Target, DollarSign, Clock, Activity, FileText, Eye, Zap, Award
+  Archive, BarChart3, TrendingUp, Download, Filter, DollarSign, Clock, Activity, FileText, Award
 } from 'lucide-preact';
 
 interface ClosedPosition {
@@ -96,14 +95,14 @@ export default function ClosedPositionsAnalytics() {
       totalTrades: positions.length,
       profitableTrades: profitablePositions.length,
       losingTrades: losingPositions.length,
-      totalPnL: totalPnL,
+      totalPnL,
       winRate: (profitablePositions.length / positions.length) * 100,
       avgHoldTime: '12h 30m', // Mock calculation
       bestTrade: Math.max(...positions.map(pos => pos.realizedPnL)),
       worstTrade: Math.min(...positions.map(pos => pos.realizedPnL)),
       profitFactor: grossLoss > 0 ? grossProfit / grossLoss : 0,
       avgPnLPerTrade: totalPnL / positions.length,
-      totalCommissions: totalCommissions,
+      totalCommissions,
       sharpeRatio: 1.45 // Mock calculation
     };
   };
@@ -123,7 +122,7 @@ export default function ClosedPositionsAnalytics() {
       setLoading(true);
       
       // PRODUCTION: Fetch real closed positions from professional backend
-      const response = await fetch('http://localhost:9001/api/portfolio/virtual/history', {
+      const response = await fetch('http://localhost:9002/api/portfolio/virtual/history', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'

@@ -23,31 +23,6 @@ import LoginForm from '../../components/shared/auth/LoginForm';
       <div class="bg-white dark:bg-gray-800 py-8 px-4 shadow-xl sm:rounded-lg sm:px-10 border border-gray-200 dark:border-gray-700">
         <LoginForm 
           client:load
-          onSuccess={() => {
-            console.log('🔐 Login Page: onSuccess callback triggered');
-            // Check user role and redirect appropriately
-            const userData = localStorage.getItem('user_data');
-            console.log('🔐 Login Page: User data from localStorage:', userData);
-            if (userData) {
-              const user = JSON.parse(userData);
-              console.log('🔐 Login Page: Parsed user:', user);
-              if (user.role === 'admin') {
-                console.log('🔐 Login Page: Redirecting admin to /admin/dashboard');
-                window.location.href = '/admin/dashboard';
-              } else {
-                console.log('🔐 Login Page: Redirecting user to /user_dashboard');
-                window.location.href = '/user_dashboard';
-              }
-            } else {
-              console.log('🔐 Login Page: No user data, fallback to /user_dashboard');
-              // Fallback to user dashboard
-              window.location.href = '/user_dashboard';
-            }
-          }}
-          onSwitchToRegister={() => {
-            // Navigate to register page
-            window.location.href = '/auth/register';
-          }}
         />
       </div>
       
@@ -100,9 +75,22 @@ import LoginForm from '../../components/shared/auth/LoginForm';
         });
         
         if (response.ok) {
-          // Token is valid, user is already authenticated, redirect to user dashboard
-          console.log('User already authenticated, redirecting to user dashboard');
-          window.location.href = '/user_dashboard';
+          // Token is valid, user is already authenticated, check role for proper redirect
+          const userData = localStorage.getItem('user_data');
+          if (userData) {
+            const user = JSON.parse(userData);
+            console.log('User already authenticated, checking role:', user.role);
+            if (user.role === 'admin') {
+              console.log('Redirecting admin to admin dashboard');
+              window.location.href = '/admin/dashboard';
+            } else {
+              console.log('Redirecting user to user dashboard');
+              window.location.href = '/user_dashboard';
+            }
+          } else {
+            console.log('No user data found, redirecting to user dashboard');
+            window.location.href = '/user_dashboard';
+          }
         } else {
           // Token is invalid, remove it and show login form
           console.log('Invalid token found, removing and showing login form');

@@ -1,13 +1,10 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
   Filter, 
   X, 
   Search, 
-  Calendar, 
   TrendingUp, 
-  TrendingDown, 
   Brain, 
-  Target, 
   Clock,
   Save,
   Trash2,
@@ -34,6 +31,8 @@ interface SignalFiltersData {
   volumeMax: string;
   searchTerm: string;
 }
+
+type SignalFilterDataValue = string | number;
 
 interface FilterPreset {
   id: string;
@@ -183,7 +182,7 @@ export default function SignalFilters({
     onFiltersChange?.(filters);
   }, [filters, onFiltersChange]);
 
-  const handleFilterChange = (key: keyof SignalFiltersData, value: any) => {
+  const handleFilterChange = (key: keyof SignalFiltersData, value: string | number) => {
     setFilters(prev => ({
       ...prev,
       [key]: value

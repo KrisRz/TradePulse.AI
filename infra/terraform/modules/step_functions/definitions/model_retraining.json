@@ -1,0 +1,207 @@
+{
+  "Comment": "TradePulse.AI - Model Retraining Pipeline",
+  "StartAt": "DataPreparation",
+  "States": {
+    "DataPreparation": {
+      "Type": "Task",
+      "Resource": "${data_preparation_arn}",
+      "Parameters": {
+        "data_source": "dynamodb",
+        "time_range": "7d",
+        "validation_split": 0.2
+      },
+      "TimeoutSeconds": 1800,
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "DataPreparationFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "ParallelModelTraining"
+    },
+    "ParallelModelTraining": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "TrainLSTM1m",
+          "States": {
+            "TrainLSTM1m": {
+              "Type": "Task",
+              "Resource": "${model_training_arn}",
+              "Parameters": {
+                "model_type": "lstm_1m",
+                "training_data.$": "$.training_data",
+                "validation_data.$": "$.validation_data",
+                "epochs": 100,
+                "batch_size": 32
+              },
+              "TimeoutSeconds": 3600,
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 60,
+                  "MaxAttempts": 1
+                }
+              ],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "TrainLSTM5m",
+          "States": {
+            "TrainLSTM5m": {
+              "Type": "Task",
+              "Resource": "${model_training_arn}",
+              "Parameters": {
+                "model_type": "lstm_5m",
+                "training_data.$": "$.training_data",
+                "validation_data.$": "$.validation_data",
+                "epochs": 100,
+                "batch_size": 32
+              },
+              "TimeoutSeconds": 3600,
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 60,
+                  "MaxAttempts": 1
+                }
+              ],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "TrainXGBoost",
+          "States": {
+            "TrainXGBoost": {
+              "Type": "Task",
+              "Resource": "${model_training_arn}",
+              "Parameters": {
+                "model_type": "xgb_ensemble",
+                "training_data.$": "$.training_data",
+                "validation_data.$": "$.validation_data",
+                "n_estimators": 1000,
+                "max_depth": 6
+              },
+              "TimeoutSeconds": 1800,
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 30,
+                  "MaxAttempts": 1
+                }
+              ],
+              "End": true
+            }
+          }
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ModelTrainingFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "ModelValidation"
+    },
+    "ModelValidation": {
+      "Type": "Task",
+      "Resource": "${model_validation_arn}",
+      "Parameters": {
+        "trained_models.$": "$",
+        "validation_data.$": "$.validation_data",
+        "performance_threshold": 0.65
+      },
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ModelValidationFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "CheckValidationResults"
+    },
+    "CheckValidationResults": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.validation_passed",
+          "BooleanEquals": true,
+          "Next": "ModelDeployment"
+        }
+      ],
+      "Default": "ValidationThresholdNotMet"
+    },
+    "ModelDeployment": {
+      "Type": "Task",
+      "Resource": "${model_deployment_arn}",
+      "Parameters": {
+        "validated_models.$": "$.validated_models",
+        "deployment_environment": "production"
+      },
+      "TimeoutSeconds": 600,
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ModelDeploymentFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "End": true
+    },
+    "ValidationThresholdNotMet": {
+      "Type": "Fail",
+      "Cause": "Model validation did not meet performance threshold",
+      "Error": "ValidationThresholdError"
+    },
+    "DataPreparationFailed": {
+      "Type": "Fail",
+      "Cause": "Data preparation failed",
+      "Error": "DataPreparationError"
+    },
+    "ModelTrainingFailed": {
+      "Type": "Fail",
+      "Cause": "Model training failed",
+      "Error": "ModelTrainingError"
+    },
+    "ModelValidationFailed": {
+      "Type": "Fail",
+      "Cause": "Model validation failed",
+      "Error": "ModelValidationError"
+    },
+    "ModelDeploymentFailed": {
+      "Type": "Fail",
+      "Cause": "Model deployment failed",
+      "Error": "ModelDeploymentError"
+    }
+  }
+}

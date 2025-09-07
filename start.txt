@@ -1,0 +1,10 @@
+Start script:
+
+source /Applications/Projects/TradePulse.AI/.venv/bin/activate && python3 TRADEPULSE_UNIFIED_MONITOR.py
+
+Backend:
+
+bash /Applications/Projects/TradePulse.AI/start_backend.sh
+
+
+bash /Applications/Projects/TradePulse.AI/start_dynamodb.sh

@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'preact/hooks';
-import { 
-  Menu, 
-  X, 
-  Home, 
-  TrendingUp, 
-  BarChart3, 
-  Settings, 
+import { useState } from 'preact/hooks';
+import { ComponentChildren } from 'preact';
+import {
+  Menu,
+  X,
+  Home,
+  TrendingUp,
+  BarChart3,
+  Settings,
   Bell,
   User,
   LogOut,
@@ -14,21 +15,28 @@ import {
   Search,
   Plus,
   DollarSign,
-  Target,
   Activity
 } from 'lucide-preact';
+import type { Icon } from 'lucide-preact';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import DarkModeToggle from '../ui/DarkModeToggle';
 
+interface HeaderAction {
+  icon: Icon;
+  label: string;
+  onClick: () => void;
+  color?: string;
+}
+
 interface MobileLayoutProps {
-  children: any;
+  children: ComponentChildren;
   title?: string;
   showBackButton?: boolean;
   showSearch?: boolean;
   onBack?: () => void;
   onSearch?: (query: string) => void;
-  headerActions?: any[];
+  headerActions?: HeaderAction[];
 }
 
 export default function MobileLayout({

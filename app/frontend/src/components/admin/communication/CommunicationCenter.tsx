@@ -3,12 +3,12 @@
 Enterprise messaging, announcements, and notification management interface
 */
 
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
-  MessageSquare, Send, Users, Bell, Settings, Eye, Edit, Trash2,
-  Plus, Filter, Search, Calendar, Clock, CheckCircle, AlertTriangle,
-  Mail, Smartphone, Monitor, Globe, TrendingUp, BarChart3,
-  FileText, Download, RefreshCw, Star, Flag, Zap
+  MessageSquare, Send, Users, Bell, Settings, Edit, Trash2,
+  Plus, Filter, Search, Clock, CheckCircle, AlertTriangle,
+  Mail, Smartphone, Monitor, TrendingUp, BarChart3,
+  FileText, Download, RefreshCw, Star, Flag
 } from 'lucide-preact';
 
 interface Message {
@@ -107,29 +107,8 @@ export default function CommunicationCenter() {
       setError(null);
 
       // Get auth token
-      let token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.warn('⚠️ No auth_token found, attempting auto-login for communication...');
-        try {
-          const loginResponse = await fetch('http://localhost:9002/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: 'admin@tradepulse.ai',
-              password: 'admin0000'
-            })
-          });
-          
-          if (loginResponse.ok) {
-            const loginData = await loginResponse.json();
-            token = loginData.access_token;
-            localStorage.setItem('auth_token', token);
-            console.log('✅ Auto-login successful for communication');
-          }
-        } catch (loginError) {
-          console.warn('Auto-login failed:', loginError);
-        }
-      }
+      // Use enterprise_admin_token for development like other components
+      const token = 'enterprise_admin_token';
 
       const [messagesResponse, announcementsResponse, analyticsResponse] = await Promise.all([
         fetch('http://localhost:9002/api/admin/communications/messages/sent', {
@@ -179,7 +158,7 @@ export default function CommunicationCenter() {
 
   const handleSendMessage = async () => {
     try {
-      const response = await fetch('/api/communication/messages/send', {
+      const response = await fetch('http://localhost:9002/api/communication/messages/send', {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer enterprise_admin_token',
@@ -761,7 +740,7 @@ export default function CommunicationCenter() {
                   </label>
                   <select
                     value={messageForm.type}
-                    onChange={(e) => setMessageForm(prev => ({ ...prev, type: e.target.value }))}
+                    onChange={(e) => setMessageForm(prev => ({ ...prev, type: (e.target as HTMLInputElement).value }))}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   >
                     <option value="direct_message">Direct Message</option>
@@ -777,7 +756,7 @@ export default function CommunicationCenter() {
                   </label>
                   <select
                     value={messageForm.priority}
-                    onChange={(e) => setMessageForm(prev => ({ ...prev, priority: e.target.value }))}
+                    onChange={(e) => setMessageForm(prev => ({ ...prev, priority: (e.target as HTMLInputElement).value }))}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   >
                     <option value="low">Low</option>
@@ -796,7 +775,7 @@ export default function CommunicationCenter() {
                 <input
                   type="text"
                   value={messageForm.subject}
-                  onChange={(e) => setMessageForm(prev => ({ ...prev, subject: e.target.value }))}
+                  onChange={(e) => setMessageForm(prev => ({ ...prev, subject: (e.target as HTMLInputElement).value }))}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   placeholder="Message subject..."
                 />
@@ -808,7 +787,7 @@ export default function CommunicationCenter() {
                 </label>
                 <textarea
                   value={messageForm.content}
-                  onChange={(e) => setMessageForm(prev => ({ ...prev, content: e.target.value }))}
+                  onChange={(e) => setMessageForm(prev => ({ ...prev, content: (e.target as HTMLInputElement).value }))}
                   rows={6}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   placeholder="Message content..."
@@ -826,7 +805,7 @@ export default function CommunicationCenter() {
                         type="checkbox"
                         checked={messageForm.channels.includes(channel)}
                         onChange={(e) => {
-                          if (e.target.checked) {
+                          if ((e.target as HTMLInputElement).checked) {
                             setMessageForm(prev => ({ ...prev, channels: [...prev.channels, channel] }));
                           } else {
                             setMessageForm(prev => ({ ...prev, channels: prev.channels.filter(c => c !== channel) }));

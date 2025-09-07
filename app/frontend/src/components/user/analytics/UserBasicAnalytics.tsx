@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'preact/hooks';
-import { BarChart3, TrendingUp, Calendar, Award, DollarSign, Activity } from 'lucide-preact';
+import { useState } from 'preact/hooks';
+import { BarChart3, TrendingUp, Award, DollarSign, Activity } from 'lucide-preact';
 
 interface PerformanceData {
   period: string;

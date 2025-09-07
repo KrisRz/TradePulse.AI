@@ -1,48 +1,106 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Shield, AlertTriangle, TrendingDown, BarChart3, Activity, Target } from 'lucide-preact';
+import { Shield, AlertTriangle, BarChart3, TrendingDown, Target } from 'lucide-preact';
+import type { PortfolioOverviewResponse } from '../../../../types';
+
+interface RiskData {
+  metrics: {
+    var_1d: number;
+    var_5d: number;
+    var_30d: number;
+    exposure: number;
+    maxDrawdown: number;
+    beta: number;
+    correlation: number;
+    volatility: number;
+    sharpeRatio: number;
+    leverageRatio: number;
+    portfolioHeat: number;
+  };
+  position_risks: Array<{
+    symbol: string;
+    risk_score: number;
+    value_at_risk: number;
+    position_size: number;
+    exposure_percentage: number;
+  }>;
+  scenarios: Array<{
+    name: string;
+    probability: number;
+    impact: number;
+    description: string;
+  }>;
+  last_updated: string;
+}
 
 interface RiskManagementProps {
-  portfolioData: any;
+  portfolioData: PortfolioOverviewResponse | null;
 }
 
 export default function RiskManagement({ portfolioData }: RiskManagementProps) {
-  const [riskTimeframe, setRiskTimeframe] = useState('24h');
+  const [riskTimeframe] = useState('24h');
+  const [riskData, setRiskData] = useState<RiskData | null>(null);
+  const [loading, setLoading] = useState(true);
   
-  const stats = portfolioData?.stats || {};
-  const totalValue = stats.total_value || 10000;
-  const availableBalance = stats.available_balance || 10000;
-  const activePositions = stats.active_positions || 0;
-  const dailyPnL = stats.daily_pnl || 0;
-  const riskExposure = stats.risk_exposure || 0;
+  // Extract data directly from PortfolioOverviewResponse
+  const totalValue = portfolioData?.total_value || 0;
+  const availableBalance = portfolioData?.cash_balance || 0;
+  const activePositions = portfolioData?.active_positions || 0;
 
-  // Mock risk metrics for enterprise dashboard
-  const riskMetrics = {
-    var_1d: 2.1,      // 1-day Value at Risk
-    var_5d: 4.8,      // 5-day Value at Risk  
-    var_30d: 12.3,    // 30-day Value at Risk
-    exposure: ((totalValue - availableBalance) / totalValue) * 100,
-    maxDrawdown: 8.2,
-    beta: 1.15,
-    correlation: 0.87,
-    volatility: 18.5,
-    sharpeRatio: 1.85,
+  // Fetch real risk data from backend
+  useEffect(() => {
+    const fetchRiskData = async () => {
+      try {
+        const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
+        const response = await fetch(`http://localhost:9002/api/portfolio/virtual/risk-metrics?timeframe=${riskTimeframe}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setRiskData(data);
+          console.log('✅ Real risk data loaded:', data);
+          console.log('✅ Risk metrics:', data.metrics);
+          console.log('✅ Position risks:', data.position_risks);
+          console.log('✅ Scenarios:', data.scenarios);
+        } else {
+          console.error('❌ Failed to fetch risk data. Status:', response.status);
+          console.error('❌ Response:', await response.text());
+          setRiskData(null);
+        }
+      } catch (error) {
+        console.error('Error fetching risk data:', error);
+        setRiskData(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRiskData();
+  }, [riskTimeframe]);
+
+  // Real risk metrics from backend
+  const riskMetrics = riskData?.metrics || {
+    var_1d: 0,
+    var_5d: 0,
+    var_30d: 0,
+    exposure: totalValue > 0 ? ((totalValue - availableBalance) / totalValue) * 100 : 0,
+    maxDrawdown: 0,
+    beta: 0,
+    correlation: 0,
+    volatility: 0,
+    sharpeRatio: 0,
     leverageRatio: 1.0,
-    portfolioHeat: 35.2
+    portfolioHeat: 0
   };
 
-  // Position risk distribution
-  const positionRisks = [
-    { symbol: 'BTCUSDT', allocation: 65.2, risk: 'Medium', var: 1.8 },
-    { symbol: 'Cash', allocation: 34.8, risk: 'Low', var: 0.0 },
-  ];
+  // Real position risk distribution from backend
+  const positionRisks = riskData?.position_risks || [];
 
-  // Risk scenarios
-  const riskScenarios = [
-    { scenario: 'Market Crash (-20%)', portfolioImpact: -18.5, probability: 'Low' },
-    { scenario: 'High Volatility (+50%)', portfolioImpact: -8.2, probability: 'Medium' },
-    { scenario: 'Bitcoin Flash Crash (-30%)', portfolioImpact: -19.6, probability: 'Low' },
-    { scenario: 'Normal Market Stress (-10%)', portfolioImpact: -9.2, probability: 'High' }
-  ];
+  // Real risk scenarios from backend
+  const riskScenarios = riskData?.scenarios || [];
 
   const getRiskColor = (risk: string) => {
     switch (risk.toLowerCase()) {
@@ -68,14 +126,6 @@ export default function RiskManagement({ portfolioData }: RiskManagementProps) {
     return 'text-red-600 dark:text-red-400';
   };
 
-  const getProbabilityColor = (probability: string) => {
-    switch (probability.toLowerCase()) {
-      case 'low': return 'text-green-600 dark:text-green-400';
-      case 'medium': return 'text-yellow-600 dark:text-yellow-400';
-      case 'high': return 'text-red-600 dark:text-red-400';
-      default: return 'text-gray-600 dark:text-gray-400';
-    }
-  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -85,10 +135,6 @@ export default function RiskManagement({ portfolioData }: RiskManagementProps) {
     }).format(amount);
   };
 
-  const formatPercentage = (percentage: number) => {
-    const formatted = percentage.toFixed(2);
-    return `${percentage >= 0 ? '' : ''}${formatted}%`;
-  };
 
   // Calculate overall risk level
   const getOverallRiskLevel = () => {
@@ -98,6 +144,31 @@ export default function RiskManagement({ portfolioData }: RiskManagementProps) {
   };
 
   const overallRisk = getOverallRiskLevel();
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading risk analysis...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (!riskData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Failed to load risk data</p>
+          <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">Check console for details</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -224,23 +295,23 @@ export default function RiskManagement({ portfolioData }: RiskManagementProps) {
               <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="font-medium text-gray-900 dark:text-white">{position.symbol}</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskBgColor(position.risk)} ${getRiskColor(position.risk)}`}>
-                    {position.risk} Risk
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${position.risk_score > 0.7 ? 'bg-red-100 text-red-800' : position.risk_score > 0.4 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                    {position.risk_score > 0.7 ? 'High' : position.risk_score > 0.4 ? 'Medium' : 'Low'} Risk
                   </span>
                 </div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-600 dark:text-gray-400">Allocation</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">{position.allocation.toFixed(1)}%</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{position.exposure_percentage.toFixed(1)}%</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-600 dark:text-gray-400">VaR Contribution</span>
-                  <span className={`font-semibold ${getVarColor(position.var)}`}>{position.var.toFixed(2)}%</span>
+                  <span className="text-gray-600 dark:text-gray-400">Value at Risk</span>
+                  <span className={`font-semibold ${position.value_at_risk > 0 ? 'text-red-600' : 'text-green-600'}`}>${position.value_at_risk.toFixed(2)}</span>
                 </div>
                 <div className="mt-2">
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div
                       className="bg-blue-500 h-2 rounded-full"
-                      style={{ width: `${position.allocation}%` }}
+                      style={{ width: `${Math.min(position.exposure_percentage, 100)}%` }}
                     ></div>
                   </div>
                 </div>
@@ -267,25 +338,25 @@ export default function RiskManagement({ portfolioData }: RiskManagementProps) {
               {riskScenarios.map((scenario, index) => (
                 <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                    {scenario.scenario}
+                    {scenario.name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm font-medium ${scenario.portfolioImpact >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatPercentage(scenario.portfolioImpact)}
+                    <span className={`text-sm font-medium ${scenario.impact >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {((scenario.impact / totalValue) * 100).toFixed(1)}%
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm font-medium ${scenario.portfolioImpact >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(totalValue * scenario.portfolioImpact / 100)}
+                    <span className={`text-sm font-medium ${scenario.impact >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(scenario.impact)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      scenario.probability === 'Low' ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' :
-                      scenario.probability === 'Medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100' :
+                      scenario.probability < 0.1 ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' :
+                      scenario.probability < 0.2 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100' :
                       'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
                     }`}>
-                      {scenario.probability}
+                      {(scenario.probability * 100).toFixed(0)}%
                     </span>
                   </td>
                 </tr>
@@ -300,24 +371,38 @@ export default function RiskManagement({ portfolioData }: RiskManagementProps) {
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Risk Controls & Limits</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">85%</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Stop Loss Coverage</div>
-            <div className="text-xs text-green-600 dark:text-green-400">Within Limits</div>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+              {positionRisks.length > 0 ? (positionRisks.filter(p => p.risk_score < 0.5).length / positionRisks.length * 100).toFixed(0) : '0'}%
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Low Risk Positions</div>
+            <div className="text-xs text-green-600 dark:text-green-400">
+              {positionRisks.length > 0 && positionRisks.filter(p => p.risk_score < 0.5).length / positionRisks.length > 0.7 ? 'Well Managed' : 'Monitor Closely'}
+            </div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">1.0x</div>
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{riskMetrics.leverageRatio.toFixed(1)}x</div>
             <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Leverage Ratio</div>
-            <div className="text-xs text-blue-600 dark:text-blue-400">Conservative</div>
+            <div className="text-xs text-blue-600 dark:text-blue-400">
+              {riskMetrics.leverageRatio <= 1.2 ? 'Conservative' : riskMetrics.leverageRatio <= 2.0 ? 'Moderate' : 'Aggressive'}
+            </div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">15%</div>
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+              {positionRisks.length > 0 ? Math.max(...positionRisks.map(p => p.exposure_percentage)).toFixed(0) : '0'}%
+            </div>
             <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Max Position Size</div>
-            <div className="text-xs text-purple-600 dark:text-purple-400">Risk Limited</div>
+            <div className="text-xs text-purple-600 dark:text-purple-400">
+              {positionRisks.length > 0 && Math.max(...positionRisks.map(p => p.exposure_percentage)) < 20 ? 'Risk Limited' : 'High Exposure'}
+            </div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">2.5h</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Avg Hold Time</div>
-            <div className="text-xs text-orange-600 dark:text-orange-400">Quick Exits</div>
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+              {riskMetrics.portfolioHeat > 0 ? (riskMetrics.portfolioHeat * 10).toFixed(1) : '0.0'}h
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Portfolio Heat</div>
+            <div className="text-xs text-orange-600 dark:text-orange-400">
+              {riskMetrics.portfolioHeat < 0.3 ? 'Cool' : riskMetrics.portfolioHeat < 0.7 ? 'Warm' : 'Hot'}
+            </div>
           </div>
         </div>
       </div>

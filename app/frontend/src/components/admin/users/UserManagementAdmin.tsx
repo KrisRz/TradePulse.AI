@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
   Users, 
   Filter, 
@@ -8,15 +8,12 @@ import {
   CheckCircle, 
   XCircle,
   TrendingUp,
-  TrendingDown,
   DollarSign,
-  Calendar,
   UserPlus,
   Download,
   Mail,
   Shield,
   Activity,
-  Eye,
   UserCheck,
   UserX,
   Key,
@@ -40,6 +37,9 @@ interface UserManagementFilters {
   kyc_status?: string;
   search?: string;
 }
+
+type FilterValue = string | undefined;
+type UserActionArg = string | undefined;
 
 interface Invitation {
   id: string;
@@ -110,7 +110,7 @@ export default function UserManagementAdmin() {
         params.append(key, String(value));
       }
     });
-    return `http://localhost:9001/api/admin/users?${params.toString()}`;
+    return `http://localhost:9002/api/admin/users?${params.toString()}`;
   };
 
   const { data: userData, loading, error, refresh } = useAdminData(buildUserDataUrl());
@@ -129,43 +129,22 @@ export default function UserManagementAdmin() {
         }
       });
 
-      // Simulated invitations since we don't have a real invitation system yet
-      // In production, this would call: http://localhost:9001/api/admin/invitations
-      const mockInvitations = [
-        {
-          id: 'inv_001',
-          email: 'trader1@example.com',
-          role: 'user',
-          status: 'sent',
-          invited_by: 'admin@tradepulse.ai',
-          created_at: '2025-08-14T10:00:00Z',
-          sent_at: '2025-08-14T10:00:00Z',
-          expires_at: '2025-08-21T10:00:00Z',
-          tracking_data: {
-            sent_count: 1,
-            last_sent: '2025-08-14T10:00:00Z'
-          }
-        },
-        {
-          id: 'inv_002', 
-          email: 'premium.user@example.com',
-          role: 'premium',
-          status: 'registered',
-          invited_by: 'admin@tradepulse.ai',
-          created_at: '2025-08-13T15:30:00Z',
-          sent_at: '2025-08-13T15:30:00Z',
-          expires_at: '2025-08-20T15:30:00Z',
-          tracking_data: {
-            sent_count: 1,
-            last_sent: '2025-08-13T15:30:00Z',
-            opened_at: '2025-08-13T16:00:00Z',
-            clicked_at: '2025-08-13T16:05:00Z'
-          }
+      // REAL API: Call actual invitation endpoint
+      const response = await fetch(`/api/admin/invitations?${  params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-      ];
+      });
 
-      setInvitations(mockInvitations);
-      console.log('📧 Loaded mock invitations:', mockInvitations.length);
+      if (response.ok) {
+        const data = await response.json();
+        setInvitations(data.invitations || []);
+        console.log('📧 Loaded real invitations:', data.invitations?.length || 0);
+      } else {
+        console.error('Failed to load invitations:', response.status);
+        setInvitations([]);
+      }
     } catch (error) {
       console.error('Failed to load invitations:', error);
       setInvitations([]);
@@ -179,7 +158,7 @@ export default function UserManagementAdmin() {
     }
   }, [activeTab, invitationFilters]);
 
-  const handleFilterChange = (key: keyof UserManagementFilters, value: any) => {
+  const handleFilterChange = (key: keyof UserManagementFilters, value: FilterValue) => {
     setFilters(prev => ({
       ...prev,
       [key]: value,
@@ -191,7 +170,7 @@ export default function UserManagementAdmin() {
     setFilters(prev => ({ ...prev, page: newPage }));
   };
 
-  const handleUserAction = async (userId: string, action: string, ...args: any[]) => {
+  const handleUserAction = async (userId: string, action: string, ...args: UserActionArg[]) => {
     try {
       setActionLoading(userId);
       
@@ -636,7 +615,7 @@ export default function UserManagementAdmin() {
                     <input
                       type="text"
                       value={filters.search || ''}
-                      onChange={(e) => handleFilterChange('search', e.target.value)}
+                      onChange={(e) => handleFilterChange('search', (e.target as HTMLInputElement).value)}
                       placeholder="Username, email..."
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     />
@@ -648,7 +627,7 @@ export default function UserManagementAdmin() {
                     </label>
                     <select
                       value={filters.role || 'all'}
-                      onChange={(e) => handleFilterChange('role', e.target.value === 'all' ? undefined : e.target.value)}
+                      onChange={(e) => handleFilterChange('role', (e.target as HTMLInputElement).value === 'all' ? undefined : (e.target as HTMLInputElement).value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     >
                       <option value="all">All Roles</option>
@@ -664,7 +643,7 @@ export default function UserManagementAdmin() {
                     </label>
                     <select
                       value={filters.status || 'all'}
-                      onChange={(e) => handleFilterChange('status', e.target.value === 'all' ? undefined : e.target.value)}
+                      onChange={(e) => handleFilterChange('status', (e.target as HTMLInputElement).value === 'all' ? undefined : (e.target as HTMLInputElement).value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     >
                       <option value="all">All Status</option>
@@ -681,7 +660,7 @@ export default function UserManagementAdmin() {
                     </label>
                     <select
                       value={filters.subscription_type || 'all'}
-                      onChange={(e) => handleFilterChange('subscription_type', e.target.value === 'all' ? undefined : e.target.value)}
+                      onChange={(e) => handleFilterChange('subscription_type', (e.target as HTMLInputElement).value === 'all' ? undefined : (e.target as HTMLInputElement).value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     >
                       <option value="all">All Plans</option>
@@ -700,7 +679,7 @@ export default function UserManagementAdmin() {
                     </label>
                     <select
                       value={filters.sort_by || 'created_at'}
-                      onChange={(e) => handleFilterChange('sort_by', e.target.value)}
+                      onChange={(e) => handleFilterChange('sort_by', (e.target as HTMLInputElement).value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     >
                       <option value="created_at">Registration Date</option>
@@ -715,7 +694,7 @@ export default function UserManagementAdmin() {
                     </label>
                     <select
                       value={filters.sort_order || 'desc'}
-                      onChange={(e) => handleFilterChange('sort_order', e.target.value)}
+                      onChange={(e) => handleFilterChange('sort_order', (e.target as HTMLInputElement).value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     >
                       <option value="desc">Descending</option>
@@ -825,7 +804,7 @@ export default function UserManagementAdmin() {
                 </label>
                 <select
                   value={invitationFilters.status}
-                  onChange={(e) => setInvitationFilters(prev => ({ ...prev, status: e.target.value, page: 1 }))}
+                  onChange={(e) => setInvitationFilters(prev => ({ ...prev, status: (e.target as HTMLInputElement).value, page: 1 }))}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 >
                   <option value="">All Status</option>
@@ -843,7 +822,7 @@ export default function UserManagementAdmin() {
                 </label>
                 <select
                   value={invitationFilters.invited_by}
-                  onChange={(e) => setInvitationFilters(prev => ({ ...prev, invited_by: e.target.value, page: 1 }))}
+                  onChange={(e) => setInvitationFilters(prev => ({ ...prev, invited_by: (e.target as HTMLInputElement).value, page: 1 }))}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 >
                   <option value="">All Admins</option>
@@ -884,7 +863,7 @@ export default function UserManagementAdmin() {
                       type="checkbox"
                       checked={selectedUsers.length === (userData?.users?.length || 0)}
                       onChange={(e) => {
-                        if (e.target.checked) {
+                        if ((e.target as HTMLInputElement).checked) {
                           setSelectedUsers(userData?.users?.map(u => u.id) || []);
                         } else {
                           setSelectedUsers([]);
@@ -923,7 +902,7 @@ export default function UserManagementAdmin() {
                         type="checkbox"
                         checked={selectedUsers.includes(user.id)}
                         onChange={(e) => {
-                          if (e.target.checked) {
+                          if ((e.target as HTMLInputElement).checked) {
                             setSelectedUsers([...selectedUsers, user.id]);
                           } else {
                             setSelectedUsers(selectedUsers.filter(id => id !== user.id));
@@ -1342,7 +1321,7 @@ export default function UserManagementAdmin() {
                   <input
                     type="email"
                     value={inviteForm.email}
-                    onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                    onChange={(e) => setInviteForm(prev => ({ ...prev, email: (e.target as HTMLInputElement).value }))}
                     placeholder="user@company.com"
                     className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   />
@@ -1386,7 +1365,7 @@ export default function UserManagementAdmin() {
                 </label>
                 <select
                   value={inviteForm.role}
-                  onChange={(e) => setInviteForm(prev => ({ ...prev, role: e.target.value }))}
+                  onChange={(e) => setInviteForm(prev => ({ ...prev, role: (e.target as HTMLInputElement).value }))}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 >
                   <option value="user">User (Basic access)</option>
@@ -1402,7 +1381,7 @@ export default function UserManagementAdmin() {
                 </label>
                 <textarea
                   value={inviteForm.custom_message}
-                  onChange={(e) => setInviteForm(prev => ({ ...prev, custom_message: e.target.value }))}
+                  onChange={(e) => setInviteForm(prev => ({ ...prev, custom_message: (e.target as HTMLInputElement).value }))}
                   placeholder="Add a personal welcome message..."
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
@@ -1416,7 +1395,7 @@ export default function UserManagementAdmin() {
                 </label>
                 <select
                   value={inviteForm.expires_in_days}
-                  onChange={(e) => setInviteForm(prev => ({ ...prev, expires_in_days: parseInt(e.target.value) }))}
+                  onChange={(e) => setInviteForm(prev => ({ ...prev, expires_in_days: parseInt((e.target as HTMLInputElement).value) }))}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 >
                   <option value={7}>7 days</option>

@@ -1,17 +1,19 @@
 ---
 export const prerender = false;
 
+// Import layouts
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
 // Import admin components with new clean structure - testing systematically
 import SystemStatusDashboard from '../../components/admin/system/SystemStatusDashboard.tsx';
 import VirtualPortfolioAdmin from '../../components/admin/portfolio/VirtualPortfolioAdmin.tsx';
+import AnalyticsAdmin from '../../components/admin/analytics/AnalyticsAdmin.tsx';
 import SystemControlAdmin from '../../components/admin/system/SystemControlAdmin.tsx';
-import CommunicationCenter from '../../components/admin/communication/CommunicationCenter.tsx';
-// Temporarily disabled for testing:
-// import SignalLogsAdmin from '../../components/admin/signals/SignalLogsAdmin.tsx';
+// import CommunicationCenter from '../../components/admin/communication/CommunicationCenter.tsx';
+// Demo components (kept as requested):
 // import UserManagementAdmin from '../../components/admin/users/UserManagementAdmin.tsx';
 // import RealTradingAdmin from '../../components/admin/portfolio/trading/RealTradingAdmin.tsx';
 // import NotificationSystemAdmin from '../../components/admin/notifications/NotificationSystemAdmin.tsx';
-import AnalyticsAdmin from '../../components/admin/analytics/AnalyticsAdmin.tsx';
 
 
 // Check if user is admin
@@ -22,16 +24,7 @@ if (!isAdmin) {
 }
 ---
 
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Dashboard - TradePulse.AI</title>
-  
-  <!-- Tailwind CSS -->
-  <link rel="stylesheet" href="/src/styles/globals.css" />
-
+<BaseLayout title="Admin Dashboard - TradePulse.AI" description="Professional trading platform admin dashboard">
   <!-- Custom Admin Dashboard Styles -->
   <style>
     /* Custom scrollbar */
@@ -148,19 +141,7 @@ if (!isAdmin) {
       }
     }
   </style>
-
-  <!-- Dark mode script -->
-  <script is:inline>
-    // Apply theme immediately to prevent FOUC
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  </script>
-</head>
-
-<body class="bg-gray-50 dark:bg-gray-900">
+  
   <div id="admin-dashboard" class="min-h-screen">
     <!-- Header -->
     <header class="bg-white dark:bg-gray-800 shadow border-b border-gray-200 dark:border-gray-700">
@@ -198,13 +179,13 @@ if (!isAdmin) {
             🖥️ System Status
           </button>
           <button data-section="user-management" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
-            👥 User Management
+            👥 User Management <span class="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-1 rounded">DEMO</span>
           </button>
           <button data-section="trading-monitor" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
-            📈 Real Trading
+            📈 Real Trading <span class="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-1 rounded">DEMO</span>
           </button>
           <button data-section="notifications" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
-            🔔 Notifications
+            🔔 Notifications <span class="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-1 rounded">DEMO</span>
           </button>
           <button data-section="analytics" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
             📈 Analytics
@@ -213,7 +194,7 @@ if (!isAdmin) {
             ⚙️ System Control
           </button>
           <button data-section="communication" class="section-tab py-4 px-2 border-b-2 border-transparent text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 font-medium text-sm transition-colors">
-            💬 Communication
+            💬 Communication <span class="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-1 rounded">DEMO</span>
           </button>
         </div>
       </div>
@@ -231,20 +212,29 @@ if (!isAdmin) {
         <SystemStatusDashboard client:load />
       </div>
 
-      <!-- User Management Section -->
-      <!-- <div id="user-management-section" class="admin-section hidden">
-        <UserManagementAdmin client:load />
-      </div> -->
+      <!-- User Management Section (DEMO) -->
+      <div id="user-management-section" class="admin-section hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">User Management</h3>
+          <p class="text-gray-600 dark:text-gray-400">User Management component temporarily disabled for debugging.</p>
+        </div>
+      </div>
 
-      <!-- Real Trading Section -->
-      <!-- <div id="trading-monitor-section" class="admin-section hidden">
-        <RealTradingAdmin client:load />
-      </div> -->
+      <!-- Real Trading Section (DEMO) -->
+      <div id="trading-monitor-section" class="admin-section hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Real Trading</h3>
+          <p class="text-gray-600 dark:text-gray-400">Real Trading component temporarily disabled for debugging.</p>
+        </div>
+      </div>
 
-      <!-- Notifications Section -->
-      <!-- <div id="notifications-section" class="admin-section hidden">
-        <NotificationSystemAdmin client:load />
-      </div> -->
+      <!-- Notifications Section (DEMO) -->
+      <div id="notifications-section" class="admin-section hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Notifications</h3>
+          <p class="text-gray-600 dark:text-gray-400">Notifications component temporarily disabled for debugging.</p>
+        </div>
+      </div>
 
       <!-- Analytics Section -->
       <div id="analytics-section" class="admin-section hidden">
@@ -258,7 +248,10 @@ if (!isAdmin) {
 
       <!-- Communication Center Section -->
       <div id="communication-section" class="admin-section hidden">
-        <CommunicationCenter client:load />
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Communication Center</h3>
+          <p class="text-gray-600 dark:text-gray-400">Communication Center component temporarily disabled for debugging.</p>
+        </div>
       </div>
     </main>
 
@@ -333,5 +326,4 @@ if (!isAdmin) {
       }
     }, 2000);
   </script>
-</body>
-</html> 
+</BaseLayout> 

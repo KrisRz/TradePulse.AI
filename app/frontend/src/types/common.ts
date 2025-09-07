@@ -185,21 +185,4 @@ export interface EnvironmentConfig {
   version: string;
 }
 
-export default {
-  ApiResponse,
-  User,
-  Position,
-  PortfolioStats,
-  TradingSignal,
-  SystemStatus,
-  Notification,
-  ChartDataPoint,
-  FormField,
-  BaseComponentProps,
-  LoadingState,
-  Pagination,
-  SortConfig,
-  FilterConfig,
-  ThemeConfig,
-  EnvironmentConfig,
-};
+// Export types only - no default export needed for types

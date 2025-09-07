@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
-import { authStore } from '@/lib/auth-store';
+import { authStore, authActions } from '@/lib/auth-store';
+import { Loader2 } from 'lucide-preact';
 import type { LoginRequest } from '../../types/auth';
 
 interface LoginFormProps {
@@ -8,6 +9,11 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
+  console.log('🔐 LoginForm: Component initialized with callbacks:', { 
+    hasOnSuccess: !!onSuccess, 
+    hasOnSwitchToRegister: !!onSwitchToRegister 
+  });
+  
   const [formData, setFormData] = useState<LoginRequest>({
     email: '',
     password: '',
@@ -60,36 +66,67 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
     }
     
     console.log('🔐 LoginForm: Submitting login for:', formData.email);
-    const success = await authStore.login(formData);
-    console.log('🔐 LoginForm: Login result:', success);
+    console.log('🔐 LoginForm: Password length:', formData.password.length);
     
-    if (success) {
-      console.log('🔐 LoginForm: Login successful, handling redirect');
+    const success = await authActions.login(formData.email, formData.password);
+    console.log('🔐 LoginForm: Login result:', success);
+    console.log('🔐 LoginForm: Login success type:', typeof success);
+    console.log('🔐 LoginForm: Login success.success:', success.success);
+    
+    if (success.success) {
+      console.log('🔐 LoginForm: Login successful, calling onSuccess callback');
+      console.log('🔐 LoginForm: Current localStorage before callback:', {
+        token: localStorage.getItem('auth_token'),
+        userData: localStorage.getItem('user_data')
+      });
       
-      // Handle redirect directly in the component
-      const userData = localStorage.getItem('user_data');
-      console.log('🔐 LoginForm: User data from localStorage:', userData);
+      // Handle redirect internally since Astro props don't work reliably
+      console.log('🔐 LoginForm: About to call onSuccess callback, callback exists:', !!onSuccess);
       
-      if (userData) {
-        const user = JSON.parse(userData);
-        console.log('🔐 LoginForm: Parsed user:', user);
-        
-        if (user.role === 'admin') {
-          console.log('🔐 LoginForm: Redirecting admin to /admin/dashboard');
-          window.location.href = '/admin/dashboard';
-        } else {
-          console.log('🔐 LoginForm: Redirecting user to /user_dashboard');
-          window.location.href = '/user_dashboard';
-        }
+      if (onSuccess) {
+        console.log('🔐 LoginForm: Calling onSuccess callback now...');
+        onSuccess();
+        console.log('🔐 LoginForm: onSuccess callback completed');
       } else {
-        console.log('🔐 LoginForm: No user data, fallback to /user_dashboard');
-        window.location.href = '/user_dashboard';
+        console.log('🔐 LoginForm: No callback provided, handling redirect internally...');
+        
+        // Handle redirect internally with detailed logging
+        setTimeout(() => {
+          const userData = localStorage.getItem('user_data');
+          const authToken = localStorage.getItem('auth_token');
+          
+          console.log('🔐 LoginForm: Internal redirect - Auth token exists:', !!authToken);
+          console.log('🔐 LoginForm: Internal redirect - User data exists:', !!userData);
+          console.log('🔐 LoginForm: Internal redirect - Raw user data:', userData);
+          
+          if (userData) {
+            try {
+              const user = JSON.parse(userData);
+              console.log('🔐 LoginForm: Internal redirect - Parsed user:', user);
+              console.log('🔐 LoginForm: Internal redirect - User role:', user.role);
+              console.log('🔐 LoginForm: Internal redirect - User is_admin:', user.is_admin);
+              
+              if (user.role === 'admin' || user.is_admin === true) {
+                console.log('🔐 LoginForm: ✅ Internal redirect ADMIN to /admin/dashboard');
+                window.location.href = '/admin/dashboard';
+              } else {
+                console.log('🔐 LoginForm: ✅ Internal redirect USER to /user_dashboard');
+                window.location.href = '/user_dashboard';
+              }
+            } catch (parseError) {
+              console.error('🔐 LoginForm: ❌ Error parsing user data:', parseError);
+              console.log('🔐 LoginForm: Fallback redirect to /user_dashboard');
+              window.location.href = '/user_dashboard';
+            }
+          } else {
+            console.log('🔐 LoginForm: No user data, fallback redirect to /user_dashboard');
+            window.location.href = '/user_dashboard';
+          }
+        }, 100);
       }
-      
-      // Also call the callback if provided (for compatibility)
-      onSuccess?.();
     } else {
       console.error('🔐 LoginForm: Login failed');
+      console.error('🔐 LoginForm: Error details:', success.error);
     }
   };
 
@@ -135,7 +172,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
         )}
       </div>
 
-      {authStore.error.value && (
+      {authStore.error?.value && (
         <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -148,12 +185,12 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
                 Login failed
               </h3>
               <div className="mt-2 text-sm text-red-700 dark:text-red-300">
-                {authStore.error.value}
+                {authStore.error?.value}
               </div>
               <div className="mt-4">
                 <button
                   type="button"
-                  onClick={() => authStore.clearError()}
+                  onClick={() => authActions.clearError()}
                   className="text-sm font-medium text-red-800 dark:text-red-200 hover:text-red-900 dark:hover:text-red-100"
                 >
                   Dismiss
@@ -167,15 +204,12 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
       <div>
         <button
           type="submit"
-          disabled={authStore.isLoading.value}
+          disabled={authStore.isLoading?.value}
           className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {authStore.isLoading.value ? (
+          {authStore.isLoading?.value ? (
             <>
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+              <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" />
               Signing in...
             </>
           ) : (

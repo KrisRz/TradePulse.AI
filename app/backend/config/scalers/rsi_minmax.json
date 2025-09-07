@@ -1,0 +1,12 @@
+{
+  "scaler_type": "minmax",
+  "feature_name": "rsi",
+  "parameters": {
+    "min": 0.0,
+    "max": 100.0,
+    "scale": 100.0
+  },
+  "training_commit": "default_v1.0.0",
+  "created_at": "2025-09-02T15:19:43.506689+00:00",
+  "checksum": "aaf93cd264e81a84930ff10c23517f5b192eb6924e257db79e084d6835e237ef"
+}

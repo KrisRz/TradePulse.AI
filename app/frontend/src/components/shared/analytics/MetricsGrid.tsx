@@ -1,21 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
-import { 
-  DollarSign, 
-  TrendingUp, 
-  TrendingDown, 
-  Target, 
-  Clock, 
-  BarChart3,
-  PieChart,
-  Activity,
-  Shield,
-  Zap,
-  Award,
-  AlertTriangle,
-  RefreshCw,
-  Eye,
-  Info
-} from 'lucide-preact';
+import { DollarSign, TrendingUp, TrendingDown, Clock, BarChart3, Activity, Shield, Award, AlertTriangle, RefreshCw, Info } from 'lucide-preact';
+
+type Icon = typeof DollarSign;
 
 interface MetricData {
   id: string;
@@ -67,7 +53,7 @@ export default function MetricsGrid({
       setError(null);
       
       // PRODUCTION: Fetch real metrics from professional backend
-      const response = await fetch(`http://localhost:9001/api/analytics/metrics?timeRange=${timeRange}`, {
+      const response = await fetch(`http://localhost:9002/api/analytics/metrics?timeRange=${timeRange}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'
@@ -96,17 +82,13 @@ export default function MetricsGrid({
   };
 
   const getIconComponent = (iconName: string) => {
-    const iconMap: { [key: string]: any } = {
+    const iconMap: { [key: string]: Icon } = {
       DollarSign,
       TrendingUp,
-      TrendingDown,
-      Target,
       Clock,
       BarChart3,
-      PieChart,
       Activity,
       Shield,
-      Zap,
       Award,
       AlertTriangle
     };

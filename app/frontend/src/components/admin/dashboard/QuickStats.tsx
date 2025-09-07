@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 
 interface QuickStat {
   label: string;
@@ -23,45 +23,64 @@ export default function QuickStats() {
 
   const fetchQuickStats = async () => {
     try {
-      // Mock data - will be replaced with API call
-      const mockStats: QuickStat[] = [
-        {
-          label: 'Portfolio Value',
-          value: '$12,456.78',
-          change: '+2.34%',
-          changeType: 'positive',
-          icon: 'wallet'
-        },
-        {
-          label: 'Today\'s P&L',
-          value: '$156.78',
-          change: '+1.28%',
-          changeType: 'positive',
-          icon: 'trending-up'
-        },
-        {
-          label: 'AI Confidence',
-          value: '76.5%',
-          change: '+2.1%',
-          changeType: 'positive',
-          icon: 'brain'
-        },
-        {
-          label: 'Active Signals',
-          value: '3',
-          change: 'New: 1',
-          changeType: 'neutral',
-          icon: 'zap'
+      setLoading(true);
+      
+      // PRODUCTION: Fetch real quick stats from backend/DynamoDB
+      const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
+      const response = await fetch('http://localhost:9002/api/portfolio/quick-stats', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-      ];
+      });
 
-      setTimeout(() => {
-        setStats(mockStats);
-        setLoading(false);
-      }, 300);
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Map real data to QuickStat format
+        const realStats: QuickStat[] = [
+          {
+            label: 'Portfolio Value',
+            value: `$${(data.total_value || 0).toLocaleString()}`,
+            change: `${data.daily_change >= 0 ? '+' : ''}${(data.daily_change || 0).toFixed(2)}%`,
+            changeType: (data.daily_change || 0) >= 0 ? 'positive' : 'negative',
+            icon: 'wallet'
+          },
+          {
+            label: 'Today\'s P&L',
+            value: `$${(data.daily_pnl || 0).toLocaleString()}`,
+            change: `${data.daily_pnl_percentage >= 0 ? '+' : ''}${(data.daily_pnl_percentage || 0).toFixed(2)}%`,
+            changeType: (data.daily_pnl || 0) >= 0 ? 'positive' : 'negative',
+            icon: 'trending-up'
+          },
+          {
+            label: 'AI Confidence',
+            value: `${(data.ai_confidence || 0).toFixed(1)}%`,
+            change: `${data.confidence_change >= 0 ? '+' : ''}${(data.confidence_change || 0).toFixed(1)}%`,
+            changeType: (data.confidence_change || 0) >= 0 ? 'positive' : 'negative',
+            icon: 'brain'
+          },
+          {
+            label: 'Active Signals',
+            value: `${data.active_signals || 0}`,
+            change: `New: ${data.new_signals || 0}`,
+            changeType: 'neutral',
+            icon: 'zap'
+          }
+        ];
+
+        setStats(realStats);
+        console.log('✅ Real quick stats loaded:', realStats);
+      } else {
+        console.error('Failed to fetch quick stats:', response.status);
+        setStats([]);
+      }
+      
+      setLoading(false);
       
     } catch (error) {
       console.error('Failed to fetch quick stats:', error);
+      setStats([]);
       setLoading(false);
     }
   };

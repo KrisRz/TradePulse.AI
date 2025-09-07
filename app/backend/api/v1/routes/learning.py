@@ -24,7 +24,7 @@ import logging
 
 from app.backend.services import get_continuous_learning_engine
 from app.backend.services import get_position_result_tracker, PositionOutcome
-from utils.dependencies import require_admin_role
+from app.backend.utils.dependencies import require_admin_role
 
 logger = logging.getLogger(__name__)
 

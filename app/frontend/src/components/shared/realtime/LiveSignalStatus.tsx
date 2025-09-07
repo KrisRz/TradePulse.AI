@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
   Activity, 
   Brain, 
-  Zap, 
   CheckCircle, 
   AlertTriangle, 
   XCircle,
@@ -10,7 +9,6 @@ import {
   WifiOff,
   Clock,
   TrendingUp,
-  Target,
   Pulse,
   Server,
   Database,
@@ -105,7 +103,7 @@ export default function LiveSignalStatus({
       setIsConnected(true);
       
       // PRODUCTION: Fetch real signal status from professional backend
-      const response = await fetch('http://localhost:9001/api/signals/status', {
+      const response = await fetch('/api/signals/brain/status', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'
@@ -119,59 +117,59 @@ export default function LiveSignalStatus({
       const data = await response.json();
       
       const realSystemStatus: SignalSystemStatus = data.systemStatus || {
-        overall: Math.random() > 0.1 ? 'healthy' : Math.random() > 0.5 ? 'warning' : 'error',
+        overall: 'healthy',
         lastUpdate: new Date(),
         modelsOnline: 3,
         totalModels: 3,
-        signalsGenerated24h: 247,
-        avgConfidence: 72.4 + (Math.random() - 0.5) * 10,
-        systemLoad: 35 + Math.random() * 30,
-        uptime: 99.8,
-        dataFeedStatus: Math.random() > 0.05 ? 'connected' : 'delayed',
-        databaseStatus: Math.random() > 0.05 ? 'connected' : 'slow',
-        apiStatus: Math.random() > 0.05 ? 'operational' : 'degraded'
+        signalsGenerated24h: 0,
+        avgConfidence: 0,
+        systemLoad: 0,
+        uptime: 0,
+        dataFeedStatus: 'disconnected',
+        databaseStatus: 'disconnected',
+        apiStatus: 'disconnected'
       };
 
       const realModelStatuses: ModelStatus[] = data.modelStatuses || [
         {
           name: 'LSTM 1H',
-          status: Math.random() > 0.1 ? 'active' : 'warning',
-          confidence: 78.5 + (Math.random() - 0.5) * 15,
-          lastPrediction: new Date(Date.now() - Math.random() * 5 * 60 * 1000),
-          predictions24h: 1440, // Every minute
-          accuracy: 73.2 + (Math.random() - 0.5) * 10,
-          responseTime: 150 + Math.random() * 100
+          status: 'inactive',
+          confidence: 0,
+          lastPrediction: new Date(0),
+          predictions24h: 0,
+          accuracy: 0,
+          responseTime: 0
         },
         {
           name: 'LSTM 4H',
-          status: Math.random() > 0.1 ? 'active' : 'warning',
-          confidence: 81.3 + (Math.random() - 0.5) * 15,
-          lastPrediction: new Date(Date.now() - Math.random() * 15 * 60 * 1000),
-          predictions24h: 360, // Every 4 minutes (for 4h timeframe)
-          accuracy: 76.8 + (Math.random() - 0.5) * 10,
-          responseTime: 200 + Math.random() * 150
+          status: 'inactive',
+          confidence: 0,
+          lastPrediction: new Date(0),
+          predictions24h: 0,
+          accuracy: 0,
+          responseTime: 0
         },
         {
           name: 'LSTM 24H',
-          status: Math.random() > 0.1 ? 'active' : 'warning',
-          confidence: 74.7 + (Math.random() - 0.5) * 15,
-          lastPrediction: new Date(Date.now() - Math.random() * 60 * 60 * 1000),
-          predictions24h: 24, // Every hour
-          accuracy: 71.5 + (Math.random() - 0.5) * 10,
-          responseTime: 300 + Math.random() * 200
+          status: 'inactive',
+          confidence: 0,
+          lastPrediction: new Date(0),
+          predictions24h: 0,
+          accuracy: 0,
+          responseTime: 0
         }
       ];
 
       const realLiveMetrics: LiveMetrics = data.liveMetrics || {
-        currentSignals: Math.floor(Math.random() * 5) + 2,
-        activeStrategies: 4,
-        avgProcessingTime: 2.3 + (Math.random() - 0.5) * 1,
-        successRate24h: 67.7 + (Math.random() - 0.5) * 10,
-        totalPnL24h: 234.56 + (Math.random() - 0.5) * 100,
-        lastSignalTime: new Date(Date.now() - Math.random() * 10 * 60 * 1000),
-        signalFrequency: 8.5 + (Math.random() - 0.5) * 3,
-        peakHour: 14, // 2 PM
-        systemEfficiency: 94.2 + (Math.random() - 0.5) * 8
+        currentSignals: 0,
+        activeStrategies: 0,
+        avgProcessingTime: 0,
+        successRate24h: 0,
+        totalPnL24h: 0,
+        lastSignalTime: new Date(0),
+        signalFrequency: 0,
+        peakHour: 0,
+        systemEfficiency: 0
       };
 
       setTimeout(() => {

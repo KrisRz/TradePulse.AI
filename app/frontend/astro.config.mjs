@@ -1,7 +1,7 @@
 import { defineConfig } from 'astro/config';
 import preact from '@astrojs/preact';
 import tailwind from '@astrojs/tailwind';
-// import node from '@astrojs/node'; // Removed for static build
+import node from '@astrojs/node';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // https://astro.build/config
@@ -14,9 +14,14 @@ export default defineConfig({
     }),
     tailwind({
       applyBaseStyles: false,
+      configFile: './tailwind.config.mjs',
+      nesting: true,
     }),
   ],
-  output: 'static',
+  output: 'server',
+  adapter: node({
+    mode: 'standalone'
+  }),
   vite: {
     server: {
       proxy: {
@@ -46,6 +51,9 @@ export default defineConfig({
       include: ['preact', '@preact/signals', 'preact/hooks'],
       exclude: ['@playwright/test', 'playwright-core', 'playwright']
     },
+    css: {
+      devSourcemap: true,
+    },
     resolve: {
       alias: {
         'react': 'preact/compat',
@@ -53,7 +61,10 @@ export default defineConfig({
       },
     },
     build: {
-      // Performance optimizations
+      // Performance optimizations for 24/7 production
+      target: 'es2020',
+      minify: 'esbuild',
+      cssMinify: true,
       rollupOptions: {
         external: [
           '@playwright/test',
@@ -65,19 +76,25 @@ export default defineConfig({
         output: {
           manualChunks: {
             vendor: ['preact', '@preact/signals'],
-            auth: ['src/contexts/AuthContext.tsx', 'src/components/auth'],
+            admin: ['src/components/admin'],
+            shared: ['src/components/shared'],
+            hooks: ['src/hooks'],
           },
         },
       },
       chunkSizeWarningLimit: 1000,
+      sourcemap: false, // Disable sourcemaps for production
     },
     plugins: [
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
-          // Increase cache limit for large background images
+          // Production optimizations for 24/7 operation
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
+          cleanupOutdatedCaches: true,
+          skipWaiting: true,
+          clientsClaim: true,
           // Don't cache extremely large images in service worker
           globIgnores: [
             '**/images/backgrounds/coin.png',
@@ -199,5 +216,11 @@ export default defineConfig({
       'playwright-report/**/*',
       'test-results/**/*'
     ]
+  },
+  // Production optimizations for 24/7 AWS deployment
+  compressHTML: true,
+  prefetch: {
+    prefetchAll: true,
+    defaultStrategy: 'viewport'
   },
 }); 

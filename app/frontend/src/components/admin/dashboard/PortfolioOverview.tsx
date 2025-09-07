@@ -1,8 +1,14 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { Portfolio, PortfolioSummary } from '../../types';
 
 interface PortfolioOverviewProps {
   portfolioId?: string;
+}
+
+interface PortfolioUpdateEvent extends CustomEvent {
+  detail: {
+    portfolio: Portfolio;
+  };
 }
 
 export default function PortfolioOverview({ portfolioId }: PortfolioOverviewProps) {
@@ -28,51 +34,36 @@ export default function PortfolioOverview({ portfolioId }: PortfolioOverviewProp
   const fetchPortfolioSummary = async () => {
     try {
       setLoading(true);
+      setError(null);
       
-      // Mock data for now - will be replaced with API call
-      const mockSummary: PortfolioSummary = {
-        portfolio: {
-          id: '1',
-          user_id: 'user1',
-          name: 'Main Portfolio',
-          balance: 12456.78,
-          initial_balance: 10000.00,
-          realized_pnl: 1234.56,
-          unrealized_pnl: 1222.22,
-          total_pnl: 2456.78,
-          total_trades: 143,
-          winning_trades: 98,
-          losing_trades: 45,
-          win_rate: 68.5,
-          profit_factor: 2.34,
-          max_drawdown: -456.78,
-          current_drawdown: -123.45,
-          positions: [],
-          created_at: '2024-01-01T00:00:00Z',
-          updated_at: new Date().toISOString()
-        },
-        daily_pnl: 156.78,
-        daily_pnl_percentage: 1.28,
-        weekly_pnl: 456.78,
-        weekly_pnl_percentage: 3.82,
-        monthly_pnl: 1234.56,
-        monthly_pnl_percentage: 11.23,
-        total_trades_today: 8,
-        open_positions_count: 3,
-      };
+      // PRODUCTION: Fetch real portfolio summary from backend/DynamoDB
+      const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
+      const response = await fetch(`http://localhost:9002/api/portfolio/summary${portfolioId ? `/${portfolioId}` : ''}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-      setTimeout(() => {
-        setPortfolioSummary(mockSummary);
-        setLoading(false);
-      }, 500);
+      if (response.ok) {
+        const data = await response.json();
+        setPortfolioSummary(data);
+        console.log('✅ Real portfolio summary loaded:', data);
+      } else {
+        console.error('Failed to fetch portfolio summary:', response.status);
+        setError('Failed to load portfolio data from backend');
+      }
+      
+      setLoading(false);
       
     } catch (err) {
+      console.error('Error fetching portfolio summary:', err);
       setError('Failed to fetch portfolio data');
       setLoading(false);
     }
   };
 
-  const handlePortfolioUpdate = (event: any) => {
+  const handlePortfolioUpdate = (event: PortfolioUpdateEvent) => {
     const { portfolio } = event.detail;
     if (portfolio && (!portfolioId || portfolio.id === portfolioId)) {
       setPortfolioSummary(prev => prev ? { ...prev, portfolio } : null);

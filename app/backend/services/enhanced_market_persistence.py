@@ -190,6 +190,22 @@ class EnhancedMarketPersistence:
         
         logger.info("🚀 Enhanced Market Persistence Engine initialized")
     
+    async def start_ingestion(self, *args, **kwargs):
+        """
+        Backwards compatibility shim for start_ingestion calls.
+        The new pattern is to call initialize() which starts all loops.
+        """
+        logger.info("📡 start_ingestion called - using initialize() for backwards compatibility")
+        if not self.is_running:
+            return await self.initialize()
+        else:
+            logger.info("✅ Enhanced persistence already running")
+            return {"status": "already_running", "timestamp": datetime.now(timezone.utc).isoformat()}
+    
+    async def start(self, *args, **kwargs):
+        """New entrypoint - alias for initialize()"""
+        return await self.initialize()
+    
     async def initialize(self) -> Dict[str, Any]:
         """Initialize persistence engine"""
         try:

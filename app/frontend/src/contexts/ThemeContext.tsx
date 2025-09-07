@@ -1,5 +1,6 @@
 import { createContext } from 'preact';
-import { useContext, useEffect, useState, useCallback } from 'preact/hooks';
+import { useEffect, useState, useCallback } from 'preact/hooks';
+import { useContext } from 'preact/compat';
 
 export type Theme = 'light' | 'dark' | 'system';
 

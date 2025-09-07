@@ -110,7 +110,7 @@ export const Default: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Default OrderForm with standard configuration for Bitcoin trading.'
+        story: 'Default OrderForm with standard configuration for DollarSign trading.'
       }
     }
   }
@@ -124,7 +124,7 @@ export const SellOrder: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'OrderForm configured for selling Bitcoin with red styling for SELL side.'
+        story: 'OrderForm configured for selling DollarSign with red styling for SELL side.'
       }
     }
   }
@@ -139,7 +139,7 @@ export const HighValueTrading: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'OrderForm for high-value trading with $100,000 balance and premium Bitcoin price.'
+        story: 'OrderForm for high-value trading with $100,000 balance and premium DollarSign price.'
       }
     }
   }
@@ -199,7 +199,7 @@ export const BearMarket: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'OrderForm during bear market conditions with lower Bitcoin price and sell-focused interface.'
+        story: 'OrderForm during bear market conditions with lower DollarSign price and sell-focused interface.'
       }
     }
   }

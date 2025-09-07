@@ -10,77 +10,22 @@ export function useAdminData(endpoint: string) {
     try {
       setLoading(true);
       
-      // Get real auth token from localStorage or auto-login
-      let token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.log('🔐 Auto-login for admin access...');
-        try {
-          const loginResponse = await fetch('http://localhost:9002/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: 'admin@tradepulse.ai',
-              password: 'admin0000'
-            })
-          });
-          
-          if (loginResponse.ok) {
-            const loginData = await loginResponse.json();
-            token = loginData.access_token;
-            if (token) {
-              localStorage.setItem('auth_token', token);
-              console.log('✅ Admin authenticated successfully');
-            }
-          } else {
-            throw new Error('Authentication failed');
-          }
-        } catch (loginError) {
-          throw new Error(`Authentication failed: ${loginError}`);
-        }
-      }
+      // Use enterprise_admin_token for development
+      const token = 'enterprise_admin_token';
 
-      // Use real professional backend endpoints with full URL
-      const fullUrl = endpoint.startsWith('http') ? endpoint : `http://localhost:9002${endpoint}`;
+      // Use proxy endpoints for reliable connection
+      const fullUrl = endpoint.startsWith('http') ? endpoint : endpoint;
       
-      let response = await fetch(fullUrl, {
+      const response = await fetch(fullUrl, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
       
-      // If 401/403, try to re-authenticate once
+      // Skip re-auth for enterprise_admin token
       if ((response.status === 401 || response.status === 403)) {
-        console.warn(`🔄 Got ${response.status} for ${endpoint}, re-authenticating...`);
-        try {
-          const loginResponse = await fetch('http://localhost:9002/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: 'admin@tradepulse.ai',
-              password: 'admin0000'
-            })
-          });
-          
-          if (loginResponse.ok) {
-            const loginData = await loginResponse.json();
-            token = loginData.access_token;
-            if (token) {
-              localStorage.setItem('auth_token', token);
-              console.log(`✅ Re-authenticated successfully for ${endpoint}`);
-            }
-            
-            // Retry the request with new token
-            response = await fetch(fullUrl, {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              }
-            });
-          }
-        } catch (reAuthError) {
-          console.error(`❌ Re-authentication failed for ${endpoint}:`, reAuthError);
-        }
+        console.warn(`🔄 Got ${response.status} for ${endpoint} with enterprise_admin token`);
       }
       
       if (!response.ok) {
@@ -97,8 +42,8 @@ export function useAdminData(endpoint: string) {
       console.error('Full error details:', {
         message: err instanceof Error ? err.message : 'Unknown error',
         stack: err instanceof Error ? err.stack : undefined,
-        endpoint: endpoint,
-        fullUrl: endpoint.startsWith('http') ? endpoint : `http://localhost:9002${endpoint}`
+        endpoint,
+        fullUrl: endpoint.startsWith('http') ? endpoint : endpoint
       });
       setError(err instanceof Error ? err.message : 'Unknown error');
       setData(null);
@@ -129,11 +74,11 @@ export function useVirtualPortfolio() {
 }
 
 export function useAnalyticsOverview() {
-  return useAdminData('/api/analytics/overview');
+  return useAdminData('/api/admin/analytics-overview');
 }
 
 export function useBacktestingResults() {
-  return useAdminData('/api/analytics/admin/backtesting-results');
+  return useAdminData('/api/admin/backtesting-results');
 }
 
 export function useAIvsRandomAnalysis() {
@@ -183,7 +128,7 @@ export function useAdminUserActions() {
   
   const updateUserStatus = async (userId: string, status: string) => {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = 'enterprise_admin_token';
       const response = await fetch(`http://localhost:9002/api/admin/users/${userId}`, {
         method: 'PUT',
         headers: {
@@ -207,7 +152,7 @@ export function useAdminUserActions() {
 
   const updateUserRole = async (userId: string, role: string) => {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = 'enterprise_admin_token';
       const response = await fetch(`http://localhost:9002/api/admin/users/${userId}`, {
         method: 'PUT',
         headers: {

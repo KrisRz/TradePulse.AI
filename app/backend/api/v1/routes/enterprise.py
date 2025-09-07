@@ -22,7 +22,8 @@ from botocore.exceptions import ClientError
 from app.backend.core.config import get_settings
 from app.backend.core.logging import get_logger
 from app.backend.utils.dependencies import get_current_user, User, require_admin_role
-from app.backend.services import EnterpriseTradingEngine, MarketRegime, SignalType
+from app.backend.services import EnterpriseTradingEngine
+from app.backend.brain.brain_state import SignalType
 from app.backend.services import MarketDataService
 from app.backend.services import DatabaseService
 

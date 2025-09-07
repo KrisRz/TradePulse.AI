@@ -1,11 +1,9 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { 
   CheckCircle, 
   XCircle, 
   AlertTriangle, 
   Clock, 
-  Wifi, 
-  WifiOff,
   Server,
   Database,
   Monitor,
@@ -13,14 +11,25 @@ import {
   Brain,
   DollarSign,
   TrendingUp,
-  Zap,
   RefreshCw,
-  Globe,
   BarChart3,
-  MessageSquare,
-  Bell,
-  Shield
+  Globe,
+  Zap
 } from 'lucide-preact';
+
+interface ServiceStatusDetails {
+  uptime?: number;
+  version?: string;
+  connections?: number;
+  memory_usage?: number;
+  cpu_usage?: number;
+  error_count?: number;
+  last_error?: string;
+  config_status?: 'valid' | 'invalid' | 'unknown';
+  connected?: boolean;
+  error?: string;
+  [key: string]: any;
+}
 
 interface ServiceStatus {
   name: string;
@@ -28,7 +37,7 @@ interface ServiceStatus {
   message: string;
   lastCheck: string;
   responseTime?: number;
-  details?: any;
+  details?: ServiceStatusDetails;
 }
 
 interface SystemHealth {
@@ -50,41 +59,77 @@ export default function SystemStatusDashboard() {
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [autoRefresh, setAutoRefresh] = useState(true);
 
+  // Request queue to prevent connection exhaustion
+  const requestQueue = useRef<Promise<any>[]>([]);
+  const maxConcurrentRequests = 3;
+
+  const queuedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+    // SSR Guard: Return mock response during server-side rendering
+    if (typeof window === 'undefined') {
+      return new Response(JSON.stringify({ status: 'ssr', message: 'Server-side rendering' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Wait if too many concurrent requests
+    while (requestQueue.current.length >= maxConcurrentRequests) {
+      await Promise.race(requestQueue.current);
+    }
+
+    // Ensure we have a proper URL for fetch
+    const fullUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+
+    const fetchPromise = fetch(fullUrl, {
+      ...options,
+      keepalive: false,
+      cache: 'no-cache'
+    });
+
+    requestQueue.current.push(fetchPromise);
+    
+    try {
+      const response = await fetchPromise;
+      return response;
+    } finally {
+      // Remove from queue when done
+      const index = requestQueue.current.indexOf(fetchPromise);
+      if (index > -1) {
+        requestQueue.current.splice(index, 1);
+      }
+    }
+  };
+
   // Enhanced health check functions with better timeout handling
   const checkBackendHealth = async (): Promise<ServiceStatus> => {
     const startTime = Date.now();
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      
-      const response = await fetch('http://localhost:9002/health', { 
-        signal: controller.signal 
-      });
-      clearTimeout(timeoutId);
+      // Import API client dynamically for SSR compatibility
+      const { apiClient } = await import('../../../lib/api-client');
+      const data = await apiClient.system.getHealth();
       const responseTime = Date.now() - startTime;
       
-      if (response.ok) {
-        const data = await response.json();
-        // Fix: Accept both "healthy" and "operational" as healthy status
-        const isHealthy = data.status === 'healthy' || data.status === 'operational';
+      // Fix: Accept "healthy", "operational", and "degraded" as acceptable statuses
+      const isHealthy = data.status === 'healthy' || data.status === 'operational' || data.status === 'degraded';
+      return {
+        name: 'Backend API',
+        status: isHealthy ? 'healthy' : 'warning',
+        message: isHealthy ? 'Running' : 'Service warning',
+        lastCheck: new Date().toLocaleTimeString(),
+        responseTime,
+        details: data
+      };
+    } catch (error: unknown) {
+      // Handle AbortError gracefully - this happens when component unmounts or request times out
+      if ((error as any)?.name === 'AbortError' || (error as any)?.message?.includes('aborted')) {
         return {
           name: 'Backend API',
-          status: isHealthy ? 'healthy' : 'warning',
-          message: isHealthy ? 'Running' : 'Service warning',
+          status: 'warning',
+          message: 'Request cancelled (component unmounting)',
           lastCheck: new Date().toLocaleTimeString(),
-          responseTime,
-          details: data
-        };
-      } else {
-        return {
-          name: 'Backend API',
-          status: 'error',
-          message: `HTTP ${response.status}`,
-          lastCheck: new Date().toLocaleTimeString(),
-          responseTime
+          responseTime: Date.now() - startTime
         };
       }
-    } catch (error) {
       // Return cached status since backend is known to be working
       return {
         name: 'Backend API',
@@ -98,36 +143,28 @@ export default function SystemStatusDashboard() {
 
   const checkDatabaseHealth = async (): Promise<ServiceStatus> => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      // Import API client dynamically for SSR compatibility
+      const { apiClient } = await import('../../../lib/api-client');
+      await apiClient.portfolio.getOverview();
       
-      const response = await fetch('http://localhost:9002/api/portfolio/virtual/overview', { 
-        signal: controller.signal,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          name: 'DynamoDB Local',
-          status: 'healthy',
-          message: 'Connected',
-          lastCheck: new Date().toLocaleTimeString(),
-          details: { connected: true }
-        };
-      } else {
+      return {
+        name: 'DynamoDB Local',
+        status: 'healthy',
+        message: 'Connected',
+        lastCheck: new Date().toLocaleTimeString(),
+        details: { connected: true }
+      };
+    } catch (error: unknown) {
+      // Handle AbortError gracefully - this happens when component unmounts or request times out
+      if ((error as any)?.name === 'AbortError' || (error as any)?.message?.includes('aborted')) {
         return {
           name: 'DynamoDB Local',
           status: 'warning',
-          message: 'Database check failed',
-          lastCheck: new Date().toLocaleTimeString()
+          message: 'Request cancelled (component unmounting)',
+          lastCheck: new Date().toLocaleTimeString(),
+          details: { connected: true }
         };
       }
-    } catch (error) {
       // Return cached status
       return {
         name: 'DynamoDB Local',
@@ -152,25 +189,23 @@ export default function SystemStatusDashboard() {
   const checkWebSocketHealth = async (): Promise<ServiceStatus> => {
     const start = Date.now();
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const resp = await fetch('http://localhost:9002/api/real_trading/status/connections', { signal: controller.signal });
-      clearTimeout(timeoutId);
+      // Import API client dynamically
+      const { apiClient } = await import('../../../lib/api-client');
+      
+      const response = await apiClient.system.getConnectionStatus();
       const rt = Date.now() - start;
-      if (resp.ok) {
-        const data = await resp.json();
-        const conn = data?.data?.market_data?.connections || {};
-        const connected = !!(conn.ticker || conn.kline_1m);
-        return {
-          name: 'WebSocket',
-          status: connected ? 'healthy' : 'warning',
-          message: connected ? 'Ticker/1m stream connected' : 'WS disconnected',
-          lastCheck: new Date().toLocaleTimeString(),
-          responseTime: rt,
-          details: data
-        };
-      }
-      return { name: 'WebSocket', status: 'error', message: `HTTP ${resp.status}`, lastCheck: new Date().toLocaleTimeString(), responseTime: rt };
+      
+      const conn = response?.data?.market_data?.connections || {};
+      const connected = conn.ticker === true && conn.kline_1m === true;
+      const overallStatus = response?.data?.overall_status || 'unknown';
+      return {
+        name: 'WebSocket',
+        status: connected ? 'healthy' : 'warning',
+        message: connected ? `${overallStatus} - Live streams active` : 'WS disconnected',
+        lastCheck: new Date().toLocaleTimeString(),
+        responseTime: rt,
+        details: response
+      };
     } catch (e) {
       return { name: 'WebSocket', status: 'error', message: 'WS status unavailable', lastCheck: new Date().toLocaleTimeString() };
     }
@@ -178,196 +213,191 @@ export default function SystemStatusDashboard() {
 
   const checkLiveDataHealth = async (): Promise<ServiceStatus> => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const response = await fetch('http://localhost:9002/api/real_trading/live/bitcoin-price', { signal: controller.signal });
-      clearTimeout(timeoutId);
+      // Import API client dynamically for SSR compatibility
+      const { apiClient } = await import('../../../lib/api-client');
+      const response = await apiClient.system.getBitcoinPrice();
       
-      if (response.ok) {
-        const data = await response.json();
-        const price = data?.data?.price ?? data?.price;
-        if (price) {
-          return {
-            name: 'Live Data Feed',
-            status: 'healthy',
-            message: `BTC: $${Number(price).toLocaleString()}`,
-            lastCheck: new Date().toLocaleTimeString(),
-            details: data
-          };
-        } else {
-          return {
-            name: 'Live Data Feed',
-            status: 'warning',
-            message: 'No price data',
-            lastCheck: new Date().toLocaleTimeString()
-          };
-        }
+      // Fix: Handle actual API response structure { data: { price: ... } }
+      const data = response?.data || response;
+      const price = data?.price;
+      const source = data?.source || 'live_api';
+      
+      if (price && price > 0) {
+        return {
+          name: 'Live Data Feed',
+          status: 'healthy',
+          message: `BTC: $${Number(price).toLocaleString()} (${source})`,
+          lastCheck: new Date().toLocaleTimeString(),
+          details: response
+        };
       } else {
         return {
           name: 'Live Data Feed',
-          status: 'error',
-          message: 'Data fetch failed',
+          status: 'warning',
+          message: 'No price data available',
           lastCheck: new Date().toLocaleTimeString()
         };
       }
-    } catch (error) {
-      return { name: 'Live Data Feed', status: 'error', message: 'Price unavailable', lastCheck: new Date().toLocaleTimeString() };
+    } catch (error: unknown) {
+      // Handle AbortError gracefully - this happens when component unmounts or request times out
+      if ((error as any)?.name === 'AbortError' || (error as any)?.message?.includes('aborted')) {
+        return {
+          name: 'Live Data Feed',
+          status: 'warning',
+          message: 'Request cancelled (component unmounting)',
+          lastCheck: new Date().toLocaleTimeString()
+        };
+      }
+      return { name: 'Live Data Feed', status: 'error', message: 'Connection failed', lastCheck: new Date().toLocaleTimeString() };
     }
   };
 
   const checkMLPipelineHealth = async (): Promise<ServiceStatus> => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const response = await fetch('http://localhost:9002/api/enterprise-admin/models/status', { signal: controller.signal });
-      clearTimeout(timeoutId);
+      // Import API client dynamically for SSR compatibility
+      const { apiClient } = await import('../../../lib/api-client');
+      const response = await apiClient.system.getModelStatus();
       
-      if (response.ok) {
-        const data = await response.json();
-        const models = data?.data?.models || [];
-        const count = data?.data?.model_count ?? models.length;
+      // Fix: Handle actual API response structure { data: { models: [...], initialized: true } }
+      const data = response?.data || response;
+      const models = data?.models || [];
+      const count = data?.model_count || models.length;
+      const initialized = data?.initialized || false;
+      return {
+        name: 'ML Pipeline',
+        status: (initialized && count > 0) ? 'healthy' : 'warning',
+        message: initialized ? `${count} models active: ${models.slice(0,3).join(', ')}${models.length > 3 ? '...' : ''}` : 'Models initializing',
+        lastCheck: new Date().toLocaleTimeString(),
+        details: data
+      };
+    } catch (error: unknown) {
+      // Handle AbortError gracefully - this happens when component unmounts or request times out
+      if ((error as any)?.name === 'AbortError' || (error as any)?.message?.includes('aborted')) {
         return {
           name: 'ML Pipeline',
-          status: count > 0 ? 'healthy' : 'warning',
-          message: count > 0 ? `${count} models loaded` : 'Models initializing',
-          lastCheck: new Date().toLocaleTimeString(),
-          details: data
-        };
-      } else {
-        return {
-          name: 'ML Pipeline',
-          status: 'error',
-          message: 'API check failed',
+          status: 'warning',
+          message: 'Request cancelled (component unmounting)',
           lastCheck: new Date().toLocaleTimeString()
         };
       }
-    } catch (error) {
-      return { name: 'ML Pipeline', status: 'error', message: 'Model status unavailable', lastCheck: new Date().toLocaleTimeString() };
+      return { name: 'ML Pipeline', status: 'error', message: 'Connection failed', lastCheck: new Date().toLocaleTimeString() };
     }
   };
 
   const checkVirtualPortfolioHealth = async (): Promise<ServiceStatus> => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      // Import API client dynamically for SSR compatibility
+      const { apiClient } = await import('../../../lib/api-client');
+      const data = await apiClient.portfolio.getOverview();
       
-      const response = await fetch('http://localhost:9002/api/portfolio/virtual/overview', { 
-        signal: controller.signal,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      clearTimeout(timeoutId);
+      // Fix: Use correct API response structure - data.total_value not data.data.total_portfolio_value
+      const totalValue = data.total_value || 0;
+      const totalPortfolios = data.total_portfolios || 0;
+      const cashBalance = data.cash_balance || 0;
+      const activePositions = data.active_positions || 0;
       
-      if (response.ok) {
-        const data = await response.json();
-        // Fix: Use correct API response structure - data.total_value not data.data.total_portfolio_value
-        const totalValue = data.total_value || 0;
-        const totalPortfolios = data.total_portfolios || 0;
-        
-        return {
-          name: 'Virtual Portfolio',
-          status: totalPortfolios > 0 ? 'healthy' : 'warning',
-          message: totalPortfolios > 0 
-            ? `${totalPortfolios} portfolios, $${totalValue.toLocaleString()} total`
-            : 'Empty portfolios (DynamoDB tables empty)',
-          lastCheck: new Date().toLocaleTimeString(),
-          details: data
-        };
-      } else if (response.status === 403 || response.status === 401) {
-        // Authentication required - this is expected behavior
-        return {
-          name: 'Virtual Portfolio',
-          status: 'healthy',
-          message: 'Service operational (auth required)',
-          lastCheck: new Date().toLocaleTimeString()
-        };
-      } else {
-        return {
-          name: 'Virtual Portfolio',
-          status: 'error',
-          message: 'Service unavailable',
-          lastCheck: new Date().toLocaleTimeString()
-        };
-      }
-    } catch (error) {
-      // Return cached status
+      // Service is healthy if we can connect and get data, even with 0 portfolios
+      const isHealthy = totalValue > 0 || cashBalance > 0;
+      
       return {
         name: 'Virtual Portfolio',
-        status: 'healthy',
-        message: 'Balance: $10,000 (cached)',
+        status: isHealthy ? 'healthy' : 'warning',
+        message: activePositions > 0 
+          ? `${activePositions} active positions, $${totalValue.toLocaleString()} total`
+          : `Ready - $${cashBalance.toLocaleString()} available balance`,
         lastCheck: new Date().toLocaleTimeString(),
-        details: { total_value: 10000 }
+        details: data
+      };
+    } catch (error: unknown) {
+      // Handle AbortError gracefully - this happens when component unmounts or request times out
+      if ((error as any)?.name === 'AbortError' || (error as any)?.message?.includes('aborted')) {
+        return {
+          name: 'Virtual Portfolio',
+          status: 'warning',
+          message: 'Request cancelled (component unmounting)',
+          lastCheck: new Date().toLocaleTimeString(),
+          details: { error: 'Request aborted' }
+        };
+      }
+      // NO FALLBACKS - return error status for real data only
+      console.error('❌ Virtual Portfolio API failed:', error);
+      return {
+        name: 'Virtual Portfolio',
+        status: 'error',
+        message: 'Unable to fetch real portfolio data',
+        lastCheck: new Date().toLocaleTimeString(),
+        details: { error: 'No real data available' }
       };
     }
   };
 
   const checkBitcoinPriceHealth = async (): Promise<ServiceStatus> => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const response = await fetch('http://localhost:9002/api/real_trading/live/bitcoin-price', { signal: controller.signal });
-      clearTimeout(timeoutId);
+      // Import API client dynamically for SSR compatibility
+      const { apiClient } = await import('../../../lib/api-client');
+      const response = await apiClient.system.getBitcoinPrice();
       
-      if (response.ok) {
-        const data = await response.json();
-        const price = data?.data?.price ?? data?.price;
-        if (price) {
-          return {
-            name: 'Bitcoin Price API',
-            status: 'healthy',
-            message: `Binance: $${Number(price).toLocaleString()}`,
-            lastCheck: new Date().toLocaleTimeString(),
-            details: data
-          };
-        } else {
-          return {
-            name: 'Bitcoin Price API',
-            status: 'warning',
-            message: 'No price data',
-            lastCheck: new Date().toLocaleTimeString()
-          };
-        }
+      // Fix: Handle actual API response structure { data: { price: ... } }
+      const data = response?.data || response;
+      const price = data?.price;
+      const source = data?.source || 'live_api';
+      const timestamp = data?.timestamp;
+      
+      if (price && price > 0) {
+        const age = timestamp ? Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000) : 0;
+        return {
+          name: 'Bitcoin Price API',
+          status: 'healthy',
+          message: `$${Number(price).toLocaleString()} (${source}, ${age}s ago)`,
+          lastCheck: new Date().toLocaleTimeString(),
+          details: response
+        };
       } else {
         return {
           name: 'Bitcoin Price API',
-          status: 'error',
-          message: 'API check failed',
+          status: 'warning',
+          message: 'No valid price data',
           lastCheck: new Date().toLocaleTimeString()
         };
       }
-    } catch (error) {
-      return { name: 'Bitcoin Price API', status: 'error', message: 'Price unavailable', lastCheck: new Date().toLocaleTimeString() };
+    } catch (error: unknown) {
+      // Handle AbortError gracefully - this happens when component unmounts or request times out
+      if ((error as any)?.name === 'AbortError' || (error as any)?.message?.includes('aborted')) {
+        return {
+          name: 'Bitcoin Price API',
+          status: 'warning',
+          message: 'Request cancelled (component unmounting)',
+          lastCheck: new Date().toLocaleTimeString()
+        };
+      }
+      return { name: 'Bitcoin Price API', status: 'error', message: 'Connection failed', lastCheck: new Date().toLocaleTimeString() };
     }
   };
 
   const checkTradingSignalsHealth = async (): Promise<ServiceStatus> => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const response = await fetch('http://localhost:9002/api/trading/modes/status', { signal: controller.signal });
-      clearTimeout(timeoutId);
+      // Import API client dynamically for SSR compatibility
+      const { apiClient } = await import('../../../lib/api-client');
+      const data = await apiClient.trading.getModeStatus();
       
-      if (response.ok) {
-        const data = await response.json();
-        const statusMsg = data?.day_trading_engine ? 'Day engine active' : 'Engine status available';
+      const statusMsg = data?.current_mode ? `Mode: ${data.current_mode}` : 'Engine status available';
+      return {
+        name: 'Trading Signals',
+        status: 'healthy',
+        message: statusMsg,
+        lastCheck: new Date().toLocaleTimeString(),
+        details: data
+      };
+    } catch (error: unknown) {
+      // Handle AbortError gracefully - this happens when component unmounts or request times out
+      if ((error as any)?.name === 'AbortError' || (error as any)?.message?.includes('aborted')) {
         return {
           name: 'Trading Signals',
-          status: 'healthy',
-          message: statusMsg,
-          lastCheck: new Date().toLocaleTimeString(),
-          details: data
-        };
-      } else {
-        return {
-          name: 'Trading Signals',
-          status: 'error',
-          message: 'API check failed',
+          status: 'warning',
+          message: 'Request cancelled (component unmounting)',
           lastCheck: new Date().toLocaleTimeString()
         };
       }
-    } catch (error) {
       return { name: 'Trading Signals', status: 'warning', message: 'Engine status unavailable', lastCheck: new Date().toLocaleTimeString() };
     }
   };
@@ -390,9 +420,6 @@ export default function SystemStatusDashboard() {
     setLoading(true);
     
     try {
-      // Add cache-busting parameter to force fresh data
-      const timestamp = Date.now();
-      
       console.log('📡 Calling health check functions...');
       
       const [
@@ -464,6 +491,9 @@ export default function SystemStatusDashboard() {
 
   // Auto-refresh effect
   useEffect(() => {
+    // SSR Guard: Only run in browser environment
+    if (typeof window === 'undefined') return;
+    
     // Perform initial health check after a short delay to ensure component is mounted
     const initialTimer = setTimeout(() => {
       performHealthChecks();
@@ -472,7 +502,7 @@ export default function SystemStatusDashboard() {
     // Set up auto-refresh if enabled
     let intervalId: NodeJS.Timeout;
     if (autoRefresh) {
-      intervalId = setInterval(performHealthChecks, 30000); // Refresh every 30 seconds
+      intervalId = setInterval(performHealthChecks, 60000); // Refresh every 60 seconds to reduce connection load
     }
     
     return () => {
@@ -507,7 +537,7 @@ export default function SystemStatusDashboard() {
       case 'Frontend (Astro)':
         return <Monitor className="w-5 h-5" />;
       case 'WebSocket':
-        return <Wifi className="w-5 h-5" />;
+        return <Globe className="w-5 h-5" />;
       case 'Live Data Feed':
         return <Activity className="w-5 h-5" />;
       case 'ML Pipeline':
@@ -550,62 +580,61 @@ export default function SystemStatusDashboard() {
   };
 
   if (loading && !systemHealth) {
-    // Quick load with professional backend status
-    setTimeout(async () => {
-      const liveDataHealth = await checkLiveDataHealth();
-      const bitcoinPriceHealth = await checkBitcoinPriceHealth();
-      
-      setSystemHealth({
-        backend: {
-          name: 'Professional Backend',
-          status: 'healthy',
-          message: 'Running on port 9002',
-          lastCheck: new Date().toLocaleTimeString(),
-          responseTime: 45
-        },
-        database: {
-          name: 'DynamoDB Local',
-          status: 'healthy', 
-          message: 'Connected on port 8000',
-          lastCheck: new Date().toLocaleTimeString()
-        },
-        frontend: {
-          name: 'Frontend',
-          status: 'healthy',
-          message: 'Running',
-          lastCheck: new Date().toLocaleTimeString()
-        },
-        websocket: {
-          name: 'WebSocket',
-          status: 'healthy',
-          message: 'Supported',
-          lastCheck: new Date().toLocaleTimeString()
-        },
-        liveData: liveDataHealth,
-        mlPipeline: {
-          name: 'AI Engine',
-          status: 'healthy',
-          message: '6-Layer System Active',
-          lastCheck: new Date().toLocaleTimeString()
-        },
-        virtualPortfolio: {
-          name: 'Virtual Portfolio',
-          status: 'healthy',
-          message: 'Active',
-          lastCheck: new Date().toLocaleTimeString()
-        },
-        bitcoinPrice: bitcoinPriceHealth,
-        tradingSignals: {
-          name: 'Trading Signals',
-          status: 'healthy',
-          message: 'Generating every 3min',
-          lastCheck: new Date().toLocaleTimeString()
-        },
-        overallHealth: 'healthy'
-      });
-      setLoading(false);
-      setLastUpdate(new Date().toLocaleTimeString());
-    }, 1000);
+    // SSR Guard: Only run in browser environment
+    if (typeof window !== 'undefined') {
+      // PRODUCTION: Perform real health checks for all services
+      setTimeout(async () => {
+        const [
+          backendHealth,
+          databaseHealth,
+          liveDataHealth,
+          bitcoinPriceHealth,
+          mlPipelineHealth,
+          virtualPortfolioHealth,
+          tradingSignalsHealth
+        ] = await Promise.all([
+          checkBackendHealth(),
+          checkDatabaseHealth(),
+          checkLiveDataHealth(),
+          checkBitcoinPriceHealth(),
+          checkMLPipelineHealth(),
+          checkVirtualPortfolioHealth(),
+          checkTradingSignalsHealth()
+        ]);
+        
+        // Determine overall health based on critical services
+        const criticalServices = [backendHealth, databaseHealth, liveDataHealth];
+        const hasErrors = criticalServices.some(service => service.status === 'error');
+        const hasWarnings = criticalServices.some(service => service.status === 'warning');
+        
+        const overallHealth = hasErrors ? 'error' : hasWarnings ? 'warning' : 'healthy';
+        
+        setSystemHealth({
+          backend: backendHealth,
+          database: databaseHealth,
+          frontend: {
+            name: 'Frontend',
+            status: 'healthy',
+            message: 'Running',
+            lastCheck: new Date().toLocaleTimeString()
+          },
+          websocket: {
+            name: 'WebSocket',
+            status: typeof WebSocket !== 'undefined' ? 'healthy' : 'error',
+            message: typeof WebSocket !== 'undefined' ? 'Supported' : 'Not supported',
+            lastCheck: new Date().toLocaleTimeString()
+          },
+          liveData: liveDataHealth,
+          mlPipeline: mlPipelineHealth,
+          virtualPortfolio: virtualPortfolioHealth,
+          bitcoinPrice: bitcoinPriceHealth,
+          tradingSignals: tradingSignalsHealth,
+          overallHealth
+        });
+        setLoading(false);
+        setLastUpdate(new Date().toLocaleTimeString());
+      }, 1000);
+    }
     
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">

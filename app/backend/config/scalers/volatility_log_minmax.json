@@ -1,0 +1,12 @@
+{
+  "scaler_type": "log_minmax",
+  "feature_name": "volatility",
+  "parameters": {
+    "min": -5.0,
+    "max": 0.0,
+    "scale": 5.0
+  },
+  "training_commit": "default_v1.0.0",
+  "created_at": "2025-09-02T15:19:43.507062+00:00",
+  "checksum": "4fd2b271d5a15edb1812d4ffa5ddb97d950f0ddcae0ca591a754d642ba0d26f5"
+}

@@ -16,6 +16,7 @@ from typing import Any, Dict
 
 from app.backend.core.config import get_settings
 from app.backend.core.database import DynamoDBClient
+from app.backend.utils.dynamodb_key_normalizer import safe_put_item, normalize_dynamodb_item
 from app.backend.services.live_market_data import get_live_market_data_service
 
 
@@ -44,24 +45,61 @@ async def start_candle_persistence() -> None:
         try:
             if not candle.get("is_closed"):
                 return
+            
+            # Extract OHLCV values for validation
+            open_price = float(candle["open"])
+            high_price = float(candle["high"])
+            low_price = float(candle["low"])
+            close_price = float(candle["close"])
+            volume = float(candle["volume"])
+            trades = int(candle.get("trades", 0))
+            
+            # Professional validation guardrails
+            if not _is_valid_candle(open_price, high_price, low_price, close_price, volume, trades):
+                print(f"⚠️ Invalid candle data for {candle['symbol']}: O={open_price} H={high_price} L={low_price} C={close_price}")
+                return
+            
+            # Professional schema with composite PK for idempotency
+            symbol = candle["symbol"]
+            interval = candle["interval"]
+            timestamp_ms = int(candle["close_time"])
+            
             item: Dict[str, Any] = {
-                "symbol": candle["symbol"],
-                "timestamp": int(candle["close_time"]),
-                "interval": candle["interval"],
+                "pk": f"{symbol}#{interval}",  # Composite partition key
+                "ts": timestamp_ms,            # Sort key (timestamp)
+                "symbol": symbol,
+                "interval": interval,
+                "timestamp": timestamp_ms,     # Keep for backward compatibility
                 # DynamoDB requires Decimal for non-integer numeric values
-                "open": Decimal(str(candle["open"])),
-                "high": Decimal(str(candle["high"])),
-                "low": Decimal(str(candle["low"])),
-                "close": Decimal(str(candle["close"])),
-                "volume": Decimal(str(candle["volume"])),
-                "trades": int(candle.get("trades", 0)),
-                "date_hour": datetime.fromtimestamp(candle["close_time"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d-%H"),
+                "open": Decimal(str(open_price)),
+                "high": Decimal(str(high_price)),
+                "low": Decimal(str(low_price)),
+                "close": Decimal(str(close_price)),
+                "volume": Decimal(str(volume)),
+                "trades": trades,
+                "date_hour": datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d-%H"),
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
-            client.put_item(table_name, item)
-        except Exception:
-            # Swallow to avoid breaking callback loop
-            pass
+            
+            # Idempotent write - only insert if timestamp doesn't exist
+            try:
+                client.put_item_conditional(
+                    table_name, 
+                    item, 
+                    condition_expression="attribute_not_exists(#ts)",
+                    expression_attribute_names={"#ts": "ts"}
+                )
+            except Exception as e:
+                if "ConditionalCheckFailedException" in str(e):
+                    # Duplicate candle - safe to ignore
+                    pass
+                else:
+                    print(f"❌ Failed to save candle for {symbol}: {e}")
+                    
+        except Exception as e:
+            # Log but don't break the callback loop
+            print(f"❌ Candle persistence error: {e}")
+
 
     # Register callback
     live_service.subscribe_to_candles(_save_closed_candle)  # type: ignore[arg-type]
@@ -69,6 +107,41 @@ async def start_candle_persistence() -> None:
     # Keep task alive
     while True:
         await asyncio.sleep(60)
+
+
+def _is_valid_candle(open_price: float, high_price: float, low_price: float, 
+                    close_price: float, volume: float, trades: int) -> bool:
+    """Professional OHLCV validation guardrails"""
+    try:
+        # Basic range validation
+        if any(price <= 0 for price in [open_price, high_price, low_price, close_price]):
+            return False
+        
+        if volume < 0 or trades < 0:
+            return False
+        
+        # OHLC consistency validation
+        min_price = min(open_price, close_price)
+        max_price = max(open_price, close_price)
+        
+        # Low must be <= all other prices, High must be >= all other prices
+        if low_price > min_price or high_price < max_price:
+            return False
+            
+        # Additional sanity checks
+        if low_price > high_price:
+            return False
+            
+        # Extreme price movement check (> 50% in one minute is suspicious)
+        price_range = high_price - low_price
+        avg_price = (high_price + low_price) / 2
+        if price_range / avg_price > 0.5:  # 50% range
+            return False
+            
+        return True
+        
+    except Exception:
+        return False
 
 
 async def load_recent(symbol: str = "BTCUSDT", horizon: str = '30m') -> list:
@@ -114,8 +187,13 @@ async def load_recent(symbol: str = "BTCUSDT", horizon: str = '30m') -> list:
         return []
 
 
-async def write_decisions(entry_decision, exit_decision, risk_assessment, signal):
-    """PHASE 1A: Write trading decisions for audit trail"""
+async def write_decisions(entry_decision, exit_decision, risk_assessment, signal) -> bool:
+    """
+    PHASE 1A: Write trading decisions for audit trail
+    
+    Returns:
+        bool: True if successfully written, False otherwise
+    """
     try:
         settings = get_settings()
         client = DynamoDBClient(local_development=settings.is_development)
@@ -123,9 +201,12 @@ async def write_decisions(entry_decision, exit_decision, risk_assessment, signal
         # Add day partition key for proper DynamoDB structure
         today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         
+        # Ensure proper key types for DynamoDB
+        timestamp_now = datetime.now(timezone.utc)
+        
         decision_item = {
-            "day": today,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "day": str(today),  # Ensure string type
+            "timestamp": timestamp_now.isoformat(),  # Keep as string to match schema
             "symbol": "BTCUSDT",
             "signal_action": signal.action if signal else "none",
             "signal_confidence": Decimal(str(signal.confidence)) if signal else Decimal('0.0'),
@@ -137,15 +218,22 @@ async def write_decisions(entry_decision, exit_decision, risk_assessment, signal
             "risk_block": getattr(risk_assessment, 'block_reason', None) if risk_assessment else None
         }
         
-        # Try to write to decisions table (create if needed)
-        try:
-            client.put_item("trading_decisions", decision_item)
-        except Exception:
-            # Silently fail - not critical for trading operation
-            pass
+        # Normalize keys before write to prevent type mismatch
+        normalized_item = normalize_dynamodb_item("trading_decisions", decision_item)
+        
+        # Try to write to decisions table with safe wrapper
+        table = client.get_table("trading_decisions")
+        success = safe_put_item(table, normalized_item, "trading_decisions")
+        
+        if success:
+            return True
+        else:
+            print(f"Decision audit write failed: safe_put_item returned False")
+            return False
             
     except Exception as e:
         print(f"Decision audit logging failed: {e}")
+        return False
 
 
 async def write_orders(order_data: Dict):

@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
   TrendingUp, 
-  TrendingDown, 
   DollarSign, 
   BarChart3, 
   Volume2, 
@@ -9,7 +8,6 @@ import {
   Activity,
   AlertTriangle,
   Info,
-  Zap,
   RefreshCw,
   ExternalLink
 } from 'lucide-preact';
@@ -81,7 +79,7 @@ export default function MarketInfo({
       setError(null);
       
       // PRODUCTION: Fetch real market data from professional backend
-      const response = await fetch(`http://localhost:9001/api/signals/live/bitcoin-price`, {
+      const response = await fetch(`http://localhost:9002/api/signals/live/bitcoin-price`, {
         headers: {
           'Content-Type': 'application/json'
         }
@@ -107,41 +105,33 @@ export default function MarketInfo({
         lastUpdate: new Date()
       };
 
-      const mockOrderBook: OrderBookData = {
-        symbol: symbol,
-        bids: [
-          [65234.67, 0.54321],
-          [65234.66, 1.23456],
-          [65234.65, 0.98765],
-          [65234.64, 2.11111],
-          [65234.63, 0.77777]
-        ],
-        asks: [
-          [65234.68, 0.43210],
-          [65234.69, 0.87654],
-          [65234.70, 1.56789],
-          [65234.71, 0.65432],
-          [65234.72, 1.98765]
-        ],
-        spread: 0.01,
-        spreadPercent: 0.00001534
-      };
+      // Fetch real order book data
+      let orderBookData: OrderBookData | null = null;
+      try {
+        const orderBookResponse = await fetch(`http://localhost:9002/api/signals/orderbook/${symbol}`);
+        if (orderBookResponse.ok) {
+          orderBookData = await orderBookResponse.json();
+        }
+      } catch (error) {
+        console.warn('Failed to fetch order book data:', error);
+      }
 
-      const mockSentiment: MarketSentiment = {
-        fearGreedIndex: 72,
-        bitcoinDominance: 52.3,
-        activeAddresses: 1045234,
-        networkHashRate: 450.5, // EH/s
-        sentiment: 'GREED'
-      };
+      // Fetch real market sentiment data
+      let sentimentData: MarketSentiment | null = null;
+      try {
+        const sentimentResponse = await fetch(`http://localhost:9002/api/signals/market-sentiment`);
+        if (sentimentResponse.ok) {
+          sentimentData = await sentimentResponse.json();
+        }
+      } catch (error) {
+        console.warn('Failed to fetch sentiment data:', error);
+      }
 
-      setTimeout(() => {
-        setMarketData(mockMarketData);
-        setOrderBook(mockOrderBook);
-        setSentiment(mockSentiment);
-        setLastRefresh(new Date());
-        setLoading(false);
-      }, 300);
+      setMarketData(realMarketData);
+      setOrderBook(orderBookData);
+      setSentiment(sentimentData);
+      setLastRefresh(new Date());
+      setLoading(false);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch market data');
@@ -159,10 +149,10 @@ export default function MarketInfo({
   };
 
   const formatLargeNumber = (num: number) => {
-    if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
-    if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-    if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+    if (num >= 1e12) return `${(num / 1e12).toFixed(2)  }T`;
+    if (num >= 1e9) return `${(num / 1e9).toFixed(2)  }B`;
+    if (num >= 1e6) return `${(num / 1e6).toFixed(2)  }M`;
+    if (num >= 1e3) return `${(num / 1e3).toFixed(2)  }K`;
     return num.toString();
   };
 

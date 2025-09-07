@@ -1,0 +1,12 @@
+{
+  "scaler_type": "minmax",
+  "feature_name": "close",
+  "parameters": {
+    "min": 10000.0,
+    "max": 100000.0,
+    "scale": 90000.0
+  },
+  "training_commit": "default_v1.0.0",
+  "created_at": "2025-09-02T15:19:43.506333+00:00",
+  "checksum": "2cc40ecb569cb00cbf89af6977837fc2064664d9c5eebb4a953bd80da75e7dc7"
+}

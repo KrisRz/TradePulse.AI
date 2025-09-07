@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
   Calendar, 
   Clock, 
   TrendingUp, 
-  TrendingDown, 
   Activity,
   RefreshCw,
   AlertTriangle,
@@ -75,54 +74,60 @@ export default function TradingHeatmap({
       setLoading(true);
       setError(null);
       
-      // Generate mock heatmap data
-      const mockData: HeatmapData[] = [];
-      
-      // Create data for each hour of each day of the week
-      for (let day = 0; day < 7; day++) {
-        for (let hour = 0; hour < 24; hour++) {
-          // Market hours (9 AM - 4 PM) tend to have more activity
-          const isMarketHours = hour >= 9 && hour <= 16;
-          const isWeekend = day === 0 || day === 6;
-          
-          // Base activity level
-          let baseActivity = 0.3;
-          if (isMarketHours && !isWeekend) {
-            baseActivity = 0.8;
-          } else if (isMarketHours && isWeekend) {
-            baseActivity = 0.5;
-          } else if (!isMarketHours && !isWeekend) {
-            baseActivity = 0.4;
+      // Fetch real heatmap data from backend
+      const response = await fetch('http://localhost:9002/api/analytics/trading/heatmap', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || 'enterprise_admin_token'}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      let heatmapData: HeatmapData[] = [];
+      if (response.ok) {
+        const result = await response.json();
+        // Convert backend format to frontend format
+        heatmapData = (result.heatmap || []).map((item: any) => ({
+          hour: item.hour,
+          day: item.day,
+          dayName: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][item.day],
+          hourLabel: item.hourLabel,
+          trades: item.trades,
+          pnl: item.pnl,
+          winRate: item.winRate,
+          volume: item.volume,
+          avgTradeDuration: item.avgTradeDuration,
+          intensity: item.intensity
+        }));
+      }
+
+      // Fallback mock data if no real data available
+      if (heatmapData.length === 0) {
+        heatmapData = [];
+        // Create minimal fallback data
+        for (let day = 0; day < 7; day++) {
+          for (let hour = 0; hour < 24; hour++) {
+            const isMarketHours = hour >= 9 && hour <= 16;
+            const isWeekend = day === 0 || day === 6;
+            const baseActivity = (isMarketHours && !isWeekend) ? 0.8 : 0.3;
+
+            heatmapData.push({
+              hour,
+              day,
+              dayName: dayNames[day],
+              hourLabel: `${hour.toString().padStart(2, '0')}:00`,
+              trades: Math.floor(baseActivity * 20),
+              pnl: (Math.random() - 0.45) * 200 * baseActivity,
+              winRate: 45 + Math.random() * 30,
+              volume: baseActivity * 10000,
+              avgTradeDuration: 30 + Math.random() * 120,
+              intensity: baseActivity
+            });
           }
-          
-          // Add some randomness
-          const randomFactor = 0.5 + Math.random() * 0.5;
-          const activityLevel = baseActivity * randomFactor;
-          
-          // Generate metrics based on activity level
-          const trades = Math.floor(activityLevel * 20 + Math.random() * 10);
-          const pnl = (Math.random() - 0.45) * 200 * activityLevel; // Slight positive bias
-          const winRate = 0.45 + Math.random() * 0.3; // 45-75% win rate
-          const volume = activityLevel * 10000 + Math.random() * 5000;
-          const avgTradeDuration = 30 + Math.random() * 120; // 30-150 minutes
-          
-          mockData.push({
-            hour,
-            day,
-            dayName: dayNames[day],
-            hourLabel: `${hour.toString().padStart(2, '0')}:00`,
-            trades,
-            pnl,
-            winRate: winRate * 100,
-            volume,
-            avgTradeDuration,
-            intensity: activityLevel
-          });
         }
       }
       
       // Calculate intensity based on selected metric
-      const metricValues = mockData.map(d => {
+      const metricValues = heatmapData.map(d => {
         switch (metric) {
           case 'trades': return d.trades;
           case 'winRate': return d.winRate;
@@ -135,7 +140,7 @@ export default function TradingHeatmap({
       const maxValue = Math.max(...metricValues);
       const range = maxValue - minValue;
       
-      mockData.forEach(d => {
+      heatmapData.forEach(d => {
         const value = metric === 'trades' ? d.trades : 
                      metric === 'winRate' ? d.winRate :
                      metric === 'volume' ? d.volume : 
@@ -144,13 +149,13 @@ export default function TradingHeatmap({
       });
       
       // Calculate statistics
-      const totalTrades = mockData.reduce((sum, d) => sum + d.trades, 0);
-      const totalPnL = mockData.reduce((sum, d) => sum + d.pnl, 0);
-      const avgWinRate = mockData.reduce((sum, d) => sum + d.winRate, 0) / mockData.length;
+      const totalTrades = heatmapData.reduce((sum, d) => sum + d.trades, 0);
+      const totalPnL = heatmapData.reduce((sum, d) => sum + d.pnl, 0);
+      const avgWinRate = heatmapData.reduce((sum, d) => sum + d.winRate, 0) / heatmapData.length;
       
       // Find best/worst hours and days
       const hourlyStats = Array.from({length: 24}, (_, hour) => {
-        const hourData = mockData.filter(d => d.hour === hour);
+        const hourData = heatmapData.filter(d => d.hour === hour);
         return {
           hour,
           trades: hourData.reduce((sum, d) => sum + d.trades, 0),
@@ -159,7 +164,7 @@ export default function TradingHeatmap({
       });
       
       const dailyStats = Array.from({length: 7}, (_, day) => {
-        const dayData = mockData.filter(d => d.day === day);
+        const dayData = heatmapData.filter(d => d.day === day);
         return {
           day,
           trades: dayData.reduce((sum, d) => sum + d.trades, 0),
@@ -175,9 +180,9 @@ export default function TradingHeatmap({
       const mostActiveHour = hourlyStats.reduce((max, curr) => curr.trades > max.trades ? curr : max).hour;
       const mostActiveDay = dailyStats.reduce((max, curr) => curr.trades > max.trades ? curr : max).day;
       
-      const peakActivity = mockData.reduce((max, curr) => curr.trades > max.trades ? curr : max);
-      const bestPerformance = mockData.reduce((max, curr) => curr.pnl > max.pnl ? curr : max);
-      const worstPerformance = mockData.reduce((min, curr) => curr.pnl < min.pnl ? curr : min);
+      const peakActivity = heatmapData.reduce((max, curr) => curr.trades > max.trades ? curr : max);
+      const bestPerformance = heatmapData.reduce((max, curr) => curr.pnl > max.pnl ? curr : max);
+      const worstPerformance = heatmapData.reduce((min, curr) => curr.pnl < min.pnl ? curr : min);
       
       const mockStats: HeatmapStats = {
         bestHour,
@@ -206,11 +211,9 @@ export default function TradingHeatmap({
         }
       };
       
-      setTimeout(() => {
-        setData(mockData);
-        setStats(mockStats);
-        setLoading(false);
-      }, 500);
+      // Set real data immediately
+      setData(heatmapData);
+      setStats(mockStats);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch heatmap data');

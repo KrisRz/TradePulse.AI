@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { useTheme } from '../../contexts/ThemeContext';
 import { clsx } from 'clsx';
 
@@ -161,7 +161,7 @@ export default function DarkModeToggle({
       <div className={clsx('relative', className)}>
         <select
           value={theme}
-          onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'system')}
+          onChange={(e) => setTheme((e.target as HTMLInputElement).value as 'light' | 'dark' | 'system')}
           className={clsx(
             'block w-full rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300',
             sizeClasses[size].button

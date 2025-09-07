@@ -129,4 +129,123 @@ export interface TradeRequest {
   take_profit?: number;
   strategy?: string;
   confidence?: number;
+}
+
+// Frontend-specific portfolio types for components
+export interface PortfolioStats {
+  total_value?: number;
+  total_pnl?: number;
+  total_pnl_percentage?: number;
+  daily_pnl?: number;
+  daily_pnl_percentage?: number;
+  win_rate_today?: number;
+  total_trades?: number;
+  closed_positions?: number;
+  available_balance?: number;
+  active_positions?: number;
+  total_realized_pnl?: number;
+  total_portfolios?: number;
+  active_users?: number;
+  avg_portfolio_value?: number;
+}
+
+export interface PortfolioData {
+  overview?: Record<string, any>;
+  positions?: Record<string, any>[];
+  performance?: Record<string, any>;
+  analytics?: Record<string, any>;
+  portfolios?: Record<string, any>[];
+  stats?: PortfolioStats;
+  lastUpdated?: string;
+  total_portfolios?: number;
+  total_value?: number;
+  total_pnl?: number;
+  daily_pnl?: number;
+  active_positions?: number;
+  closed_positions?: number;
+}
+
+// Trading Intelligence specific types
+export interface TradingSignal {
+  id: string;
+  symbol: string;
+  action: 'buy' | 'sell';
+  confidence: number;
+  timestamp: string;
+  price: number;
+  reason: string;
+}
+
+export interface SignalData {
+  signals: TradingSignal[];
+  summary: {
+    total_signals: number;
+    buy_signals: number;
+    sell_signals: number;
+    avg_confidence: number;
+  };
+  last_updated: string;
+}
+
+// Market Intelligence specific types
+export interface MarketCondition {
+  condition: string;
+  value: number;
+  status: 'bullish' | 'bearish' | 'neutral';
+  trend: 'up' | 'down' | 'sideways';
+}
+
+export interface MarketData {
+  conditions: MarketCondition[];
+  sentiment: {
+    overall: 'bullish' | 'bearish' | 'neutral';
+    score: number;
+  };
+  volatility: number;
+  volume: number;
+  last_updated: string;
+}
+
+// Risk Management specific types
+export interface RiskMetrics {
+  var_95: number;
+  var_99: number;
+  expected_shortfall: number;
+  beta: number;
+  correlation_matrix: Record<string, Record<string, number>>;
+  drawdown: number;
+  max_drawdown: number;
+}
+
+export interface RiskData {
+  metrics: RiskMetrics;
+  alerts: Array<{
+    level: 'low' | 'medium' | 'high' | 'critical';
+    message: string;
+    timestamp: string;
+  }>;
+  exposure: Record<string, number>;
+}
+
+// Portfolio Optimization specific types
+export interface OptimizationResult {
+  recommended_allocation: Record<string, number>;
+  expected_return: number;
+  expected_risk: number;
+  sharpe_ratio: number;
+  efficient_frontier: Array<{
+    return: number;
+    risk: number;
+  }>;
+}
+
+export interface OptimizationData {
+  current_allocation: Record<string, number>;
+  optimization_result: OptimizationResult;
+  rebalancing_suggestions: Array<{
+    action: 'buy' | 'sell' | 'hold';
+    symbol: string;
+    amount: number;
+    reason: string;
+  }>;
 } 

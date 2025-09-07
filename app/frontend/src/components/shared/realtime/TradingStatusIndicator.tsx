@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
   Activity, 
   Brain, 
@@ -102,31 +102,32 @@ export function TradingStatusIndicator({
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Add some randomness to simulate real conditions
-      const randomizedStatus = {
-        ...mockStatus,
+      // Use real data from backend or show disconnected state
+      const realStatus: TradingStatus = data.status || {
+        overall: 'disconnected',
         lastUpdate: new Date(),
         components: {
-          ...mockStatus.components,
           dataFeed: {
-            ...mockStatus.components.dataFeed,
-            latency: Math.floor(Math.random() * 100) + 20,
-            messagesReceived: mockStatus.components.dataFeed.messagesReceived + Math.floor(Math.random() * 10),
-            lastMessage: new Date()
+            status: 'disconnected',
+            latency: 0,
+            messagesReceived: 0,
+            lastMessage: new Date(0)
           },
           database: {
-            ...mockStatus.components.database,
-            responseTime: Math.floor(Math.random() * 50) + 10,
-            lastWrite: new Date(Date.now() - Math.random() * 5000)
+            status: 'disconnected',
+            responseTime: 0,
+            lastWrite: new Date(0)
           },
           aiModels: {
-            ...mockStatus.components.aiModels,
-            lastPrediction: new Date(Date.now() - Math.random() * 60000)
+            status: 'inactive',
+            modelsOnline: 0,
+            totalModels: 3,
+            lastPrediction: new Date(0)
           }
         }
       };
       
-      setStatus(randomizedStatus);
+      setStatus(realStatus);
     } catch (err) {
       setError('Failed to fetch system status');
     } finally {

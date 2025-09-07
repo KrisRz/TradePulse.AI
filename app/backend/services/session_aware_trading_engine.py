@@ -35,7 +35,7 @@ from app.backend.services.professional_portfolio import get_professional_portfol
 from app.backend.services.dynamic_risk_manager import DynamicRiskManager
 from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_market_data, get_live_candlestick_data
 from app.backend.services.binance_hybrid_client import get_live_price_hybrid, get_live_candles_hybrid
-from app.backend.services.integrated_market_pipeline import get_integrated_market_pipeline
+from app.backend.services.enhanced_market_persistence import get_enhanced_persistence
 from app.backend.core.database import DynamoDBClient
 from app.backend.core.config import get_settings
 
@@ -258,28 +258,51 @@ class SessionAwareTradingEngine:
             raise RuntimeError(f"Initialization failed: {e}")
 
     async def _initialize_core_engines(self):
-        """Initialize core trading engines"""
-        # Initialize day trading engine
-        from app.backend.services.day_trading_engine import get_day_trading_engine
-        self.day_trading_engine = await get_day_trading_engine()
+        """Initialize core trading engines using DI container"""
+        # Use DI container to avoid circular dependencies
+        from app.backend.core.container import get_container
+        container = get_container()
         
-        # Initialize enterprise engine
-        self.enterprise_engine = EnterpriseTradingEngine()
-        await self.enterprise_engine.initialize()
+        # Get engines from DI container (they're already initialized)
+        try:
+            self.day_trading_engine = container.get("day_trading_engine")
+            logger.info("✅ Day trading engine retrieved from DI container")
+        except Exception:
+            logger.warning("⚠️ Day trading engine not in DI - will be None")
+            self.day_trading_engine = None
         
-        # Initialize risk manager
-        self.risk_manager = DynamicRiskManager()
-        await self.risk_manager.initialize()
+        try:
+            self.enterprise_engine = container.get("enterprise_trading_engine")
+            logger.info("✅ Enterprise engine retrieved from DI container")
+        except Exception:
+            logger.warning("⚠️ Enterprise engine not in DI, creating local instance")
+            self.enterprise_engine = EnterpriseTradingEngine()
+            await self.enterprise_engine.initialize()
+        
+        try:
+            self.risk_manager = container.get("risk_manager")
+            logger.info("✅ Risk manager retrieved from DI container")
+        except Exception:
+            logger.warning("⚠️ Risk manager not in DI, creating local instance")
+            self.risk_manager = DynamicRiskManager()
+            await self.risk_manager.initialize()
         
         logger.info("✅ Core trading engines initialized")
 
     async def _initialize_market_pipeline(self):
         """Initialize integrated market data pipeline"""
-        self.market_pipeline = await get_integrated_market_pipeline()
-        if not self.market_pipeline.is_running:
-            await self.market_pipeline.start()
-        
-        logger.info("✅ Market data pipeline initialized")
+        try:
+            from app.backend.services.integrated_market_pipeline import get_integrated_market_pipeline
+            self.market_pipeline = await get_integrated_market_pipeline()
+            if not self.market_pipeline.is_running:
+                await self.market_pipeline.start()
+            logger.info("✅ Market data pipeline initialized")
+        except ImportError:
+            logger.warning("⚠️ Integrated market pipeline not available, using basic market data")
+            self.market_pipeline = None
+        except Exception as e:
+            logger.warning(f"⚠️ Market pipeline initialization failed: {e}")
+            self.market_pipeline = None
 
     async def _load_session_configurations(self):
         """Load session configurations from database or create defaults"""
@@ -316,6 +339,16 @@ class SessionAwareTradingEngine:
                 position_size_multiplier=1.1,
                 risk_tolerance=1.2
             ),
+            TradingSession.OVERLAP_ASIAN_EU: SessionCharacteristics(
+                session=TradingSession.OVERLAP_ASIAN_EU,
+                start_time=datetime.now(timezone.utc).replace(hour=6, minute=0, second=0),
+                end_time=datetime.now(timezone.utc).replace(hour=9, minute=0, second=0),
+                expected_volatility=VolatilityLevel.MODERATE,
+                expected_liquidity=LiquidityLevel.HIGH,
+                confidence_multiplier=1.05,
+                position_size_multiplier=1.0,
+                risk_tolerance=1.0
+            ),
             TradingSession.OVERLAP_EU_US: SessionCharacteristics(
                 session=TradingSession.OVERLAP_EU_US,
                 start_time=datetime.now(timezone.utc).replace(hour=12, minute=0, second=0),
@@ -325,6 +358,36 @@ class SessionAwareTradingEngine:
                 confidence_multiplier=1.25,
                 position_size_multiplier=1.2,
                 risk_tolerance=1.3
+            ),
+            TradingSession.OVERLAP_US_ASIAN: SessionCharacteristics(
+                session=TradingSession.OVERLAP_US_ASIAN,
+                start_time=datetime.now(timezone.utc).replace(hour=21, minute=0, second=0),
+                end_time=datetime.now(timezone.utc).replace(hour=0, minute=0, second=0) + timedelta(days=1),
+                expected_volatility=VolatilityLevel.MODERATE,
+                expected_liquidity=LiquidityLevel.HIGH,
+                confidence_multiplier=1.0,
+                position_size_multiplier=1.0,
+                risk_tolerance=1.0
+            ),
+            TradingSession.PRE_MARKET: SessionCharacteristics(
+                session=TradingSession.PRE_MARKET,
+                start_time=datetime.now(timezone.utc).replace(hour=8, minute=0, second=0),
+                end_time=datetime.now(timezone.utc).replace(hour=14, minute=0, second=0),
+                expected_volatility=VolatilityLevel.LOW,
+                expected_liquidity=LiquidityLevel.MODERATE,
+                confidence_multiplier=0.9,
+                position_size_multiplier=0.9,
+                risk_tolerance=0.9
+            ),
+            TradingSession.AFTER_HOURS: SessionCharacteristics(
+                session=TradingSession.AFTER_HOURS,
+                start_time=datetime.now(timezone.utc).replace(hour=21, minute=0, second=0),
+                end_time=datetime.now(timezone.utc).replace(hour=1, minute=0, second=0) + timedelta(days=1),
+                expected_volatility=VolatilityLevel.LOW,
+                expected_liquidity=LiquidityLevel.LOW,
+                confidence_multiplier=0.8,
+                position_size_multiplier=0.8,
+                risk_tolerance=0.8
             ),
             TradingSession.WEEKEND: SessionCharacteristics(
                 session=TradingSession.WEEKEND,
@@ -491,6 +554,14 @@ class SessionAwareTradingEngine:
             persistence_task = asyncio.create_task(self._session_persistence_loop())
             self.monitoring_tasks.append(persistence_task)
             
+            # Start market pipeline if available
+            if self.market_pipeline and not self.market_pipeline.is_running:
+                try:
+                    await self.market_pipeline.start()
+                    logger.info("✅ Market data pipeline started successfully")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to start market pipeline: {e}")
+            
             # Start underlying day trading engine with session-aware config
             await self._start_session_aware_trading()
             
@@ -548,6 +619,11 @@ class SessionAwareTradingEngine:
     async def _update_market_conditions(self):
         """Update real-time market conditions from live data"""
         try:
+            # Check if market pipeline is available
+            if not self.market_pipeline:
+                logger.debug("Market pipeline not available, skipping market conditions update")
+                return
+                
             # Get live market data from integrated pipeline
             live_price = await self.market_pipeline.get_live_price()
             live_candles = await self.market_pipeline.get_live_candles(limit=100)

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'preact/hooks';
-import { useAIModelsData, useModelTrainingStatus, useModelComparison } from "../../hooks/admin-hooks";
-import { Brain, TrendingUp, Target, Zap, BarChart3, Activity, CheckCircle, AlertCircle, Clock, Award, Settings } from 'lucide-preact';
+import { useState } from 'preact/hooks';
+import { useAIModelsData, useModelTrainingStatus, useModelComparison } from "../../../hooks/admin-hooks";
+import { Brain, TrendingUp, BarChart3, Activity, CheckCircle, AlertTriangle, Clock, Award, Settings } from 'lucide-preact';
 
 interface ModelPerformance {
   name: string;
@@ -164,7 +164,7 @@ export default function AIModelsDashboard() {
         </div>
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <div className="flex items-center">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mr-2" />
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mr-2" />
             <span className="text-red-800 dark:text-red-200">
               Error loading AI models data. Please check system status.
             </span>
@@ -191,14 +191,14 @@ export default function AIModelsDashboard() {
             <input
               type="checkbox"
               checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
+              onChange={(e) => setAutoRefresh((e.target as HTMLInputElement).checked)}
               className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
             />
           </div>
           
           <select
             value={refreshInterval}
-            onChange={(e) => setRefreshInterval(Number(e.target.value))}
+            onChange={(e) => setRefreshInterval(Number((e.target as HTMLInputElement).value))}
             disabled={!autoRefresh}
             className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800"
           >

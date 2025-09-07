@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
-  Eye, TrendingUp, TrendingDown, X, Edit, Plus, Minus, 
-  Target, Wallet, RefreshCw, CheckSquare, Filter, Download, Clock
+  Eye, TrendingUp, X, Edit, Plus, Minus, Wallet, RefreshCw, Check, Filter, Download, Clock
 } from 'lucide-preact';
 
 interface RealPosition {
@@ -124,7 +123,7 @@ export default function OpenPositionsManager() {
       setLoading(true);
       
       // Load real open positions from backend
-      const response = await fetch('http://localhost:9001/api/real-trading/positions/open', {
+      const response = await fetch('http://localhost:9002/api/real-trading/positions/open', {
         headers: {
           'Authorization': 'Bearer enterprise_admin_token',
           'Content-Type': 'application/json'
@@ -410,7 +409,7 @@ export default function OpenPositionsManager() {
                   onClick={() => setShowBatchActions(!showBatchActions)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors flex items-center"
                 >
-                  <CheckSquare className="w-4 h-4 mr-2" />
+                  <Check className="w-4 h-4 mr-2" />
                   Batch Actions ({selectedPositions.length})
                 </button>
                 

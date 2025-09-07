@@ -1,0 +1,234 @@
+{
+  "schema_version": "1.0.0",
+  "created_at": "2025-09-02T15:05:00Z",
+  "checksum": "sha256:0afb7222bcdb1daceec3350f919451b5fa61f489fbb77ec2d9e41028ca6ae1a0",
+  "description": "TradePulse.AI Professional Feature Schema - Single Source of Truth",
+  "features": {
+    "standard_order": [
+      "close",
+      "volume",
+      "rsi",
+      "macd",
+      "bb_position",
+      "volatility",
+      "trend_strength",
+      "volume_ratio",
+      "price_change_24h"
+    ],
+    "feature_definitions": {
+      "close": {
+        "type": "float32",
+        "description": "Current close price (normalized)",
+        "min_value": 1000.0,
+        "max_value": 1000000.0,
+        "default_value": 50000.0,
+        "scaling": "minmax",
+        "required": true,
+        "category": "price"
+      },
+      "volume": {
+        "type": "float32",
+        "description": "Trading volume (scaled)",
+        "min_value": 0.0,
+        "max_value": 1000000.0,
+        "default_value": 1000.0,
+        "scaling": "log_minmax",
+        "required": true,
+        "category": "volume"
+      },
+      "rsi": {
+        "type": "float32",
+        "description": "Relative Strength Index (14 period)",
+        "min_value": 0.0,
+        "max_value": 100.0,
+        "default_value": 50.0,
+        "scaling": "none",
+        "required": true,
+        "category": "momentum"
+      },
+      "macd": {
+        "type": "float32",
+        "description": "MACD indicator (12,26,9)",
+        "min_value": -10000.0,
+        "max_value": 10000.0,
+        "default_value": 0.0,
+        "scaling": "standardization",
+        "required": true,
+        "category": "momentum"
+      },
+      "bb_position": {
+        "type": "float32",
+        "description": "Bollinger Band position (0=lower, 1=upper)",
+        "min_value": 0.0,
+        "max_value": 1.0,
+        "default_value": 0.5,
+        "scaling": "none",
+        "required": true,
+        "category": "volatility"
+      },
+      "volatility": {
+        "type": "float32",
+        "description": "Price volatility (rolling std)",
+        "min_value": 0.001,
+        "max_value": 0.5,
+        "default_value": 0.02,
+        "scaling": "log_minmax",
+        "required": true,
+        "category": "volatility"
+      },
+      "trend_strength": {
+        "type": "float32",
+        "description": "Trend strength indicator (0=sideways, 1=strong)",
+        "min_value": 0.0,
+        "max_value": 1.0,
+        "default_value": 0.5,
+        "scaling": "none",
+        "required": true,
+        "category": "trend"
+      },
+      "volume_ratio": {
+        "type": "float32",
+        "description": "Volume ratio vs average (1.0=normal)",
+        "min_value": 0.1,
+        "max_value": 10.0,
+        "default_value": 1.0,
+        "scaling": "log_minmax",
+        "required": true,
+        "category": "volume"
+      },
+      "price_change_24h": {
+        "type": "float32",
+        "description": "24-hour price change percentage",
+        "min_value": -100.0,
+        "max_value": 100.0,
+        "default_value": 0.0,
+        "scaling": "none",
+        "required": true,
+        "category": "price"
+      }
+    }
+  },
+  "model_requirements": {
+    "regime_classifier": {
+      "expected_features": 9,
+      "feature_order": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "bb_position",
+        "volatility",
+        "trend_strength",
+        "volume_ratio",
+        "price_change_24h"
+      ],
+      "input_shape": [1, 9],
+      "dtype": "float32"
+    },
+    "technical_filters": {
+      "expected_features": 2,
+      "feature_order": [
+        "rsi",
+        "bb_position"
+      ],
+      "input_shape": [1, 2],
+      "dtype": "float32"
+    },
+    "confidence_model": {
+      "expected_features": 6,
+      "feature_order": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "volatility",
+        "trend_strength"
+      ],
+      "input_shape": [1, 6],
+      "dtype": "float32"
+    },
+    "reversal_classifier": {
+      "expected_features": 8,
+      "feature_order": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "bb_position",
+        "volatility",
+        "trend_strength",
+        "volume_ratio"
+      ],
+      "input_shape": [1, 8],
+      "dtype": "float32"
+    },
+    "lightgbm_classifier": {
+      "expected_features": 9,
+      "feature_order": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "bb_position",
+        "volatility",
+        "trend_strength",
+        "volume_ratio",
+        "price_change_24h"
+      ],
+      "input_shape": [1, 9],
+      "dtype": "float32"
+    },
+    "lightgbm_regressor": {
+      "expected_features": 9,
+      "feature_order": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "bb_position",
+        "volatility",
+        "trend_strength",
+        "volume_ratio",
+        "price_change_24h"
+      ],
+      "input_shape": [1, 9],
+      "dtype": "float32"
+    },
+    "lstm_ensemble": {
+      "expected_features": 9,
+      "feature_order": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "bb_position",
+        "volatility",
+        "trend_strength",
+        "volume_ratio",
+        "price_change_24h"
+      ],
+      "input_shape": [1, 9],
+      "dtype": "float32",
+      "sequence_length": 60
+    }
+  },
+  "validation_rules": {
+    "fail_on_mismatch": true,
+    "log_warnings": true,
+    "auto_fix_order": true,
+    "strict_typing": true,
+    "checksum_validation": true
+  },
+  "metadata": {
+    "training_commit": "unknown",
+    "model_versions": {
+      "layer_1": "v1.0.0",
+      "layer_3": "v1.0.0",
+      "layer_4": "v1.0.0",
+      "layer_5": "v1.0.0",
+      "layer_6": "v1.0.0"
+    },
+    "last_updated": "2025-09-02T15:05:00Z",
+    "environment": "development"
+  }
+}

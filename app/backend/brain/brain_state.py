@@ -245,7 +245,7 @@ class BrainControllerState(BaseModel):
     cycle_interval_seconds: int = 15
     max_positions: int = 5
     position_size_pct: Decimal = Decimal('0.05')
-    confidence_threshold: Decimal = Decimal('0.25')
+    confidence_threshold: Decimal = Decimal('0.65')  # Professional threshold
     
     class Config:
         arbitrary_types_allowed = True

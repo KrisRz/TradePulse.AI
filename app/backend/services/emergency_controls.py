@@ -178,11 +178,24 @@ class EmergencyControlSystem:
     
     async def start_monitoring(self) -> Dict[str, Any]:
         """Start real-time emergency monitoring"""
+        # Use BootOnce guard to prevent duplicate starts
+        from app.backend.core.boot_once import BootOnce
+        
+        if not await BootOnce.start_async("emergency_monitoring", self._start_monitoring_once):
+            return {"status": "already_monitoring"}
+        
+        return {
+            "status": "monitoring_started", 
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    
+    async def _start_monitoring_once(self):
+        """Internal method to start monitoring once"""
         if not self.is_initialized:
             await self.initialize()
         
         if self.is_monitoring:
-            return {"status": "already_monitoring"}
+            return
         
         self.is_monitoring = True
         logger.info("🔍 Starting emergency monitoring...")
@@ -592,16 +605,17 @@ class EmergencyControlSystem:
     async def _save_emergency_event(self, event: EmergencyEvent):
         """Save emergency event to database"""
         try:
+            from decimal import Decimal
             event_data = {
                 "event_id": event.event_id,
+                "timestamp": int(event.timestamp.timestamp()),
                 "level": event.level.value,
                 "breaker_type": event.breaker_type.value,
                 "description": event.description,
-                "trigger_value": event.trigger_value,
-                "threshold": event.threshold,
-                "timestamp": int(event.timestamp.timestamp()),
+                "trigger_value": Decimal(str(event.trigger_value)),
+                "threshold": Decimal(str(event.threshold)),
                 "auto_resolved": event.auto_resolved,
-                "resolution_timestamp": int(event.resolution_timestamp.timestamp()) if event.resolution_timestamp else None
+                "resolution_timestamp": int(event.resolution_timestamp.timestamp()) if event.resolution_timestamp else 0
             }
             
             await self.db_service.put_item("emergency_events", event_data)
@@ -619,20 +633,27 @@ class EmergencyControlSystem:
             logger.error(f"Failed to load emergency state: {e}")
     
     async def _update_emergency_state(self):
-        """Update emergency state in database"""
+        """Update emergency state in database - ONLY if changed"""
         try:
-            state_data = {
+            current_state = {
                 "emergency_stop_active": self.emergency_stop_active,
                 "emergency_stop_reason": self.emergency_stop_reason,
                 "active_breakers": list(self.circuit_breakers_triggered.keys()),
                 "total_emergencies": self.total_emergencies,
-                "automatic_recoveries": self.automatic_recoveries,
-                "last_updated": int(datetime.now(timezone.utc).timestamp())
+                "automatic_recoveries": self.automatic_recoveries
             }
             
-            # Add unique ID for DynamoDB
-            state_data["id"] = "emergency_state_global"
-            await self.db_service.put_item("emergency_state", state_data)
+            # FIXED: Only write if state actually changed
+            if not hasattr(self, '_last_saved_state') or self._last_saved_state != current_state:
+                state_data = current_state.copy()
+                state_data["last_updated"] = int(datetime.now(timezone.utc).timestamp())
+                state_data["id"] = "emergency_state_global"
+                
+                await self.db_service.put_item("emergency_state", state_data)
+                self._last_saved_state = current_state
+                logger.debug("💾 Emergency state updated (changed)")
+            else:
+                logger.debug("🔄 Emergency state unchanged, skipping DB write")
             
         except Exception as e:
             logger.error(f"Failed to update emergency state: {e}")
@@ -720,8 +741,9 @@ class EmergencyControlSystem:
             # Log the failure
             logger.warning(f"🚨 Analysis failure #{self._api_failure_count}: {error_message}")
             
-            # Trigger emergency stop if too many failures
-            if self._api_failure_count >= 3:
+            # Trigger emergency stop if too many failures (more tolerant during startup)
+            failure_threshold = 10 if (datetime.now(timezone.utc) - self._last_failure_reset).total_seconds() < 300 else 3  # 10 failures in first 5 minutes
+            if self._api_failure_count >= failure_threshold:
                 await self.trigger_emergency_stop(f"Multiple analysis failures: {error_message}", EmergencyLevel.HIGH)
                 
         except Exception as e:

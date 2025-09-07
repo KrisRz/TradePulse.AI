@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'preact/hooks';
-import { Eye, Download, Filter, Search, RefreshCw, TrendingUp, TrendingDown, Activity, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-preact';
-import { useSignalLogs } from '../../hooks/admin-hooks';
+import { useState } from 'preact/hooks';
+import { Eye, Download, Filter, Search, RefreshCw, TrendingUp, Activity, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-preact';
+import { useSignalLogs } from '../../../hooks/admin-hooks';
 
 // Define the filters type here since it's no longer imported
 interface SignalLogsFilters {
@@ -11,6 +11,8 @@ interface SignalLogsFilters {
   date_from?: string;
   date_to?: string;
 }
+
+type SignalFilterValue = string | number | undefined;
 
 export default function SignalLogsAdmin() {
   const [filters, setFilters] = useState<SignalLogsFilters>({
@@ -41,7 +43,7 @@ export default function SignalLogsAdmin() {
     }
   }, [autoRefresh, refresh]);
 
-  const handleFilterChange = (key: keyof SignalLogsFilters, value: any) => {
+  const handleFilterChange = (key: keyof SignalLogsFilters, value: SignalFilterValue) => {
     setFilters(prev => ({
       ...prev,
       [key]: value,
@@ -178,7 +180,7 @@ export default function SignalLogsAdmin() {
               <input
                 type="checkbox"
                 checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
+                onChange={(e) => setAutoRefresh((e.target as HTMLInputElement).checked)}
                 className="rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
               />
               <span className="text-sm text-gray-600 dark:text-gray-400">Auto-refresh</span>
@@ -258,7 +260,7 @@ export default function SignalLogsAdmin() {
                 <input
                   type="text"
                   value={filters.symbol || ''}
-                  onChange={(e) => handleFilterChange('symbol', e.target.value)}
+                  onChange={(e) => handleFilterChange('symbol', (e.target as HTMLInputElement).value)}
                   placeholder="e.g., BTCUSDT"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
@@ -270,7 +272,7 @@ export default function SignalLogsAdmin() {
                 </label>
                 <select
                   value={filters.signal_type || 'all'}
-                  onChange={(e) => handleFilterChange('signal_type', e.target.value === 'all' ? undefined : e.target.value)}
+                  onChange={(e) => handleFilterChange('signal_type', (e.target as HTMLInputElement).value === 'all' ? undefined : (e.target as HTMLInputElement).value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 >
                   <option value="all">All Types</option>
@@ -290,7 +292,7 @@ export default function SignalLogsAdmin() {
                   max="1"
                   step="0.1"
                   value={filters.min_confidence || 0}
-                  onChange={(e) => handleFilterChange('min_confidence', parseFloat(e.target.value))}
+                  onChange={(e) => handleFilterChange('min_confidence', parseFloat((e.target as HTMLInputElement).value))}
                   className="w-full"
                 />
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -304,7 +306,7 @@ export default function SignalLogsAdmin() {
                 </label>
                 <select
                   value={filters.execution_status || 'all'}
-                  onChange={(e) => handleFilterChange('execution_status', e.target.value === 'all' ? undefined : e.target.value)}
+                  onChange={(e) => handleFilterChange('execution_status', (e.target as HTMLInputElement).value === 'all' ? undefined : (e.target as HTMLInputElement).value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 >
                   <option value="all">All Status</option>
@@ -324,7 +326,7 @@ export default function SignalLogsAdmin() {
                 <input
                   type="date"
                   value={filters.date_from || ''}
-                  onChange={(e) => handleFilterChange('date_from', e.target.value)}
+                  onChange={(e) => handleFilterChange('date_from', (e.target as HTMLInputElement).value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
               </div>
@@ -335,7 +337,7 @@ export default function SignalLogsAdmin() {
                 <input
                   type="date"
                   value={filters.date_to || ''}
-                  onChange={(e) => handleFilterChange('date_to', e.target.value)}
+                  onChange={(e) => handleFilterChange('date_to', (e.target as HTMLInputElement).value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
               </div>

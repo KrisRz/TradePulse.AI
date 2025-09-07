@@ -50,10 +50,26 @@ async def health_check():
 @router.get("/live/bitcoin-price")
 async def get_bitcoin_price(admin_user: User = Depends(require_admin_role)):
     """
-    🔴 GET LIVE BITCOIN PRICE - Real Binance Data
-    Returns current live Bitcoin price from WebSocket stream
+    🔴 GET LIVE BITCOIN PRICE - Real Binance Data (Cached)
+    Returns current live Bitcoin price from cache or WebSocket stream
     """
     try:
+        from app.backend.services.btc_price_cache import get_cached_btc_price
+        price_data = await get_cached_btc_price("BTCUSDT")
+
+        if price_data and "price" in price_data:
+            return {
+                "status": "success",
+                "data": {
+                    "symbol": "BTCUSDT",
+                    "price": price_data["price"],
+                    "timestamp": price_data.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                    "source": price_data.get("source", "cache")
+                }
+            }
+
+        # Fallback to direct API call
+        logger.warning("💰 Cache miss - falling back to direct API call")
         price = await get_live_bitcoin_price()
         return {
             "status": "success",
@@ -61,9 +77,10 @@ async def get_bitcoin_price(admin_user: User = Depends(require_admin_role)):
                 "symbol": "BTCUSDT",
                 "price": price,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "source": "binance_websocket"
+                "source": "binance_websocket_fallback"
             }
         }
+
     except Exception as e:
         logger.error(f"Failed to get live Bitcoin price: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get live price: {str(e)}")

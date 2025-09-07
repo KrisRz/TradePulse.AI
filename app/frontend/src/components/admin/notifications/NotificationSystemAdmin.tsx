@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { useNotificationSettings, useNotificationChannels, useNotificationLogs } from "../../../hooks/admin-hooks";
 import { Bell, Mail, Settings, AlertTriangle, CheckCircle, Clock, Send, MessageSquare, Tag, Volume, VolumeOff } from 'lucide-preact';
 
@@ -213,14 +213,14 @@ export default function NotificationSystemAdmin() {
             <input
               type="checkbox"
               checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
+              onChange={(e) => setAutoRefresh((e.target as HTMLInputElement).checked)}
               className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
           </div>
           
           <select
             value={refreshInterval}
-            onChange={(e) => setRefreshInterval(Number(e.target.value))}
+            onChange={(e) => setRefreshInterval(Number((e.target as HTMLInputElement).value))}
             disabled={!autoRefresh}
             className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800"
           >

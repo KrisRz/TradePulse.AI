@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { authStore } from '../../lib/auth-store';
+import { authStore, authActions } from '../../../lib/auth-store';
 import type { RegisterRequest } from '../../types/auth';
 
 interface RegisterFormProps {
@@ -77,9 +77,9 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
       return;
     }
     
-    const success = await authStore.register(formData);
+    const success = await authActions.register(formData.username, formData.email, formData.password);
     
-    if (success) {
+    if (success.success) {
       onSuccess?.();
     }
   };
@@ -166,7 +166,7 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
         )}
       </div>
 
-      {authStore.error.value && (
+      {authStore.error?.value && (
         <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -179,12 +179,12 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
                 Registration failed
               </h3>
               <div className="mt-2 text-sm text-red-700 dark:text-red-300">
-                {authStore.error.value}
+                {authStore.error?.value}
               </div>
               <div className="mt-4">
                 <button
                   type="button"
-                  onClick={() => authStore.clearError()}
+                  onClick={() => authActions.clearError()}
                   className="text-sm font-medium text-red-800 dark:text-red-200 hover:text-red-900 dark:hover:text-red-100"
                 >
                   Dismiss
@@ -198,10 +198,10 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
       <div>
         <button
           type="submit"
-          disabled={authStore.isLoading.value}
+          disabled={authStore.isLoading?.value}
           className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {authStore.isLoading.value ? (
+          {authStore.isLoading?.value ? (
             <>
               <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

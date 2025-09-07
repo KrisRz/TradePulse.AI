@@ -414,8 +414,8 @@ class DynamicRiskManager:
                 )
                 return self.current_risk_metrics
             
-            # Extract price data
-            closes = [float(candle[4]) for candle in historical_data]
+            # Extract price data - handle dict format from Binance API
+            closes = [float(candle.get("close", candle.get("c", 0))) for candle in historical_data]
             returns = np.diff(np.log(closes))
             
             # Calculate volatility (24h)
@@ -462,7 +462,11 @@ class DynamicRiskManager:
             
         except Exception as e:
             logger.error(f"Error calculating risk metrics: {e}")
-            # Return default metrics on error
+            logger.error(f"Risk calculation error details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Risk calculation traceback: {traceback.format_exc()}")
+            
+            # Return professional default metrics on error
             self.current_risk_metrics = RiskMetrics(
                 var_1d=-0.05,
                 var_1w=-0.15,
@@ -671,12 +675,18 @@ class DynamicRiskManager:
             risk_multiplier = max(0.3, 1.0 - risk_ctx.risk_score)
             
             final_size = base_size * multiplier * risk_multiplier
+            
+            # Enforce minimum $500 position size
+            min_size_usd = 500.0
+            if final_size < min_size_usd:
+                final_size = min_size_usd
+                logger.info(f"💰 Position size increased to minimum: ${min_size_usd}")
+            
             return final_size
             
         except Exception as e:
             logger.error(f"Position size calculation failed: {e}")
-            # Return conservative fallback
-            return float(portfolio.cash_balance) * 0.05  # 5% conservative size
+            raise RuntimeError(f"Professional position sizing failed: {e} - no fallback allowed")
             
     async def position_size(self, signal, risk_ctx, portfolio, tick) -> Decimal:
         """PHASE 1A: Position size calculation - alias for trading loop compatibility"""

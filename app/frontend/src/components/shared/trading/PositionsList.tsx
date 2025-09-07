@@ -1,18 +1,31 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
   TrendingUp, 
-  TrendingDown, 
   DollarSign, 
-  Percent, 
-  Clock, 
-  Target,
+  Hash, 
+  Clock,
   Shield,
   AlertTriangle,
   X,
-  Eye,
   Settings,
   MoreHorizontal
 } from 'lucide-preact';
+
+interface ApiPosition {
+  position_id?: string;
+  symbol: string;
+  type?: string;
+  size?: number;
+  entry_price?: number;
+  current_price?: number;
+  current_value?: number;
+  unrealized_pnl?: number;
+  unrealized_pnl_percentage?: number;
+  stop_loss?: number;
+  take_profit?: number;
+  entry_time?: string;
+  status?: string;
+}
 
 interface Position {
   id: string;
@@ -81,7 +94,7 @@ export default function PositionsList({
       }
 
       const data = await response.json();
-      const realPositions = (data.positions || []).map((p: any, idx: number) => ({
+      const realPositions = (data.positions || []).map((p: ApiPosition, idx: number) => ({
         id: p.position_id ?? String(idx),
         symbol: p.symbol,
         side: (p.type || 'LONG') as 'LONG' | 'SHORT',

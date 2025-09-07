@@ -1,16 +1,34 @@
-import { useState, useEffect, useCallback } from 'preact/hooks';
-import { 
-  X, 
-  CheckCircle, 
-  AlertTriangle, 
-  XCircle, 
-  Info, 
-  TrendingUp, 
-  TrendingDown,
+import { useState, useCallback } from 'preact/hooks';
+import {
+  X,
+  CheckCircle,
+  AlertTriangle,
+  XCircle,
+  Info,
+  TrendingUp,
   Bell,
   Volume2,
   VolumeX
 } from 'lucide-preact';
+
+export interface SignalNotificationData {
+  signalId: string;
+  symbol: string;
+  action: 'buy' | 'sell';
+  confidence: number;
+  price: number;
+}
+
+export interface TradeNotificationData {
+  tradeId: string;
+  symbol: string;
+  side: 'buy' | 'sell';
+  quantity: number;
+  price: number;
+  pnl?: number;
+}
+
+export type NotificationExtraData = SignalNotificationData | TradeNotificationData | Record<string, unknown>;
 
 export interface NotificationData {
   id: string;
@@ -22,7 +40,7 @@ export interface NotificationData {
     label: string;
     onClick: () => void;
   };
-  data?: any;
+  data?: NotificationExtraData;
   timestamp: Date;
 }
 

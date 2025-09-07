@@ -1,30 +1,25 @@
 import { useState, useEffect } from 'preact/hooks';
-import { 
-  DollarSign, TrendingUp, TrendingDown, AlertTriangle, Clock, Target, Zap, BarChart3, 
-  Eye, Wallet, Signal, Lock, Shield, Settings, Activity, CreditCard, Globe,
-  CheckCircle, Play, Pause, RefreshCw, PieChart, LineChart, Archive, FileText,
-  Users, Bell, Database
-} from 'lucide-preact';
+import { DollarSign, TrendingUp, AlertTriangle, Clock, BarChart3, Wallet, Signal, Shield, Settings, Activity, CheckCircle, Play, Pause, RefreshCw, Archive, FileText, Users, Bell, Database, Eye, Globe } from 'lucide-preact';
 import SignalLogsAdmin from '../../signals/SignalLogsAdmin';
 import { OpenPositionsManager, WalletManagement } from '../../../shared/trading';
 import { ClosedPositionsAnalytics } from '../../../shared/analytics';
-import { LiveBitcoinChart } from '../../../shared/charts';
+import { TradingViewChart } from '../../../shared/charts';
 
 export default function RealTradingAdmin() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [tradingEnabled, setTradingEnabled] = useState(false);
+  const [tradingEnabled, setTradingEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
-  const [bitcoinPrice, setBitcoinPrice] = useState(96500);
+  const [bitcoinPrice, setBitcoinPrice] = useState(0);
 
   // Enhanced tab structure from the plan
   const tabs = [
-    { id: 'overview', label: 'Portfolio Overview', icon: PieChart },
+    { id: 'overview', label: 'Portfolio Overview', icon: BarChart3 },
     { id: 'open-positions', label: 'Open Positions', icon: Eye },
     { id: 'closed-positions', label: 'Closed Positions', icon: Archive },
     { id: 'orders', label: 'Order Management', icon: FileText },
     { id: 'wallet', label: 'Wallet', icon: Wallet },
-    { id: 'chart', label: 'Live Chart', icon: LineChart },
+    { id: 'chart', label: 'Live Chart', icon: BarChart3 },
     { id: 'risk', label: 'Risk Management', icon: Shield },
     { id: 'controls', label: 'Trading Controls', icon: Settings },
     { id: 'broker', label: 'Broker Integration', icon: Globe },
@@ -32,22 +27,32 @@ export default function RealTradingAdmin() {
     { id: 'signals', label: 'AI Signals', icon: Signal }
   ];
 
-  // Update price every few seconds (mock)
+  // Fetch real DollarSign price from backend
   useEffect(() => {
-    const interval = setInterval(() => {
-      setBitcoinPrice(prev => {
-        const change = (Math.random() - 0.5) * 100;
-        return Math.max(prev + change, 50000);
-      });
-      setLastUpdate(new Date());
-    }, 3000);
+    const fetchRealPrice = async () => {
+      try {
+        const response = await fetch('/api/signals/live/bitcoin-price');
+        if (response.ok) {
+          const data = await response.json();
+          setBitcoinPrice(data.price || 0);
+          setLastUpdate(new Date());
+        }
+      } catch (error) {
+        console.error('Failed to fetch real DollarSign price:', error);
+      }
+    };
 
+    // Initial fetch
+    fetchRealPrice();
+    
+    // Update every 5 seconds with real data
+    const interval = setInterval(fetchRealPrice, 5000);
     return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="space-y-6">
-      {/* Enhanced Header with Live Bitcoin Price */}
+      {/* Enhanced Header with Live DollarSign Price */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
@@ -57,7 +62,7 @@ export default function RealTradingAdmin() {
           <div className="flex items-center space-x-4 mt-2">
             <span className="text-sm text-gray-600 dark:text-gray-400">Live BTC:</span>
             <span className="text-lg font-bold text-orange-600">
-              ${bitcoinPrice.toLocaleString()}
+              {bitcoinPrice > 0 ? `$${bitcoinPrice.toLocaleString()}` : 'Loading...'}
             </span>
             <span className="text-xs text-gray-500">
               Updated: {lastUpdate.toLocaleTimeString()}
@@ -75,7 +80,7 @@ export default function RealTradingAdmin() {
             {tradingEnabled ? 'Trading Active' : 'Trading Paused'}
           </div>
           <div className="flex items-center px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 rounded-full text-sm">
-            <Lock className="w-4 h-4 mr-1" />
+            <Shield className="w-4 h-4 mr-1" />
             Development Mode
           </div>
         </div>
@@ -171,7 +176,7 @@ export default function RealTradingAdmin() {
                   <p className="text-xs text-gray-500 mt-1">Available for trading</p>
                 </div>
                 <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                  <CreditCard className="h-6 w-6 text-blue-600" />
+                  <Wallet className="h-6 w-6 text-blue-600" />
                 </div>
               </div>
             </div>
@@ -209,7 +214,7 @@ export default function RealTradingAdmin() {
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Portfolio Allocation</h3>
               <div className="space-y-4">
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <PieChart className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <BarChart3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No positions to display</p>
                   <p className="text-xs">Connect to broker to view allocation</p>
                 </div>
@@ -308,9 +313,33 @@ export default function RealTradingAdmin() {
         <WalletManagement />
       )}
 
-      {/* Live Chart Tab - NOW INTEGRATED */}
+      {/* Live Chart Tab - PROFESSIONAL TRADING CHART */}
       {activeTab === 'chart' && (
-        <LiveBitcoinChart />
+        <div className="space-y-6">
+          {/* Chart Header */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Live Trading Chart</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Real-time BTC/USDT with technical indicators</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-xs text-green-600 dark:text-green-400 font-medium">LIVE DATA</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Professional Chart */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <TradingViewChart 
+              symbol="BTCUSDT" 
+              defaultInterval="5m" 
+              height={600} 
+              showToolbar={true} 
+            />
+          </div>
+        </div>
       )}
 
       {/* Risk Management Tab */}

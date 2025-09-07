@@ -1,26 +1,82 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Compass, TrendingUp, TrendingDown, Activity, Zap, Globe, BarChart3, AlertCircle } from 'lucide-preact';
+import { TrendingUp, TrendingDown, Activity, BarChart3, Globe, Zap } from 'lucide-preact';
+import type { PortfolioOverviewResponse } from '../../../../types';
+import { TradingViewChart } from '../../../shared/charts';
 
-interface MarketIntelligenceProps {
-  portfolioData: any;
+interface MarketData {
+  market_overview: {
+    current_price: number;
+    price_change_24h: number;
+    price_change_24h_percentage: number;
+    volume_24h: number;
+    market_cap: number;
+    dominance: number;
+  };
+  technical_analysis: {
+    trend: string;
+    support_level: number;
+    resistance_level: number;
+    rsi: number;
+    macd_signal: string;
+    volume_trend: string;
+    volatility: number;
+  };
+  sentiment_analysis: {
+    overall_sentiment: string;
+    fear_greed_index: number;
+    social_sentiment: string;
+    news_sentiment: number;
+  };
+  market_conditions: {
+    liquidity: string;
+    volatility_regime: string;
+    trading_session: string;
+    market_phase: string;
+  };
+  key_levels: {
+    daily_high: number;
+    daily_low: number;
+    weekly_high: number;
+    weekly_low: number;
+    pivot_point: number;
+    fibonacci_levels: {
+      [key: string]: number;
+    };
+  };
+  alerts: Array<{
+    type: string;
+    message: string;
+    severity: string;
+    timestamp: string;
+  }>;
+  last_updated: string;
 }
 
-export default function MarketIntelligence({ portfolioData }: MarketIntelligenceProps) {
-  const [marketData, setMarketData] = useState<any>(null);
-  const [selectedTimeframe, setSelectedTimeframe] = useState('24h');
+interface MarketIntelligenceProps {
+  portfolioData: PortfolioOverviewResponse | null;
+}
+
+export default function MarketIntelligence({ }: MarketIntelligenceProps) {
+  const [marketData, setMarketData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Fetch live market data
   useEffect(() => {
     const fetchMarketData = async () => {
       try {
-        const response = await fetch('http://localhost:9001/api/signals/live/bitcoin-price');
+        // Fetch comprehensive market intelligence data
+        const response = await fetch('http://localhost:9002/api/signals/market-intelligence');
         if (response.ok) {
           const data = await response.json();
           setMarketData(data);
+          console.log('✅ Real market intelligence data loaded:', data);
+        } else {
+          console.error('Failed to fetch market intelligence:', response.status);
+          setMarketData(null);
         }
       } catch (error) {
         console.error('Error fetching market data:', error);
+        setMarketData(null);
       } finally {
         setLoading(false);
       }
@@ -31,29 +87,35 @@ export default function MarketIntelligence({ portfolioData }: MarketIntelligence
     return () => clearInterval(interval);
   }, []);
 
-  // Mock enhanced market intelligence data
+  // Real enhanced market intelligence data from backend
   const marketIntelligence = {
-    price: marketData?.price || 117287,
-    change24h: marketData?.change_24h || 2.34,
-    volume24h: 28.5, // Billion USD
-    marketCap: 2.31, // Trillion USD
-    volatilityIndex: 18.5,
-    fearGreedIndex: 74, // 0-100 scale
-    dominance: 54.2,
-    liquidityScore: 85.3,
-    sentimentScore: 68.2,
-    technicalScore: 72.1,
-    momentumScore: 81.4,
-    trendStrength: 7.2, // 0-10 scale
-    supportLevel: 115000,
-    resistanceLevel: 120000,
-    rsi: 58.2,
-    macd: 'Bullish',
-    bollingerPosition: 'Upper Band',
-    volumeProfile: 'High'
+    price: marketData?.market_overview?.current_price || 0,
+    change24h: marketData?.market_overview?.price_change_24h || 0,
+    change24hPercentage: marketData?.market_overview?.price_change_24h_percentage || 0,
+    volume24h: marketData?.market_overview?.volume_24h || 0,
+    marketCap: marketData?.market_overview?.market_cap || 0,
+    dominance: marketData?.market_overview?.dominance || 0,
+    volatilityIndex: marketData?.technical_analysis?.volatility || 0,
+    fearGreedIndex: marketData?.sentiment_analysis?.fear_greed_index || 0,
+    sentimentScore: marketData?.sentiment_analysis?.news_sentiment ? marketData.sentiment_analysis.news_sentiment * 100 : 0,
+    technicalScore: marketData?.technical_analysis?.rsi || 0,
+    supportLevel: marketData?.technical_analysis?.support_level || 0,
+    resistanceLevel: marketData?.technical_analysis?.resistance_level || 0,
+    rsi: marketData?.technical_analysis?.rsi || 0,
+    macd: marketData?.technical_analysis?.macd_signal || 'Neutral',
+    trend: marketData?.technical_analysis?.trend || 'NEUTRAL',
+    volumeTrend: marketData?.technical_analysis?.volume_trend || 'Normal',
+    marketPhase: marketData?.market_conditions?.market_phase || 'NEUTRAL',
+    liquidity: marketData?.market_conditions?.liquidity || 'MEDIUM',
+    volatilityRegime: marketData?.market_conditions?.volatility_regime || 'NORMAL',
+    tradingSession: marketData?.market_conditions?.trading_session || 'ACTIVE',
+    dailyHigh: marketData?.key_levels?.daily_high || 0,
+    dailyLow: marketData?.key_levels?.daily_low || 0,
+    weeklyHigh: marketData?.key_levels?.weekly_high || 0,
+    weeklyLow: marketData?.key_levels?.weekly_low || 0,
+    pivotPoint: marketData?.key_levels?.pivot_point || 0,
+    fibonacciLevels: marketData?.key_levels?.fibonacci_levels || {}
   };
-
-  const timeframes = ['1h', '4h', '24h', '7d', '30d'];
 
   const getSentimentColor = (score: number) => {
     if (score >= 75) return 'text-green-600 dark:text-green-400';
@@ -81,14 +143,6 @@ export default function MarketIntelligence({ portfolioData }: MarketIntelligence
     return 'High';
   };
 
-  const getTrendDirection = (score: number) => {
-    if (score >= 6) return 'Strong Bullish';
-    if (score >= 4) return 'Bullish';
-    if (score >= 3) return 'Neutral';
-    if (score >= 1) return 'Bearish';
-    return 'Strong Bearish';
-  };
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -107,23 +161,35 @@ export default function MarketIntelligence({ portfolioData }: MarketIntelligence
     return `${percentage >= 0 ? '+' : ''}${formatted}%`;
   };
 
-  // Market conditions indicators
+  // Market conditions indicators based on real data
   const marketConditions = [
     { 
-      name: 'Bull Market Signals', 
-      indicators: ['RSI > 50', 'MACD Bullish', 'Price > MA200'], 
-      status: 'Active',
-      strength: 8.2 
+      name: `${marketIntelligence.trend} Market Signals`, 
+      indicators: [
+        `RSI ${marketIntelligence.rsi > 50 ? '>' : '<'} 50`, 
+        `MACD ${marketIntelligence.macd}`, 
+        `Trend: ${marketIntelligence.trend}`
+      ], 
+      status: marketIntelligence.trend === 'BULLISH' ? 'Active' : marketIntelligence.trend === 'BEARISH' ? 'Declining' : 'Neutral',
+      strength: marketIntelligence.technicalScore / 10 
     },
     { 
-      name: 'Momentum Strength', 
-      indicators: ['Volume Increase', 'Breakout Pattern', 'Higher Highs'], 
-      status: 'Strong',
-      strength: 7.8 
+      name: 'Volume Analysis', 
+      indicators: [
+        `Volume Trend: ${marketIntelligence.volumeTrend}`, 
+        `24h Volume: ${marketIntelligence.volume24h.toFixed(0)}`, 
+        `Liquidity: ${marketIntelligence.liquidity}`
+      ], 
+      status: marketIntelligence.volumeTrend === 'INCREASING' ? 'Strong' : 'Normal',
+      strength: marketIntelligence.volumeTrend === 'INCREASING' ? 7.8 : 5.5 
     },
     { 
-      name: 'Support Levels', 
-      indicators: ['$115K Support', 'Volume Profile', 'Technical Floor'], 
+      name: 'Key Levels', 
+      indicators: [
+        `Support: ${formatCurrency(marketIntelligence.supportLevel)}`, 
+        `Resistance: ${formatCurrency(marketIntelligence.resistanceLevel)}`, 
+        `Pivot: ${formatCurrency(marketIntelligence.pivotPoint)}`
+      ], 
       status: 'Solid',
       strength: 8.5 
     }
@@ -140,23 +206,45 @@ export default function MarketIntelligence({ portfolioData }: MarketIntelligence
 
   return (
     <div className="space-y-6">
+      {/* Live Market Chart */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Live Market Analysis</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Real-time BTC/USDT with technical indicators</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-xs text-green-600 dark:text-green-400 font-medium">LIVE DATA</span>
+            </div>
+          </div>
+        </div>
+        <TradingViewChart 
+          symbol="BTCUSDT" 
+          defaultInterval="15m" 
+          height={500} 
+          showToolbar={true} 
+        />
+      </div>
+
       {/* Market Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Bitcoin Price */}
+        {/* DollarSign Price */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Bitcoin Price</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">DollarSign Price</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                 {formatCurrency(marketIntelligence.price)}
               </p>
-              <div className={`flex items-center mt-2 ${marketIntelligence.change24h >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {marketIntelligence.change24h >= 0 ? (
+              <div className={`flex items-center mt-2 ${marketIntelligence.change24hPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {marketIntelligence.change24hPercentage >= 0 ? (
                   <TrendingUp className="w-4 h-4 mr-1" />
                 ) : (
                   <TrendingDown className="w-4 h-4 mr-1" />
                 )}
-                <span className="text-sm font-medium">{formatPercentage(marketIntelligence.change24h)} 24h</span>
+                <span className="text-sm font-medium">{formatPercentage(marketIntelligence.change24hPercentage)} 24h</span>
               </div>
             </div>
             <div className="p-3 rounded-full bg-orange-100 dark:bg-orange-900/30">
@@ -182,7 +270,7 @@ export default function MarketIntelligence({ portfolioData }: MarketIntelligence
               </div>
             </div>
             <div className={`p-3 rounded-full ${getSentimentBgColor(marketIntelligence.sentimentScore)}`}>
-              <Compass className={`w-6 h-6 ${getSentimentColor(marketIntelligence.sentimentScore)}`} />
+              <Activity className={`w-6 h-6 ${getSentimentColor(marketIntelligence.sentimentScore)}`} />
             </div>
           </div>
         </div>
@@ -250,15 +338,15 @@ export default function MarketIntelligence({ portfolioData }: MarketIntelligence
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-600 dark:text-gray-400">Bollinger Bands</span>
-              <span className="font-semibold text-gray-900 dark:text-white">{marketIntelligence.bollingerPosition}</span>
+              <span className="text-gray-600 dark:text-gray-400">Market Phase</span>
+              <span className="font-semibold text-gray-900 dark:text-white">{marketIntelligence.marketPhase}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-600 dark:text-gray-400">Volume Profile</span>
+              <span className="text-gray-600 dark:text-gray-400">Volume Trend</span>
               <span className={`font-semibold ${
-                marketIntelligence.volumeProfile === 'High' ? 'text-green-600' : 'text-yellow-600'
+                marketIntelligence.volumeTrend === 'INCREASING' ? 'text-green-600' : 'text-yellow-600'
               }`}>
-                {marketIntelligence.volumeProfile}
+                {marketIntelligence.volumeTrend}
               </span>
             </div>
             <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -281,13 +369,13 @@ export default function MarketIntelligence({ portfolioData }: MarketIntelligence
             <div className="flex justify-between items-center">
               <span className="text-gray-600 dark:text-gray-400">24h Volume</span>
               <span className="font-semibold text-gray-900 dark:text-white">
-                ${formatLargeNumber(marketIntelligence.volume24h, 'B')}
+                {formatLargeNumber(marketIntelligence.volume24h / 1000000000, 'B')}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-600 dark:text-gray-400">Market Cap</span>
               <span className="font-semibold text-gray-900 dark:text-white">
-                ${formatLargeNumber(marketIntelligence.marketCap, 'T')}
+                ${formatLargeNumber(marketIntelligence.marketCap / 1000000000000, 'T')}
               </span>
             </div>
             <div className="flex justify-between items-center">
@@ -295,20 +383,20 @@ export default function MarketIntelligence({ portfolioData }: MarketIntelligence
               <span className="font-semibold text-gray-900 dark:text-white">{marketIntelligence.dominance.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-600 dark:text-gray-400">Liquidity Score</span>
-              <span className="font-semibold text-green-600 dark:text-green-400">{marketIntelligence.liquidityScore.toFixed(1)}%</span>
+              <span className="text-gray-600 dark:text-gray-400">Liquidity</span>
+              <span className="font-semibold text-green-600 dark:text-green-400">{marketIntelligence.liquidity}</span>
             </div>
             <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
               <div className="flex justify-between items-center">
-                <span className="text-gray-600 dark:text-gray-400">Trend Strength</span>
-                <span className={`font-semibold ${getSentimentColor(marketIntelligence.trendStrength * 10)}`}>
-                  {marketIntelligence.trendStrength.toFixed(1)}/10
+                <span className="text-gray-600 dark:text-gray-400">Volatility Regime</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {marketIntelligence.volatilityRegime}
                 </span>
               </div>
               <div className="flex justify-between items-center mt-2">
-                <span className="text-gray-600 dark:text-gray-400">Trend Direction</span>
-                <span className={`font-semibold ${getSentimentColor(marketIntelligence.trendStrength * 10)}`}>
-                  {getTrendDirection(marketIntelligence.trendStrength)}
+                <span className="text-gray-600 dark:text-gray-400">Trading Session</span>
+                <span className="font-semibold text-green-600 dark:text-green-400">
+                  {marketIntelligence.tradingSession}
                 </span>
               </div>
             </div>
@@ -362,24 +450,24 @@ export default function MarketIntelligence({ portfolioData }: MarketIntelligence
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Trading Environment Summary</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{marketIntelligence.technicalScore.toFixed(0)}%</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Technical Score</div>
-            <div className="text-xs text-green-600 dark:text-green-400">Strong Signals</div>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{marketIntelligence.rsi.toFixed(0)}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">RSI Score</div>
+            <div className="text-xs text-green-600 dark:text-green-400">{marketIntelligence.rsi > 50 ? 'Bullish' : 'Bearish'}</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{marketIntelligence.momentumScore.toFixed(0)}%</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Momentum Score</div>
-            <div className="text-xs text-blue-600 dark:text-blue-400">High Momentum</div>
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{marketIntelligence.fearGreedIndex}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Fear & Greed</div>
+            <div className="text-xs text-blue-600 dark:text-blue-400">{getFearGreedLabel(marketIntelligence.fearGreedIndex)}</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{marketIntelligence.liquidityScore.toFixed(0)}%</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Liquidity Score</div>
-            <div className="text-xs text-purple-600 dark:text-purple-400">High Liquidity</div>
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{marketIntelligence.liquidity}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Liquidity</div>
+            <div className="text-xs text-purple-600 dark:text-purple-400">Market Depth</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">Optimal</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Trading Conditions</div>
-            <div className="text-xs text-orange-600 dark:text-orange-400">Favorable</div>
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{marketIntelligence.trend}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Market Trend</div>
+            <div className="text-xs text-orange-600 dark:text-orange-400">{marketIntelligence.marketPhase}</div>
           </div>
         </div>
       </div>

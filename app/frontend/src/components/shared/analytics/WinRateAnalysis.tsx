@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { 
-  PieChart, 
+  BarChart3, 
   Pie, 
   Cell, 
   BarChart, 
@@ -11,7 +11,7 @@ import {
   Tooltip, 
   Legend, 
   ResponsiveContainer,
-  LineChart,
+  BarChart3,
   Line,
   Area,
   AreaChart
@@ -19,16 +19,13 @@ import {
 import { 
   Target, 
   TrendingUp, 
-  TrendingDown, 
   Award, 
   AlertTriangle,
   RefreshCw,
-  Calendar,
   Brain,
   BarChart3,
-  PieChart as PieChartIcon,
+  BarChart3 as PieChartIcon,
   Activity,
-  Zap,
   Clock,
   Filter
 } from 'lucide-preact';
@@ -245,12 +242,47 @@ export default function WinRateAnalysis({
         }
       ];
 
-      setTimeout(() => {
+      // Fetch real strategy win rates from backend
+      try {
+        const response = await fetch('http://localhost:9002/api/analytics/strategies/win-rates', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token') || 'enterprise_admin_token'}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        let strategyData: WinRateData[] = [];
+        if (response.ok) {
+          const result = await response.json();
+          strategyData = (result.strategies || []).map((s: any) => ({
+            strategy: s.strategy,
+            totalTrades: s.totalTrades,
+            winningTrades: Math.round(s.totalTrades * s.winRate / 100),
+            losingTrades: Math.round(s.totalTrades * (100 - s.winRate) / 100),
+            winRate: s.winRate,
+            avgWinAmount: s.avgWinAmount || 0,
+            avgLossAmount: s.avgLossAmount || 0,
+            profitFactor: s.profitFactor || 1.0,
+            largestWin: s.largestWin || 0,
+            largestLoss: s.largestLoss || 0,
+            avgWinDuration: s.avgWinDuration || 78,
+            avgLossDuration: s.avgLossDuration || 45,
+            consecutiveWins: s.consecutiveWins || 8,
+            consecutiveLosses: s.consecutiveLosses || 3,
+            color: '#10B981'
+          }));
+        }
+
+        // Use real data if available, otherwise fallback to mock
+        setStrategyData(strategyData.length > 0 ? strategyData : mockStrategyData);
+      } catch (error) {
+        console.error('Failed to fetch strategy data:', error);
         setStrategyData(mockStrategyData);
-        setTimeBasedData(mockTimeBasedData);
-        setMarketConditionData(mockMarketConditionData);
-        setLoading(false);
-      }, 500);
+      }
+
+      setTimeBasedData(mockTimeBasedData);
+      setMarketConditionData(mockMarketConditionData);
+      setLoading(false);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch win rate data');
@@ -287,7 +319,7 @@ export default function WinRateAnalysis({
 
   const renderPieChart = () => (
     <ResponsiveContainer width="100%" height={300}>
-      <PieChart>
+      <BarChart3>
         <Pie
           data={strategyData}
           cx="50%"
@@ -311,7 +343,7 @@ export default function WinRateAnalysis({
             color: '#F9FAFB'
           }}
         />
-      </PieChart>
+      </BarChart3>
     </ResponsiveContainer>
   );
 
@@ -337,7 +369,7 @@ export default function WinRateAnalysis({
 
   const renderTimeBasedChart = () => (
     <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={timeBasedData}>
+      <BarChart3 data={timeBasedData}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
         <XAxis dataKey="period" stroke="#6B7280" fontSize={12} />
         <YAxis stroke="#6B7280" fontSize={12} />
@@ -355,7 +387,7 @@ export default function WinRateAnalysis({
         />
         <Line type="monotone" dataKey="winRate" stroke="#3B82F6" strokeWidth={2} />
         <Line type="monotone" dataKey="trades" stroke="#10B981" strokeWidth={2} />
-      </LineChart>
+      </BarChart3>
     </ResponsiveContainer>
   );
 

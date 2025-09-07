@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'preact/hooks';
-import { Brain, TrendingUp, TrendingDown, Eye, AlertTriangle, CheckCircle } from 'lucide-preact';
+import { useState } from 'preact/hooks';
+import { Brain, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-preact';
 import { ConfidenceScore } from '../signals/ConfidenceScore';
 
 interface AIConfidenceData {
@@ -71,41 +71,37 @@ export function AIConfidenceIndicator({
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      // Add realistic fluctuations
-      const previousData = confidenceData || mockConfidenceData;
-      const fluctuation = (Math.random() - 0.5) * 0.1; // ±5% fluctuation
-      const newConfidence = Math.max(0.1, Math.min(0.95, previousData.currentConfidence + fluctuation));
-      
-      // Determine trend
-      let trend: 'up' | 'down' | 'stable' = 'stable';
-      if (previousConfidence !== null) {
-        if (newConfidence > previousConfidence + 0.02) trend = 'up';
-        else if (newConfidence < previousConfidence - 0.02) trend = 'down';
-      }
-      
-      // Update breakdown with some correlation
-      const baseConfidence = newConfidence;
-      const variation = 0.15; // Max variation from base
-      
-      const newData: AIConfidenceData = {
-        ...mockConfidenceData,
-        currentConfidence: newConfidence,
-        trend: trend,
+      // Use real data from backend or show default state
+      const realData: AIConfidenceData = data.confidence || {
+        currentConfidence: 0,
+        trend: 'stable',
         lastUpdate: new Date(),
-        prediction: newConfidence > 0.7 ? 'BUY' : newConfidence < 0.4 ? 'SELL' : 'HOLD',
+        prediction: 'HOLD',
         breakdown: {
-          marketRegime: Math.max(0.1, Math.min(0.95, baseConfidence + (Math.random() - 0.5) * variation)),
-          lstmConsensus: Math.max(0.1, Math.min(0.95, baseConfidence + (Math.random() - 0.5) * variation)),
-          technicalIndicators: Math.max(0.1, Math.min(0.95, baseConfidence + (Math.random() - 0.5) * variation)),
-          volumeAnalysis: Math.max(0.1, Math.min(0.95, baseConfidence + (Math.random() - 0.5) * variation)),
-          riskAssessment: Math.max(0.1, Math.min(0.95, baseConfidence + (Math.random() - 0.5) * variation))
+          marketRegime: 0,
+          lstmConsensus: 0,
+          technicalIndicators: 0,
+          volumeAnalysis: 0,
+          riskAssessment: 0
         },
         historicalAccuracy: {
-          last24h: Math.max(0.5, Math.min(0.8, 0.67 + (Math.random() - 0.5) * 0.1)),
-          last7d: Math.max(0.5, Math.min(0.8, 0.71 + (Math.random() - 0.5) * 0.1)),
-          last30d: Math.max(0.5, Math.min(0.8, 0.68 + (Math.random() - 0.5) * 0.1))
+          last24h: 0,
+          last7d: 0,
+          last30d: 0
         },
-        nextPrediction: new Date(Date.now() + 300000 - Math.random() * 60000)
+        nextPrediction: new Date(Date.now() + 300000)
+      };
+      
+      // Determine trend based on previous data
+      let trend: 'up' | 'down' | 'stable' = 'stable';
+      if (previousConfidence !== null) {
+        if (realData.currentConfidence > previousConfidence + 0.02) trend = 'up';
+        else if (realData.currentConfidence < previousConfidence - 0.02) trend = 'down';
+      }
+      
+      const newData: AIConfidenceData = {
+        ...realData,
+        trend
       };
       
       setPreviousConfidence(confidenceData?.currentConfidence || null);
@@ -279,7 +275,7 @@ export function AIConfidenceIndicator({
           />
         </div>
 
-        {/* Next Prediction Timer */}
+        {/* Next Prediction Clock */}
         <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
           <div className="flex items-center space-x-2">
             <Eye size={14} />

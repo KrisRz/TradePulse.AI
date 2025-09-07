@@ -14,6 +14,13 @@ logger = structlog.get_logger()
 class Settings(BaseSettings):
     """Application settings from environment variables"""
     
+    model_config = {
+        "env_file": "/Applications/Projects/TradePulse.AI/app/backend/config/development.env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True,
+        "extra": "allow"  # Allow extra fields from environment
+    }
+    
     # Application settings
     APP_NAME: str = "TradePulse.AI"
     ENVIRONMENT: str = Field(default="dev", env="ENVIRONMENT")
@@ -72,8 +79,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")
     LOG_FORMAT: str = Field(default="json", env="LOG_FORMAT")
     
-    # Rate limiting
-    RATE_LIMIT_REQUESTS: int = Field(default=100, env="RATE_LIMIT_REQUESTS")
+    # Rate limiting - INCREASED FOR DEVELOPMENT/DASHBOARD POLLING
+    RATE_LIMIT_REQUESTS: int = Field(default=1000, env="RATE_LIMIT_REQUESTS")  # Increased from 100
     RATE_LIMIT_WINDOW: int = Field(default=60, env="RATE_LIMIT_WINDOW")  # seconds
     
     # Redis settings (for caching and rate limiting)
@@ -91,11 +98,7 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         return self.ENVIRONMENT.lower() in ["dev", "development"]
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-        extra = "allow"  # Allow extra fields from environment
+    # Config moved to model_config above for Pydantic v2 compatibility
 
 
 # Global settings instance

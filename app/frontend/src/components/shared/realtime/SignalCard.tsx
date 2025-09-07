@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import { Signal, SignalType } from '@/types/signals';
-import { ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, Clock, Target, Brain } from 'lucide-preact';
+import { ChevronDown, ChevronUp, TrendingUp, Minus, Clock, Brain } from 'lucide-preact';
 import { ConfidenceScore } from './ConfidenceScore';
 
 interface SignalCardProps {

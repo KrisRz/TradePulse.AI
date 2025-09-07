@@ -33,21 +33,48 @@ from app.backend.services.dynamic_risk_manager import DynamicRiskManager
 from app.backend.services.emergency_controls import EmergencyControlSystem
 from app.backend.services.market_data_persistence import load_recent, write_decisions
 from app.backend.services.trading_performance_tracker import get_trading_performance_tracker
+from app.backend.utils.safe_formatting import (
+    safe_format_price, safe_format_percentage, safe_format_number,
+    ensure_price_not_none, ensure_confidence_not_none
+)
 
 logger = logging.getLogger(__name__)
 
+
+def validate_signal_position_mapping(signal_action: str, position_type: "PositionType") -> None:
+    """Validate that signal action maps correctly to position type"""
+    from app.backend.services.professional_portfolio import PositionType
+    
+    valid_mappings = {
+        "BUY": PositionType.LONG,
+        "SELL": PositionType.SHORT,
+        "LONG": PositionType.LONG,
+        "SHORT": PositionType.SHORT
+    }
+    
+    expected_type = valid_mappings.get(signal_action.upper())
+    if expected_type and expected_type != position_type:
+        raise ValueError(
+            f"Signal-Position mismatch: {signal_action} signal should create {expected_type.value} position, "
+            f"not {position_type.value} position"
+        )
+    
+    logger.debug(f"✅ Signal-position mapping validated: {signal_action} → {position_type.value}")
+
+
 class TradingMode(str, Enum):
-    """Trading mode types"""
-    SWING = "swing"           # 3-minute cycles, longer positions
-    DAY_TRADING = "day"       # 30-second cycles, intraday focus
-    SCALPING = "scalping"     # 10-second cycles, ultra-short positions
+    """Trading mode types - DAY TRADING FOCUSED"""
+    DAY_TRADING = "day"       # 15-second cycles, intraday focus - MAIN MODE
+    SCALPING = "scalping"     # 10-second cycles, ultra-short positions - OPTIONAL
 
 class TradingSession(str, Enum):
     """Global trading sessions"""
-    ASIAN = "asian"           # 21:00-06:00 UTC (Tokyo, Sydney)
-    EUROPEAN = "european"     # 06:00-14:00 UTC (London, Frankfurt)
-    AMERICAN = "american"     # 14:00-21:00 UTC (New York, Chicago)
-    OVERLAP_EU_US = "overlap" # 12:00-16:00 UTC (High volume)
+    ASIAN = "asian"                    # 21:00-06:00 UTC (Tokyo, Sydney)
+    EUROPEAN = "european"              # 06:00-14:00 UTC (London, Frankfurt)
+    AMERICAN = "american"              # 14:00-21:00 UTC (New York, Chicago)
+    OVERLAP_ASIAN_EU = "overlap_asian_eu"      # 06:00-09:00 UTC (Tokyo/London)
+    OVERLAP_EU_US = "overlap_eu_us"            # 12:00-16:00 UTC (London/NY - Highest liquidity)
+    OVERLAP_US_ASIAN = "overlap_us_asian"      # 21:00-00:00 UTC (NY/Sydney)
 
 @dataclass
 class TradingModeConfig:
@@ -74,7 +101,7 @@ class DayTradingEngine:
     
     def __init__(self):
         self.is_initialized = False
-        self.current_mode = TradingMode.SWING
+        self.current_mode = TradingMode.DAY_TRADING  # DAY TRADING ONLY!
         self.current_session = TradingSession.AMERICAN
         
         # Core engines
@@ -99,37 +126,17 @@ class DayTradingEngine:
         self.positions_opened = 0
         self.avg_analysis_time_ms = 0
         
-        # Mode configurations
+        # CONSERVATIVE SCALPING MODE - Tryb 1: Małe, częste zyski
         self.mode_configs = {
-            TradingMode.SWING: TradingModeConfig(
-                mode=TradingMode.SWING,
-                analysis_interval=180,      # 3 minutes
-                position_duration=7200,    # 2 hours average
-                confidence_threshold=0.60,
-                max_positions=3,
-                position_size_pct=0.08,    # 8% per position
-                stop_loss_pct=0.02,        # 2%
-                take_profit_pct=0.04       # 4%
-            ),
             TradingMode.DAY_TRADING: TradingModeConfig(
                 mode=TradingMode.DAY_TRADING,
-                analysis_interval=15,       # 15 seconds (day trading default)
-                position_duration=1800,    # 30 minutes average
-                confidence_threshold=0.25,  # PROFESSIONAL FIX: Lower threshold for active trading
-                max_positions=5,
-                position_size_pct=0.05,    # 5% per position
-                stop_loss_pct=0.015,       # 1.5%
-                take_profit_pct=0.025      # 2.5%
-            ),
-            TradingMode.SCALPING: TradingModeConfig(
-                mode=TradingMode.SCALPING,
-                analysis_interval=10,       # 10 seconds
-                position_duration=300,     # 5 minutes average
-                confidence_threshold=0.70,
-                max_positions=8,
-                position_size_pct=0.03,    # 3% per position
-                stop_loss_pct=0.01,        # 1%
-                take_profit_pct=0.015      # 1.5%
+                analysis_interval=12,       # 12 seconds - SCALPING: szybsze reakcje
+                position_duration=900,     # 15 minutes average (krótsze pozycje)
+                confidence_threshold=0.35,  # SCALPING: 35% confidence (więcej sygnałów dla testów)
+                max_positions=8,           # SCALPING: 8 pozycji (więcej możliwości)
+                position_size_pct=0.020,   # SCALPING: 2.0% per position (~$1,000 for $40 profit targets)
+                stop_loss_pct=0.005,       # SCALPING: 0.5% = $50 max strata
+                take_profit_pct=0.004      # SCALPING: 0.4% = $40 target zysk
             )
         }
         
@@ -138,25 +145,86 @@ class DayTradingEngine:
     async def initialize(self):
         """Initialize the day trading engine"""
         if self.is_initialized:
+            logger.info("🔄 PIPELINE DEBUG: Day Trading Engine already initialized, skipping...")
             return
             
         logger.info("🚀 Initializing Day Trading Engine...")
+        logger.info("📊 PIPELINE DEBUG: Day Trading Engine - Starting initialization sequence")
+        logger.info(f"🎯 PIPELINE DEBUG: Day Trading Engine - Component: Day Trading Engine v1.0.0")
+        logger.info(f"🎯 PIPELINE DEBUG: Day Trading Engine - Purpose: High-frequency trading coordination")
         
         try:
-            # Initialize core engines
-            self.enterprise_engine = EnterpriseTradingEngine()
-            await self.enterprise_engine.initialize()
+            # Use DI container for core engines to avoid circular dependencies
+            logger.info("🔗 PIPELINE DEBUG: Day Trading Engine - Connecting to DI container...")
+            from app.backend.core.container import get_container
+            container = get_container()
+            logger.info("✅ PIPELINE DEBUG: Day Trading Engine - DI container connected")
             
-            self.entry_engine = IntelligentEntryEngine()
-            await self.entry_engine.initialize()
+            # Get engines from DI container (they're already initialized)
+            logger.info("🤖 PIPELINE DEBUG: Day Trading Engine - Retrieving Enterprise Engine...")
+            try:
+                self.enterprise_engine = container.get("enterprise_trading_engine")
+                logger.info("✅ Enterprise engine retrieved from DI container")
+                logger.info("✅ PIPELINE DEBUG: Day Trading Engine - Enterprise Engine connected")
+            except Exception:
+                # Fallback: create our own instance
+                logger.warning("⚠️ Enterprise engine not in DI, creating local instance")
+                logger.warning("⚠️ PIPELINE DEBUG: Day Trading Engine - Creating local Enterprise Engine instance")
+                self.enterprise_engine = EnterpriseTradingEngine()
+                await self.enterprise_engine.initialize()
             
-            self.exit_engine = IntelligentExitEngine()
-            await self.exit_engine.initialize()
+            try:
+                # Ensure AI services are initialized first
+                logger.info("🤖 PIPELINE DEBUG: Day Trading Engine - Ensuring AI services are initialized...")
+                await container._initialize_ai_services()
+                
+                logger.info("🤖 PIPELINE DEBUG: Day Trading Engine - Retrieving Entry Engine from DI...")
+                entry_engine_factory = container.get("entry_engine")
+                if entry_engine_factory is None:
+                    raise ValueError("Entry engine factory not found in DI container")
+                
+                # Get the already initialized Entry Engine
+                self.entry_engine = entry_engine_factory()  # This should return initialized instance
+                if self.entry_engine is None:
+                    raise ValueError("Entry engine is None from DI container factory")
+                
+                logger.info("✅ PIPELINE DEBUG: Day Trading Engine - Using shared Entry Engine from DI")
+                
+                logger.info("✅ Enhanced Entry Engine retrieved from DI container")
+                logger.info("✅ PIPELINE DEBUG: Day Trading Engine - Entry Engine connected")
+            except Exception as e:
+                logger.error(f"❌ Entry engine DI retrieval failed: {e}")
+                logger.warning("⚠️ PIPELINE DEBUG: Day Trading Engine - Creating and registering Entry Engine")
+                
+                # Create and register in container to avoid duplication
+                from app.backend.services.intelligent_entry_engine import IntelligentEntryEngine
+                self.entry_engine = IntelligentEntryEngine()
+                await self.entry_engine.initialize()
+                
+                # Register in container to prevent future duplication
+                try:
+                    container.register_singleton("entry_engine", lambda: self.entry_engine)
+                    logger.info("✅ Entry Engine registered in DI container")
+                except:
+                    pass  # Continue if registration fails
             
-            # PHASE 1A: Initialize professional risk and safety systems
-            logger.info("🛡️ Initializing professional risk management...")
-            self.risk_manager = DynamicRiskManager()
-            await self.risk_manager.initialize()
+            try:
+                self.exit_engine = container.get("exit_engine")
+                logger.info("✅ Exit engine retrieved from DI container")
+            except Exception:
+                logger.warning("⚠️ Exit engine not in DI, creating local instance")
+                self.exit_engine = IntelligentExitEngine()
+                await self.exit_engine.initialize()
+            
+            # PHASE 1A: Use DI container for risk and safety systems
+            logger.info("🛡️ Getting professional risk management from DI...")
+            try:
+                self.risk_manager = container.get("risk_manager")
+                logger.info("✅ Risk manager retrieved from DI container")
+            except Exception:
+                logger.warning("⚠️ Risk manager not in DI, creating local instance")
+                self.risk_manager = DynamicRiskManager()
+                await self.risk_manager.initialize()
             
             logger.info("🚨 Initializing emergency control system...")
             self.emergency_system = EmergencyControlSystem()
@@ -203,19 +271,27 @@ class DayTradingEngine:
         }
     
     def _detect_current_session(self) -> TradingSession:
-        """Detect current global trading session"""
+        """Detect current global trading session with overlaps"""
         current_hour = datetime.now(timezone.utc).hour
         
         if 21 <= current_hour or current_hour < 6:
+            # Asian session with US overlap check
+            if 21 <= current_hour <= 23:
+                return TradingSession.OVERLAP_US_ASIAN
             return TradingSession.ASIAN
         elif 6 <= current_hour < 14:
+            # European session with overlap checks
+            if 6 <= current_hour < 9:
+                return TradingSession.OVERLAP_ASIAN_EU
+            elif 12 <= current_hour < 14:
+                return TradingSession.OVERLAP_EU_US
             return TradingSession.EUROPEAN
         elif 14 <= current_hour < 21:
+            # American session with EU overlap check
+            if 14 <= current_hour < 16:
+                return TradingSession.OVERLAP_EU_US
             return TradingSession.AMERICAN
         else:
-            # Overlap period (12:00-16:00 UTC)
-            if 12 <= current_hour < 16:
-                return TradingSession.OVERLAP_EU_US
             return TradingSession.AMERICAN
     
     async def start_analysis_loop(self) -> Dict[str, Any]:
@@ -289,6 +365,10 @@ class DayTradingEngine:
                     # Run high-frequency market analysis
                     await self._run_market_analysis()
                     
+                    # Monitor open positions with exit engine (every 3rd cycle)
+                    if self.analyses_completed % 3 == 0:
+                        await self._monitor_open_positions()
+                    
                     # Track performance
                     analysis_time_ms = (time.time() - start_time) * 1000
                     self._update_performance_metrics(analysis_time_ms)
@@ -311,13 +391,15 @@ class DayTradingEngine:
     async def _monitor_open_positions(self):
         """Monitor open positions using intelligent exit engine"""
         try:
+            # Get portfolio (will use TTL-based caching)
             portfolio = await get_professional_portfolio("admin")
+            await portfolio.update_positions_with_live_data()  # Update with live prices
             active_positions = portfolio.get_active_positions()
             
             if not active_positions:
                 return
             
-            logger.info(f"🔍 Monitoring {len(active_positions)} open positions with intelligent exit engine")
+            logger.info(f"🔍 Monitoring {len(active_positions)} open positions with intelligent exit engine (LIVE DATA SYNC)")
             
             for position in active_positions:
                 try:
@@ -354,6 +436,8 @@ class DayTradingEngine:
                             position_id=position.position_id,
                             reason=exit_analysis["exit_reason"]
                         )
+                        # CRITICAL FIX: Save portfolio state after closing position
+                        await portfolio._save_portfolio_state()
                         logger.info(f"✅ Position closed: {position.position_id} PnL=${float(realized_pnl):.2f}")
                         
                 except Exception as e:
@@ -361,6 +445,51 @@ class DayTradingEngine:
                     
         except Exception as e:
             logger.error(f"❌ Position monitoring failed: {e}")
+    
+    async def _is_duplicate_entry(self, signal, portfolio) -> bool:
+        """Check if this entry would be a duplicate of recent positions"""
+        try:
+            current_time = datetime.now(timezone.utc)
+            current_price = await get_live_bitcoin_price()
+            
+            # Check recent positions (last 5 minutes)
+            for position in portfolio.get_active_positions():
+                time_diff = (current_time - position.entry_time).total_seconds()
+                price_diff = abs(current_price - float(position.entry_price)) / float(position.entry_price)
+                
+                # Consider duplicate if:
+                # 1. Same direction (LONG/SHORT)
+                # 2. Within 5 minutes
+                # 3. Price difference < 1%
+                same_direction = (
+                    (signal.action == "BUY" and position.type == PositionType.LONG) or
+                    (signal.action == "SELL" and position.type == PositionType.SHORT)
+                )
+                
+                if same_direction and time_diff < 120 and price_diff < 0.005:  # 2 min, 0.5% (more aggressive)
+                    logger.warning(f"🚫 Duplicate detected: {signal.action} position within 5min and 1% price")
+                    return True
+            
+            # Check closed positions (last 30 minutes) to prevent immediate re-entry
+            for position in portfolio.closed_positions[-10:]:  # Check last 10 closed
+                if position.exit_time:
+                    time_diff = (current_time - position.exit_time).total_seconds()
+                    if time_diff < 1800:  # 30 minutes
+                        price_diff = abs(current_price - float(position.exit_price or position.entry_price)) / float(position.entry_price)
+                        same_direction = (
+                            (signal.action == "BUY" and position.type == PositionType.LONG) or
+                            (signal.action == "SELL" and position.type == PositionType.SHORT)
+                        )
+                        
+                        if same_direction and price_diff < 0.01:  # 1% for closed positions (more aggressive)
+                            logger.warning(f"🚫 Re-entry too soon: {signal.action} position closed {time_diff/60:.1f}min ago")
+                            return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Duplicate entry check failed: {e}")
+            return False  # Allow entry if check fails
     
     async def _run_market_analysis(self):
         """PHASE 1A: Professional tick-by-tick trading sequence with real data only"""
@@ -429,7 +558,9 @@ class DayTradingEngine:
                         await self._audit_decision(signal, None, None, risk_assessment, "risk_blocked")
                         return
                         
-                    logger.debug(f"🛡️ Risk assessment: score={getattr(risk_assessment, 'risk_score', 'N/A'):.2f}")
+                    risk_score = getattr(risk_assessment, 'risk_score', None)
+                    risk_score_str = safe_format_number(risk_score) if risk_score is not None else "N/A"
+                    logger.debug(f"🛡️ Risk assessment: score={risk_score_str}")
                 except Exception as e:
                     logger.warning(f"⚠️ Risk manager failed, proceeding without: {e}")
             
@@ -443,10 +574,12 @@ class DayTradingEngine:
             
             logger.info(f"🎯 Signal: {signal.action} conf={signal.confidence:.2f} → {adjusted_confidence:.2f} (session={self.current_session.value})")
             
-            # PROFESSIONAL FIX: Lower threshold for exploratory signals
+            # FIXED: Show actual confidence, don't clamp to threshold
             effective_threshold = config.confidence_threshold
+            display_confidence = signal.confidence  # Show real confidence, not threshold
             if hasattr(signal, 'signal_type') and signal.signal_type == "exploratory":
-                effective_threshold = 0.20  # PROFESSIONAL FIX: Much lower threshold for exploratory signals
+                effective_threshold = 0.35  # Use unified exploratory threshold
+                # But display the ACTUAL confidence, not the threshold
                 
             logger.info(f"🔍 THRESHOLD CHECK: {adjusted_confidence:.2f} > {effective_threshold:.2f} ? signal_type={getattr(signal, 'signal_type', 'primary')}")
             
@@ -458,6 +591,12 @@ class DayTradingEngine:
                 if active_positions >= config.max_positions:
                     logger.debug(f"⚠️ Max positions reached: {active_positions}/{config.max_positions}")
                     await self._audit_decision(signal, None, None, risk_assessment, "max_positions")
+                    return
+                
+                # CRITICAL: Check for duplicate positions (prevent same-minute entries)
+                if await self._is_duplicate_entry(signal, portfolio):
+                    logger.warning(f"🚫 Duplicate entry prevented: {signal.action} signal too similar to recent position")
+                    await self._audit_decision(signal, None, None, risk_assessment, "duplicate_entry_prevented")
                     return
                 
                 # ENTRY ANALYSIS using intelligent_entry_engine
@@ -479,34 +618,55 @@ class DayTradingEngine:
                                 signal, risk_assessment, portfolio, tick
                             )
                         except Exception as e:
-                            logger.warning(f"Risk manager size calculation failed: {e}, using fallback")
-                            position_size = float(portfolio.cash_balance) * config.position_size_pct
+                            logger.error(f"Risk manager size calculation failed: {e}")
+                            raise RuntimeError(f"Position sizing failed: {e}")
                     else:
-                        # Fallback to mode config
+                        # Use mode config for position sizing
                         position_size = float(portfolio.cash_balance) * config.position_size_pct
                     
-                    # Open position
+                    # Open position with semantic consistency
                     from decimal import Decimal
-                    logger.info(f"🚀 Opening position: {signal.symbol} {signal.action} size={position_size}")
+                    
+                    position_type = PositionType.LONG if signal.action == "BUY" else PositionType.SHORT
+                    position_direction = "LONG" if position_type == PositionType.LONG else "SHORT"
+                    
+                    # Create semantically consistent AI reasoning
+                    consistent_reasoning = f"{self.current_mode.value}: {position_direction} position based on {signal.action} signal - {signal.reasoning}"
+                    
+                    
+                    # CRITICAL: Validate signal-position mapping
+                    validate_signal_position_mapping(signal.action, position_type)
+                    # Validate semantic consistency
+                    assert (signal.action == "BUY" and position_type == PositionType.LONG) or \
+                           (signal.action == "SELL" and position_type == PositionType.SHORT), \
+                           f"Semantic inconsistency: {signal.action} signal with {position_type} position"
+                    
+                    logger.info(f"🚀 Opening position: {signal.symbol} {position_direction} size={position_size}")
+                    
+                    # CRITICAL: Normalize AI confidence to [0,1] range
+                    normalized_confidence = min(max(adjusted_confidence, 0.0), 1.0)
                     
                     position_id = await portfolio.open_position(
                         symbol=signal.symbol,
-                        position_type=PositionType.LONG if signal.action == "BUY" else PositionType.SHORT,
+                        position_type=position_type,
                         size=Decimal(str(position_size)),
-                        ai_confidence=adjusted_confidence,
-                        ai_reasoning=f"{self.current_mode.value}: {signal.reasoning}",
+                        ai_confidence=normalized_confidence,
+                        ai_reasoning=consistent_reasoning,
                         stop_loss_pct=Decimal(str(config.stop_loss_pct)),
                         take_profit_pct=Decimal(str(config.take_profit_pct))
                     )
                     
                     self.positions_opened += 1
+                    
+                    # CRITICAL FIX: Save portfolio state after opening position
+                    await portfolio._save_portfolio_state()
                     logger.info(f"✅ POSITION OPENED: {position_id} ({signal.action}) conf={adjusted_confidence:.1%}")
                     
                     # PHASE 4.3: Track trade execution for performance learning
                     if self.performance_tracker:
                         position_data = {
                             "symbol": signal.symbol,
-                            "entry_price": tick.get("price", 0),
+                            "entry_price": tick if isinstance(tick, (int, float)) else tick.get("price", 0),
                             "position_size": position_size,
                             "position_id": position_id
                         }
@@ -517,9 +677,8 @@ class DayTradingEngine:
                     # (G) In-position risk management
                     if self.risk_manager:
                         try:
-                            await self.risk_manager.assess_in_position(
-                                portfolio, {"price": tick, "timestamp": datetime.now(timezone.utc)}
-                            )
+                            tick_data = {"price": tick if isinstance(tick, (int, float)) else tick.get("price", 0), "timestamp": datetime.now(timezone.utc)}
+                            await self.risk_manager.assess_in_position(portfolio, tick_data)
                         except Exception as e:
                             logger.warning(f"In-position risk assessment failed: {e}")
                     
@@ -533,7 +692,7 @@ class DayTradingEngine:
                 
         except Exception as e:
             logger.error(f"❌ Professional trading analysis failed: {e}")
-            # Emergency fallback - ensure no hanging positions
+            # Emergency handling - ensure system stability
             if self.emergency_system:
                 try:
                     await self.emergency_system.handle_analysis_failure(str(e))
@@ -552,7 +711,9 @@ class DayTradingEngine:
                 signal_data={
                     "action": signal.action,
                     "confidence": signal.confidence,
-                    "reasoning": signal.reasoning
+                    "reasoning": signal.reasoning,
+                    "signal_type": getattr(signal, 'signal_type', 'primary'),  # Pass signal type
+                    "layer_analysis": getattr(signal, 'layer_analysis', {})  # Pass layer analysis for L6_timing
                 },
                 user_portfolio={
                     "available_cash": float(portfolio.cash_balance),
@@ -563,17 +724,37 @@ class DayTradingEngine:
                 }
             )
             
+            # Safe formatting for optimal price
+            try:
+                optimal_price = entry_result.optimal_entry_price
+                if optimal_price is None or optimal_price <= 0:
+                    logger.debug(f"🔄 PIPELINE DEBUG: Day Trading Engine - Invalid entry price during warmup: {optimal_price}")
+                    optimal_price = 0.0
+                    optimal_price_str = "N/A (warmup)"
+                else:
+                    optimal_price = float(optimal_price)
+                    optimal_price_str = safe_format_price(optimal_price)
+            except (ValueError, TypeError) as price_error:
+                logger.debug(f"🔄 PIPELINE DEBUG: Day Trading Engine - Entry price validation failed: {price_error}")
+                optimal_price = 0.0
+                optimal_price_str = "N/A (invalid)"
+            
             return {
                 "should_enter": entry_result.should_enter,
                 "confidence": entry_result.confidence,
                 "entry_quality": entry_result.entry_quality.value,
-                "optimal_price": entry_result.optimal_entry_price,
+                "optimal_price": optimal_price,
+                "optimal_price_formatted": optimal_price_str,
                 "reasoning": f"Day trading analysis: {entry_result.entry_reason.value}"
             }
             
         except Exception as e:
             logger.error(f"Day trading entry analysis failed: {e}")
-            return {"should_enter": False, "reasoning": f"Analysis failed: {e}"}
+            return {
+                "should_enter": False, 
+                "confidence": 0.0,
+                "reasoning": f"Analysis failed: {str(e)}"
+            }
     
     def _get_session_confidence_multiplier(self) -> float:
         """Get confidence multiplier based on current trading session"""
@@ -613,8 +794,11 @@ class DayTradingEngine:
             }
             
             # Use market data persistence for audit logging
-            await write_decisions(entry_decision, exit_decision, risk_assessment, signal)
-            logger.debug(f"📝 Decision audited: {outcome}")
+            audit_success = await write_decisions(entry_decision, exit_decision, risk_assessment, signal)
+            if audit_success:
+                logger.debug(f"📝 Decision audited: {outcome}")
+            else:
+                logger.warning(f"⚠️ Decision audit failed, but continuing: {outcome}")
             
         except Exception as e:
             logger.error(f"❌ Audit logging failed: {e}")

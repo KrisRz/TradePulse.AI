@@ -1,0 +1,12 @@
+{
+  "scaler_type": "log_minmax",
+  "feature_name": "volume_ratio",
+  "parameters": {
+    "min": -2.0,
+    "max": 2.0,
+    "scale": 4.0
+  },
+  "training_commit": "default_v1.0.0",
+  "created_at": "2025-09-02T15:19:43.507278+00:00",
+  "checksum": "151540cd2bdbb73f158188494c1b7909682e38945c3b7cd1b7948fa560b95bc1"
+}

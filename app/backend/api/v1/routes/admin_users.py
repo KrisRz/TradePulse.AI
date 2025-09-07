@@ -12,10 +12,19 @@ import logging
 
 from app.backend.api.v1.routes.auth import verify_production_jwt_token
 from app.backend.services.database_service import DatabaseService
+from app.backend.utils.dependencies import require_admin_role, get_current_user, User
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 security = HTTPBearer()
+
+# Pydantic models for user management
+class UserStatusUpdate(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+class UserRoleUpdate(BaseModel):
+    role: str
 
 # Initialize database service
 database_service = DatabaseService()
@@ -479,6 +488,144 @@ async def get_user_portfolio_details(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch user portfolio details: {str(e)}"
+        )
+
+@router.post("/users/{user_id}/status")
+async def update_user_status(
+    user_id: str,
+    status_update: UserStatusUpdate,
+    admin_user: User = Depends(require_admin_role)
+):
+    """Update user status (activate/deactivate/suspend)"""
+    try:
+        logger.info(f"👤 Admin {admin_user.email} updating status for user {user_id}")
+        
+        # Validate status
+        valid_statuses = ["active", "inactive", "suspended", "banned"]
+        if status_update.status not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status. Must be one of: {valid_statuses}"
+            )
+        
+        # Update user status in database
+        result = await database_service.update_user_status(
+            user_id=user_id,
+            new_status=status_update.status,
+            reason=status_update.reason,
+            updated_by=admin_user.id
+        )
+        
+        response_data = {
+            "user_id": user_id,
+            "old_status": result.get('old_status'),
+            "new_status": status_update.status,
+            "reason": status_update.reason,
+            "updated_by": admin_user.email,
+            "updated_at": datetime.now().isoformat(),
+            "success": True
+        }
+        
+        logger.info(f"✅ User {user_id} status updated to {status_update.status}")
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error updating user status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update user status: {str(e)}"
+        )
+
+@router.post("/users/{user_id}/role")
+async def update_user_role(
+    user_id: str,
+    role_update: UserRoleUpdate,
+    admin_user: User = Depends(require_admin_role)
+):
+    """Update user role (user/admin/moderator)"""
+    try:
+        logger.info(f"👤 Admin {admin_user.email} updating role for user {user_id}")
+        
+        # Validate role
+        valid_roles = ["user", "admin", "moderator", "premium_user"]
+        if role_update.role not in valid_roles:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid role. Must be one of: {valid_roles}"
+            )
+        
+        # Update user role in database
+        result = await database_service.update_user_role(
+            user_id=user_id,
+            new_role=role_update.role,
+            updated_by=admin_user.id
+        )
+        
+        response_data = {
+            "user_id": user_id,
+            "old_role": result.get('old_role'),
+            "new_role": role_update.role,
+            "updated_by": admin_user.email,
+            "updated_at": datetime.now().isoformat(),
+            "success": True,
+            "permissions_updated": True
+        }
+        
+        logger.info(f"✅ User {user_id} role updated to {role_update.role}")
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error updating user role: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update user role: {str(e)}"
+        )
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: str,
+    admin_user: User = Depends(require_admin_role)
+):
+    """Reset user password (admin only)"""
+    try:
+        logger.info(f"👤 Admin {admin_user.email} resetting password for user {user_id}")
+        
+        # Generate temporary password
+        import secrets
+        import string
+        temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+        
+        # Update user password in database
+        result = await database_service.reset_user_password(
+            user_id=user_id,
+            new_password=temp_password,
+            reset_by=admin_user.id
+        )
+        
+        response_data = {
+            "user_id": user_id,
+            "temporary_password": temp_password,
+            "password_expires_in": "24 hours",
+            "reset_by": admin_user.email,
+            "reset_at": datetime.now().isoformat(),
+            "success": True,
+            "instructions": "User must change password on next login"
+        }
+        
+        logger.info(f"✅ Password reset for user {user_id}")
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error resetting password: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset password: {str(e)}"
         )
 
 @router.get("/health")

@@ -10,13 +10,49 @@ import json
 import os
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.config import Config
 import structlog
 from dataclasses import dataclass
+import logging
+from functools import lru_cache
 
 from .config import get_settings
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
+
+@lru_cache(maxsize=1)
+def get_dynamodb_singleton():
+    """Singleton DynamoDB resource to prevent multiple client creation and ListTables storms"""
+    cfg = Config(
+        region_name=os.getenv("DYNAMODB_REGION", "us-east-1"),
+        retries={"max_attempts": 5, "mode": "standard"},
+        connect_timeout=3, 
+        read_timeout=6, 
+        max_pool_connections=50,
+        user_agent_extra="TradePulseAI"
+    )
+    
+    endpoint_url = os.getenv("DYNAMODB_ENDPOINT")
+    if endpoint_url:
+        logger.info(f"Using DynamoDB Local on {endpoint_url} with optimized connection pooling")
+        # FORCE dummy credentials for DynamoDB Local (ignore system AWS credentials)
+        return boto3.resource(
+            "dynamodb",
+            endpoint_url=endpoint_url,
+            region_name=os.getenv("DYNAMODB_REGION", "us-east-1"),
+            aws_access_key_id="dummy", 
+            aws_secret_access_key="dummy",
+            aws_session_token=None,  # Explicitly clear session token
+            config=cfg
+        )
+    else:
+        # Use system credentials for production AWS
+        return boto3.resource("dynamodb", config=cfg)
+
+# Reduce noisy botocore logs for both development and production
+for name in ("botocore", "boto3", "urllib3", "s3transfer"):
+    logging.getLogger(name).setLevel(logging.WARNING)
 
 
 class DynamoDBClient:
@@ -26,38 +62,46 @@ class DynamoDBClient:
         if local_development is None:
             # CRITICAL FIX: Use is_development property instead of string comparison
             local_development = settings.is_development
-        self.dynamodb: Any
-        if local_development:
+        # Professional connection configuration with optimized pooling
+        config = Config(
+            max_pool_connections=50,  # Reduce connection resets
+            retries={
+                'max_attempts': 3,
+                'mode': 'standard'
+            },
+            read_timeout=60,
+            connect_timeout=60
+        )
+        
+        # Use singleton DynamoDB resource to prevent multiple client creation
+        self.dynamodb = get_dynamodb_singleton()
+        
+        # Test connection only once during initialization
+        if not hasattr(DynamoDBClient, '_connection_verified'):
             try:
-                # Local DynamoDB with configurable endpoint
-                endpoint_url = settings.DYNAMODB_ENDPOINT or 'http://localhost:8000'
-                self.dynamodb = boto3.resource(
-                    'dynamodb',
-                    endpoint_url=endpoint_url,
-                    region_name='us-east-1',
-                    aws_access_key_id='dummy',
-                    aws_secret_access_key='dummy'
-                )
-                # Test connection
                 self.dynamodb.meta.client.list_tables()
-                logger.info(f"Using DynamoDB Local on {endpoint_url}")
+                logger.info("✅ DynamoDB connection verified")
+                DynamoDBClient._connection_verified = True
             except Exception as e:
-                logger.error(f"DynamoDB Local connection failed: {e}")
-                logger.warning("DynamoDB Local not available, falling back to AWS DynamoDB")
+                logger.error(f"DynamoDB connection failed: {e}")
+                
+                # In development, NEVER fallback to AWS - force DynamoDB Local usage
+                if settings.is_development:
+                    logger.error("🚨 DynamoDB Local connection required for development - check if DynamoDB Local is running on port 8000")
+                    logger.error("💡 Run: ./start_dynamodb.sh")
+                    raise ConnectionError(f"DynamoDB Local required for development but connection failed: {e}")
+                else:
+                    # Only fallback to AWS in production
+                    logger.warning("DynamoDB Local not available, falling back to AWS DynamoDB")
                 self.dynamodb = boto3.resource(
                     'dynamodb',
                     region_name=settings.AWS_REGION,
                     aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+                    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                    config=config
                 )
         else:
-            # AWS DynamoDB
-            self.dynamodb = boto3.resource(
-                'dynamodb',
-                region_name=settings.AWS_REGION,
-                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
-            )
+            logger.debug("🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test")
     
     def get_table(self, table_name: str) -> Any:
         """Get a DynamoDB table"""
@@ -79,27 +123,101 @@ class DynamoDBClient:
             return False
     
     def put_item(self, table_name: str, item: Dict[str, Any]) -> bool:
-        """Put an item in DynamoDB table"""
+        """Put an item in DynamoDB table with proper type conversion"""
         try:
             logger.info(f"🔄 Attempting to save item to table '{table_name}'")
-            logger.info(f"📝 Item data: {list(item.keys())} - ID: {item.get('position_id', 'NO_ID')}")
+            # Extract ID from various possible fields
+            item_id = item.get('id') or item.get('position_id') or item.get('trade_id') or item.get('pk') or 'NO_ID'
+            logger.info(f"📝 Item data: {list(item.keys())} - ID: {item_id}")
+            
+            # Convert numeric values to proper DynamoDB format
+            processed_item = self._convert_item_types(item)
             
             table = self.get_table(table_name)
             logger.info(f"✅ Got table reference for '{table_name}'")
             
-            table.put_item(Item=item)
-            logger.info(f"✅ Successfully saved item to '{table_name}' - ID: {item.get('position_id', 'NO_ID')}")
+            table.put_item(Item=processed_item)
+            logger.info(f"✅ Successfully saved item to '{table_name}' - ID: {item_id}")
             return True
         except Exception as e:
             logger.error(f"❌ Error putting item in {table_name}: {e}")
             logger.error(f"📝 Item keys that failed: {list(item.keys()) if item else 'None'}")
             return False
     
-    def get_item(self, table_name: str, key: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Get an item from DynamoDB table"""
+    def put_item_conditional(self, table_name: str, item: Dict[str, Any], 
+                           condition_expression: str, 
+                           expression_attribute_names: Optional[Dict[str, str]] = None,
+                           expression_attribute_values: Optional[Dict[str, Any]] = None) -> bool:
+        """Put an item with conditional expression for idempotency"""
+        try:
+            # Convert numeric values to proper DynamoDB format
+            processed_item = self._convert_item_types(item)
+            
+            table = self.get_table(table_name)
+            
+            # Build put_item parameters
+            put_params = {
+                'Item': processed_item,
+                'ConditionExpression': condition_expression
+            }
+            
+            if expression_attribute_names:
+                put_params['ExpressionAttributeNames'] = expression_attribute_names
+                
+            if expression_attribute_values:
+                put_params['ExpressionAttributeValues'] = expression_attribute_values
+            
+            table.put_item(**put_params)
+            return True
+            
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                # Item already exists - this is expected for idempotency
+                raise e
+            else:
+                logger.error(f"❌ Error putting conditional item in {table_name}: {e}")
+                return False
+        except Exception as e:
+            logger.error(f"❌ Unexpected error putting conditional item in {table_name}: {e}")
+            return False
+    
+    def _convert_item_types(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert item types for proper DynamoDB storage"""
+        converted = {}
+        
+        # Define numeric fields that should be stored as DynamoDB Number type
+        numeric_fields = {
+            'entry_price', 'exit_price', 'current_price', 'stop_loss', 'take_profit',
+            'size', 'quantity', 'ai_confidence', 'realized_pnl', 'unrealized_pnl',
+            'pnl_percentage', 'duration_minutes', 'price', 'volume', 'amount',
+            'balance', 'cash_balance', 'total_pnl', 'risk_score', 'confidence',
+            'threshold', 'multiplier', 'ratio', 'percentage'
+        }
+        
+        for key, value in item.items():
+            if key in numeric_fields and value is not None:
+                # Convert to Decimal for DynamoDB Number type
+                if isinstance(value, (int, float, str)):
+                    try:
+                        converted[key] = Decimal(str(value))
+                    except (ValueError, TypeError):
+                        converted[key] = value
+                elif isinstance(value, Decimal):
+                    converted[key] = value
+                else:
+                    converted[key] = value
+            else:
+                converted[key] = value
+                
+        return converted
+    
+    def get_item(self, table_name: str, key: Dict[str, Any], consistent_read: bool = True) -> Optional[Dict[str, Any]]:
+        """Get an item from DynamoDB table with consistent read by default"""
         try:
             table = self.get_table(table_name)
-            response = table.get_item(Key=key)
+            # Use ConsistentRead=True by default to avoid eventual consistency races
+            # This is especially important for DynamoDB Local during development
+            response = table.get_item(Key=key, ConsistentRead=consistent_read)
             return response.get('Item')
         except Exception as e:
             logger.error(f"Error getting item from {table_name}: {e}")
@@ -125,29 +243,58 @@ class DynamoDBClient:
             logger.error(f"Error scanning table {table_name}: {e}")
             return []
     
-    def query_items(self, table_name: str, key_condition: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Query items from DynamoDB table"""
+    def query_items(
+        self, 
+        table_name: str, 
+        key_condition_expression: Any = None,
+        filter_expression: Any = None,
+        projection_expression: str = None,
+        index_name: str = None,
+        limit: int = None,
+        exclusive_start_key: Dict[str, Any] = None,
+        consistent_read: bool = True
+    ) -> Dict[str, Any]:
+        """Query items from DynamoDB table with proper Query operation"""
         try:
             table = self.get_table(table_name)
-            # Simple implementation - can be expanded
-            response = table.scan()  # For now, just scan and filter
-            items = response.get('Items', [])
             
-            # Basic filtering
-            filtered_items = []
-            for item in items:
-                match = True
-                for key, value in key_condition.items():
-                    if item.get(key) != value:
-                        match = False
-                        break
-                if match:
-                    filtered_items.append(item)
+            query_params = {}
             
-            return filtered_items
+            if key_condition_expression:
+                query_params['KeyConditionExpression'] = key_condition_expression
+            
+            if filter_expression:
+                query_params['FilterExpression'] = filter_expression
+                
+            if projection_expression:
+                query_params['ProjectionExpression'] = projection_expression
+                
+            if index_name:
+                query_params['IndexName'] = index_name
+                
+            if limit:
+                query_params['Limit'] = limit
+                
+            if exclusive_start_key:
+                query_params['ExclusiveStartKey'] = exclusive_start_key
+            
+            # Add ConsistentRead for DynamoDB Local to avoid eventual consistency races
+            # Note: ConsistentRead only works for queries on the main table, not GSI
+            if not index_name and consistent_read:
+                query_params['ConsistentRead'] = consistent_read
+            
+            response = table.query(**query_params)
+            
+            return {
+                'Items': response.get('Items', []),
+                'Count': response.get('Count', 0),
+                'ScannedCount': response.get('ScannedCount', 0),
+                'LastEvaluatedKey': response.get('LastEvaluatedKey')
+            }
+            
         except Exception as e:
             logger.error(f"Error querying table {table_name}: {e}")
-            return []
+            return {'Items': [], 'Count': 0, 'ScannedCount': 0, 'LastEvaluatedKey': None}
 
 
 @dataclass
@@ -896,7 +1043,7 @@ class TableSchemas:
             'BillingMode': 'PAY_PER_REQUEST'
         }
 
-    def get_users_enhanced_schema() -> Dict[str, Any]:
+    def get_users_enhanced_schema(self) -> Dict[str, Any]:
         """Get the enhanced users table schema for enterprise user management"""
         return {
             'TableName': 'users_enhanced',
@@ -935,7 +1082,7 @@ class TableSchemas:
             ]
         }
 
-    def get_invitations_schema() -> Dict[str, Any]:
+    def get_invitations_schema(self) -> Dict[str, Any]:
         """Get the invitations table schema for invitation management"""
         return {
             'TableName': 'invitations',
@@ -974,7 +1121,7 @@ class TableSchemas:
             ]
         }
 
-    def get_user_activity_logs_schema() -> Dict[str, Any]:
+    def get_user_activity_logs_schema(self) -> Dict[str, Any]:
         """Get the user_activity_logs table schema for audit trails"""
         return {
             'TableName': 'user_activity_logs',
@@ -1412,8 +1559,15 @@ class DatabaseManager:
             logger.error(f"Error getting alert notifications by type {alert_type}: {e}")
             return []
 
-# Initialize database manager
-db_manager = DatabaseManager() 
+# Database manager - initialize only when needed
+_db_manager = None
+
+def get_database_manager():
+    """Get database manager instance (lazy initialization)"""
+    global _db_manager
+    if _db_manager is None:
+        _db_manager = DatabaseManager()
+    return _db_manager 
 
 async def init_database() -> None:
     """
@@ -1455,4 +1609,154 @@ def get_database_session():
 
 def get_database_client():
     """Get database client for service usage"""
-    return DynamoDBClient() 
+    return DynamoDBClient()
+
+
+def ensure_table_exists(dynamodb_client, table_name: str, attributes: List[Dict], key_schema: List[Dict], 
+                       global_secondary_indexes: Optional[List[Dict]] = None) -> bool:
+    """
+    Ensure a DynamoDB table exists, create if it doesn't
+    
+    Args:
+        dynamodb_client: DynamoDB client instance
+        table_name: Name of the table
+        attributes: List of attribute definitions
+        key_schema: Key schema definition
+        global_secondary_indexes: Optional GSI definitions
+        
+    Returns:
+        bool: True if table exists or was created successfully
+    """
+    try:
+        # Check if table exists
+        table = dynamodb_client.get_table(table_name)
+        logger.info(f"✅ Table '{table_name}' already exists")
+        return True
+    except Exception:
+        # Table doesn't exist, create it
+        try:
+            logger.info(f"🔧 Creating table '{table_name}'...")
+            
+            table_config = {
+                'TableName': table_name,
+                'AttributeDefinitions': attributes,
+                'KeySchema': key_schema,
+                'BillingMode': 'PAY_PER_REQUEST'
+            }
+            
+            if global_secondary_indexes:
+                table_config['GlobalSecondaryIndexes'] = global_secondary_indexes
+            
+            dynamodb_client.dynamodb.create_table(**table_config)
+            
+            # Wait for table to become active
+            waiter = dynamodb_client.dynamodb.meta.client.get_waiter('table_exists')
+            waiter.wait(TableName=table_name)
+            
+            logger.info(f"✅ Table '{table_name}' created successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to create table '{table_name}': {e}")
+            return False
+
+    def get_learning_engine_state_schema(self) -> Dict[str, Any]:
+        """Learning engine state table schema"""
+        return {
+            'TableName': 'learning_engine_state',
+            'KeySchema': [
+                {'AttributeName': 'engine_id', 'KeyType': 'HASH'}
+            ],
+            'AttributeDefinitions': [
+                {'AttributeName': 'engine_id', 'AttributeType': 'S'}
+            ],
+            'BillingMode': 'PAY_PER_REQUEST'
+        }
+
+
+def ensure_required_tables() -> bool:
+    """
+    Ensure all required tables exist in DynamoDB Local
+    This function should be called during application startup
+    
+    Returns:
+        bool: True if all tables exist or were created successfully
+    """
+    try:
+        client = DynamoDBClient()
+        success = True
+        
+        # Get all table schemas from TableSchemas class
+        schemas = TableSchemas()
+        table_schemas = [
+            TableSchemas.get_live_candles_schema(),
+            TableSchemas.get_signals_schema(),
+            TableSchemas.get_training_data_schema(),
+            TableSchemas.get_exit_analysis_log_schema(),
+            TableSchemas.get_position_monitoring_log_schema(),
+            TableSchemas.get_trade_execution_metrics_schema(),
+            TableSchemas.get_alert_notifications_schema(),
+            TableSchemas.get_users_schema(),
+            TableSchemas.get_virtual_portfolios_schema(),
+            schemas.get_ai_vs_random_experiments_schema(),
+            schemas.get_signal_accuracy_tracking_schema(),
+            schemas.get_trading_patterns_schema(),
+            schemas.get_user_performance_showcases_schema(),
+            schemas.get_model_performance_metrics_schema(),
+            schemas.get_users_enhanced_schema(),
+            schemas.get_invitations_schema(),
+            schemas.get_user_activity_logs_schema(),
+            schemas.get_messages_schema(),
+            schemas.get_message_deliveries_schema(),
+            schemas.get_announcements_schema(),
+            schemas.get_user_notification_preferences_schema(),
+            schemas.get_notification_templates_schema(),
+            schemas.get_learning_engine_state_schema()
+        ]
+        
+        success_count = 0
+        total_count = len(table_schemas)
+        
+        logger.info(f"🔧 Ensuring {total_count} required DynamoDB tables exist...")
+        
+        for schema in table_schemas:
+            table_name = schema['TableName']
+            try:
+                # Check if table exists
+                client.dynamodb.meta.client.describe_table(TableName=table_name)
+                logger.info(f"✅ Table {table_name} already exists")
+                success_count += 1
+                
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                    # Table doesn't exist, create it
+                    try:
+                        logger.info(f"🔨 Creating table {table_name}...")
+                        client.dynamodb.meta.client.create_table(**schema)
+                        
+                        # Wait for table to become active
+                        waiter = client.dynamodb.meta.client.get_waiter('table_exists')
+                        waiter.wait(TableName=table_name)
+                        
+                        logger.info(f"✅ Successfully created table {table_name}")
+                        success_count += 1
+                        
+                    except Exception as create_error:
+                        logger.error(f"❌ Failed to create table {table_name}: {create_error}")
+                else:
+                    logger.error(f"❌ Error checking table {table_name}: {e}")
+        
+        success = (success_count == total_count)
+        
+        logger.info(f"📊 Table creation complete: {success_count}/{total_count} tables ready")
+        
+        if success:
+            logger.info("🎉 All required tables are available!")
+        else:
+            logger.error(f"⚠️ {total_count - success_count} tables failed to create")
+            
+        return success
+        
+    except Exception as e:
+        logger.error(f"❌ Error ensuring required tables: {e}")
+        return False 

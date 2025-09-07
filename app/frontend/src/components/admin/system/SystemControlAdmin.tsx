@@ -2,14 +2,30 @@ import { useState, useEffect } from 'preact/hooks';
 import { Settings, Power, Database, Trash2, RefreshCw, Server, Shield, AlertTriangle, CheckCircle, Clock, Download } from 'lucide-preact';
 
 interface SystemStatus {
-  maintenance_mode: boolean;
-  uptime_seconds: number;
+  status: string;
+  uptime_hours: number;
+  total_users: number;
+  active_users: number;
+  bitcoin_price: number;
+  system_load: number;
   memory_usage: number;
-  cpu_usage: number;
-  disk_usage: number;
-  active_connections: number;
-  cache_size_mb: number;
-  background_jobs: number;
+  database_status: string;
+  api_status: string;
+  websocket_status: string;
+  ml_service_status: string;
+  trading_service_status: string;
+  live_data_status: string;
+  performance_tracking_status: string;
+  portfolio_service_status: string;
+  total_predictions: number;
+  predictions_accuracy: number;
+  last_updated: string;
+  maintenance_mode?: boolean;
+  cpu_usage?: number;
+  disk_usage?: number;
+  active_connections?: number;
+  cache_size_mb?: number;
+  background_jobs?: number;
 }
 
 interface SystemSettings {
@@ -22,6 +38,8 @@ interface SystemSettings {
   debug_mode: boolean;
   log_level: string;
 }
+
+type SystemSettingValue = boolean | number | string;
 
 interface CacheStats {
   redis_cache: {
@@ -50,58 +68,97 @@ export default function SystemControlAdmin() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Mock data for demonstration
-  const mockSystemStatus: SystemStatus = {
-    maintenance_mode: false,
-    uptime_seconds: 86400 * 7, // 7 days
-    memory_usage: 67.5,
-    cpu_usage: 23.8,
-    disk_usage: 45.2,
-    active_connections: 156,
-    cache_size_mb: 512.7,
-    background_jobs: 8
-  };
-
-  const mockSystemSettings: SystemSettings = {
-    trading_enabled: true,
-    api_rate_limit: 1200,
-    max_positions: 10,
-    risk_limit_percent: 5.0,
-    notification_cooldown: 300,
-    auto_backup_enabled: true,
-    debug_mode: false,
-    log_level: 'INFO'
-  };
-
-  const mockCacheStats: CacheStats = {
-    redis_cache: {
-      size_mb: 256.3,
-      hit_rate: 94.7,
-      keys_count: 15234,
-      memory_usage: 78.2
-    },
-    application_cache: {
-      size_mb: 128.5,
-      entries: 5672,
-      last_cleared: '2024-01-20T06:00:00Z'
-    },
-    database_cache: {
-      query_cache_size: 512,
-      buffer_pool_size: 1024,
-      cache_hit_ratio: 97.3
-    }
-  };
-
   useEffect(() => {
-    // Simulate loading system data
+    // PRODUCTION: Load real system data from backend
     const loadSystemData = async () => {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      setSystemStatus(mockSystemStatus);
-      setSystemSettings(mockSystemSettings);
-      setCacheStats(mockCacheStats);
-      setLoading(false);
+      try {
+        const token = 'enterprise_admin_token';
+        
+        // Fetch real system status
+        const statusResponse = await fetch('http://localhost:9002/api/admin/system-status', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        // Also fetch health data for additional system metrics
+        const healthResponse = await fetch('http://localhost:9002/api/health', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          
+          // Merge with health data if available
+          if (healthResponse.ok) {
+            const healthData = await healthResponse.json();
+            const cpuCheck = healthData.checks?.find((c: any) => c.component === 'cpu');
+            const memoryCheck = healthData.checks?.find((c: any) => c.component === 'memory');
+            const diskCheck = healthData.checks?.find((c: any) => c.component === 'disk');
+            const connectionsCheck = healthData.checks?.find((c: any) => c.component === 'connections');
+            
+            const enhancedStatusData = {
+              ...statusData,
+              cpu_usage: cpuCheck?.details?.percent || 0,
+              disk_usage: diskCheck?.details?.percent || 0,
+              active_connections: connectionsCheck?.details?.count || statusData.total_users || 0,
+              cache_size_mb: (memoryCheck?.details?.used_gb || 0) * 1024,
+              background_jobs: healthData.summary?.healthy || 0,
+              uptime_seconds: healthData.uptime_seconds || 0
+            };
+            setSystemStatus(enhancedStatusData);
+            console.log('✅ Enhanced system status with health data:', enhancedStatusData);
+          } else {
+            setSystemStatus(statusData);
+            console.log('✅ Real system status loaded:', statusData);
+          }
+        } else {
+          console.error('Failed to fetch system status:', statusResponse.status);
+        }
+
+        // Fetch real system settings
+        const settingsResponse = await fetch('http://localhost:9002/api/system/settings', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (settingsResponse.ok) {
+          const settingsData = await settingsResponse.json();
+          setSystemSettings(settingsData);
+          console.log('✅ Real system settings loaded:', settingsData);
+        } else {
+          console.error('Failed to fetch system settings:', settingsResponse.status);
+        }
+
+        // Fetch real cache stats
+        const cacheResponse = await fetch('http://localhost:9002/api/system/cache-stats', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (cacheResponse.ok) {
+          const cacheData = await cacheResponse.json();
+          setCacheStats(cacheData);
+          console.log('✅ Real cache stats loaded:', cacheData);
+        } else {
+          console.error('Failed to fetch cache stats:', cacheResponse.status);
+        }
+        
+      } catch (error) {
+        console.error('Error loading system data:', error);
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadSystemData();
@@ -110,20 +167,42 @@ export default function SystemControlAdmin() {
   const handleSystemAction = async (action: string) => {
     setActionLoading(action);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    if (action === 'toggle_maintenance' && systemStatus) {
-      setSystemStatus(prev => prev ? {
-        ...prev,
-        maintenance_mode: !prev.maintenance_mode
-      } : null);
+    try {
+      const token = 'enterprise_admin_token';
+      const response = await fetch(`http://localhost:9002/api/system/action`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ action })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`✅ System action ${action} completed:`, result);
+        
+        // Update local state based on action
+        if (action === 'toggle_maintenance' && systemStatus) {
+          setSystemStatus(prev => prev ? {
+            ...prev,
+            maintenance_mode: !prev.maintenance_mode
+          } : null);
+        }
+        
+        // Reload system data to get updated status
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        console.error(`Failed to execute ${action}:`, response.status);
+      }
+    } catch (error) {
+      console.error(`Error executing ${action}:`, error);
     }
     
     setActionLoading(null);
   };
 
-  const updateSystemSetting = (key: keyof SystemSettings, value: any) => {
+  const updateSystemSetting = (key: keyof SystemSettings, value: SystemSettingValue) => {
     setSystemSettings(prev => prev ? { ...prev, [key]: value } : null);
   };
 
@@ -176,7 +255,7 @@ export default function SystemControlAdmin() {
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">System Status</dt>
                   <dd className="text-2xl font-semibold text-gray-900 dark:text-white">
-                    {systemStatus?.maintenance_mode ? 'Maintenance' : 'Online'}
+                    {systemStatus?.maintenance_mode ? 'Maintenance' : systemStatus?.status || 'Online'}
                   </dd>
                 </dl>
               </div>
@@ -196,7 +275,7 @@ export default function SystemControlAdmin() {
               <dl>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Uptime</dt>
                 <dd className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  {systemStatus ? formatUptime(systemStatus.uptime_seconds) : '--'}
+                  {systemStatus ? `${systemStatus.uptime_hours.toFixed(1)}h` : '--'}
                 </dd>
               </dl>
             </div>
@@ -212,7 +291,7 @@ export default function SystemControlAdmin() {
               <dl>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Cache Size</dt>
                 <dd className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  {systemStatus?.cache_size_mb.toFixed(1)} MB
+                  {(systemStatus?.cache_size_mb || cacheStats?.total_cache_size_mb || 0).toFixed(1)} MB
                 </dd>
               </dl>
             </div>
@@ -226,9 +305,9 @@ export default function SystemControlAdmin() {
             </div>
             <div className="ml-5 w-0 flex-1">
               <dl>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Active Connections</dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Active Users</dt>
                 <dd className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  {systemStatus?.active_connections}
+                  {systemStatus?.active_users || 0}
                 </dd>
               </dl>
             </div>
@@ -247,13 +326,13 @@ export default function SystemControlAdmin() {
               <div className="flex justify-between mb-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">CPU Usage</span>
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {systemStatus?.cpu_usage.toFixed(1)}%
+                  {(systemStatus?.cpu_usage || 0).toFixed(1)}%
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div 
                   className="bg-blue-600 h-3 rounded-full" 
-                  style={{ width: `${systemStatus?.cpu_usage}%` }}
+                  style={{ width: `${systemStatus?.cpu_usage || 0}%` }}
                 ></div>
               </div>
             </div>
@@ -262,13 +341,13 @@ export default function SystemControlAdmin() {
               <div className="flex justify-between mb-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Memory Usage</span>
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {systemStatus?.memory_usage.toFixed(1)}%
+                  {((systemStatus?.memory_usage || 0) * 100).toFixed(1)}%
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div 
                   className="bg-green-600 h-3 rounded-full" 
-                  style={{ width: `${systemStatus?.memory_usage}%` }}
+                  style={{ width: `${(systemStatus?.memory_usage || 0) * 100}%` }}
                 ></div>
               </div>
             </div>
@@ -277,13 +356,13 @@ export default function SystemControlAdmin() {
               <div className="flex justify-between mb-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Disk Usage</span>
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {systemStatus?.disk_usage.toFixed(1)}%
+                  {(systemStatus?.disk_usage || 0).toFixed(1)}%
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div 
                   className="bg-purple-600 h-3 rounded-full" 
-                  style={{ width: `${systemStatus?.disk_usage}%` }}
+                  style={{ width: `${systemStatus?.disk_usage || 0}%` }}
                 ></div>
               </div>
             </div>
@@ -291,22 +370,44 @@ export default function SystemControlAdmin() {
         </div>
       </div>
 
-      {/* Background Jobs */}
+      {/* Service Status */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Background Jobs</h3>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Service Status</h3>
         </div>
         <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Active Jobs:</span>
-              <span className="font-semibold text-gray-900 dark:text-white">
-                {systemStatus?.background_jobs}
+              <span className="text-gray-600 dark:text-gray-400">Database:</span>
+              <span className={`font-semibold ${
+                systemStatus?.database_status === 'connected' ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {systemStatus?.database_status || 'Unknown'}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Queue Status:</span>
-              <span className="font-semibold text-green-600">Healthy</span>
+              <span className="text-gray-600 dark:text-gray-400">Trading Engine:</span>
+              <span className={`font-semibold ${
+                systemStatus?.trading_service_status === 'active' ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {systemStatus?.trading_service_status || 'Unknown'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600 dark:text-gray-400">AI Models:</span>
+              <span className={`font-semibold ${
+                systemStatus?.ml_service_status === 'operational' ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {systemStatus?.ml_service_status || 'Unknown'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600 dark:text-gray-400">Live Data:</span>
+              <span className={`font-semibold ${
+                systemStatus?.live_data_status === 'connected' ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {systemStatus?.live_data_status || 'Unknown'}
+              </span>
             </div>
           </div>
         </div>
@@ -434,19 +535,19 @@ export default function SystemControlAdmin() {
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Size:</span>
               <span className="font-semibold text-gray-900 dark:text-white">
-                {cacheStats?.redis_cache.size_mb.toFixed(1)} MB
+                {(cacheStats?.redis_cache?.size_mb || 0).toFixed(1)} MB
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Hit Rate:</span>
               <span className="font-semibold text-green-600">
-                {cacheStats?.redis_cache.hit_rate.toFixed(1)}%
+                {(cacheStats?.redis_cache?.hit_rate || 0).toFixed(1)}%
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Keys:</span>
               <span className="font-semibold text-gray-900 dark:text-white">
-                {cacheStats?.redis_cache.keys_count.toLocaleString()}
+                {(cacheStats?.redis_cache?.keys_count || 0).toLocaleString()}
               </span>
             </div>
           </div>
@@ -465,13 +566,13 @@ export default function SystemControlAdmin() {
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Size:</span>
               <span className="font-semibold text-gray-900 dark:text-white">
-                {cacheStats?.application_cache.size_mb.toFixed(1)} MB
+                {(cacheStats?.application_cache?.size_mb || 0).toFixed(1)} MB
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Entries:</span>
               <span className="font-semibold text-gray-900 dark:text-white">
-                {cacheStats?.application_cache.entries.toLocaleString()}
+                {(cacheStats?.application_cache?.entries || 0).toLocaleString()}
               </span>
             </div>
             <div className="flex justify-between">
@@ -496,19 +597,19 @@ export default function SystemControlAdmin() {
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Query Cache:</span>
               <span className="font-semibold text-gray-900 dark:text-white">
-                {cacheStats?.database_cache.query_cache_size} MB
+                {cacheStats?.database_cache?.query_cache_size || 0} MB
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Hit Ratio:</span>
               <span className="font-semibold text-green-600">
-                {cacheStats?.database_cache.cache_hit_ratio.toFixed(1)}%
+                {(cacheStats?.database_cache?.cache_hit_ratio || cacheStats?.database_cache?.hit_rate || 0).toFixed(1)}%
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Buffer Pool:</span>
               <span className="font-semibold text-gray-900 dark:text-white">
-                {cacheStats?.database_cache.buffer_pool_size} MB
+                {cacheStats?.database_cache?.buffer_pool_size || 0} MB
               </span>
             </div>
           </div>

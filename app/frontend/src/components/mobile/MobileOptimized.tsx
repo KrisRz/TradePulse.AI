@@ -1,15 +1,17 @@
-import { useState, useEffect, useRef } from 'preact/hooks';
+import { useState, useRef } from 'preact/hooks';
+import { ComponentChildren } from 'preact';
 import { ChevronDown, ChevronUp, MoreHorizontal, X } from 'lucide-preact';
+import type { Icon } from 'lucide-preact';
 
 // Mobile-optimized card component with touch interactions
 interface MobileCardProps {
-  children: any;
+  children: ComponentChildren;
   className?: string;
   onTap?: () => void;
   onLongPress?: () => void;
   swipeActions?: {
-    left?: { icon: any; label: string; action: () => void; color?: string };
-    right?: { icon: any; label: string; action: () => void; color?: string };
+    left?: { icon: Icon; label: string; action: () => void; color?: string };
+    right?: { icon: Icon; label: string; action: () => void; color?: string };
   };
 }
 
@@ -23,7 +25,7 @@ export function MobileCard({
   const [isPressed, setIsPressed] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [showActions, setShowActions] = useState(false);
-  const pressTimer = useRef<any>(null);
+  const pressTimer = useRef<number | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const handleTouchStart = (e: TouchEvent) => {
@@ -104,7 +106,7 @@ interface BottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
-  children: any;
+  children: ComponentChildren;
   snapPoints?: number[];
   initialSnap?: number;
 }
@@ -196,7 +198,7 @@ export function BottomSheet({
 // Mobile-optimized expandable section
 interface ExpandableSectionProps {
   title: string;
-  children: any;
+  children: ComponentChildren;
   defaultExpanded?: boolean;
   badge?: string | number;
 }
@@ -243,7 +245,7 @@ export function ExpandableSection({
 
 // Mobile-optimized horizontal scroll container
 interface HorizontalScrollProps {
-  children: any;
+  children: ComponentChildren;
   className?: string;
   showScrollIndicator?: boolean;
 }
@@ -309,7 +311,7 @@ export function HorizontalScroll({
 
 // Mobile-optimized floating action button
 interface FloatingActionButtonProps {
-  icon: any;
+  icon: Icon;
   onClick: () => void;
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
   className?: string;
@@ -355,7 +357,7 @@ export function FloatingActionButton({
 // Mobile-optimized pull-to-refresh component
 interface PullToRefreshProps {
   onRefresh: () => Promise<void>;
-  children: any;
+  children: ComponentChildren;
   threshold?: number;
 }
 

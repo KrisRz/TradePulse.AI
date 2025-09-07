@@ -19,44 +19,16 @@ from pydantic import BaseModel, Field, validator
 from app.backend.core.config import get_settings
 from app.backend.core.logging import get_logger
 from app.backend.core.database import DynamoDBClient
-try:
-    from app.backend.utils.dependencies import get_current_user, User
-except ImportError:
-    # Fallback for testing without auth
-    class User:
-        def __init__(self, email="admin@test.com"):
-            self.email = email
-    
-    def get_current_user():
-        return User()
+from app.backend.core.exceptions import (
+    ServiceUnavailableException,
+    ConfigurationException,
+    ModelNotLoadedException
+)
+from app.backend.services.day_trading_engine import get_day_trading_engine
+from app.backend.utils.dependencies import get_current_user, User
 from app.backend.services import VirtualPortfolioManager as VirtualPortfolioService
 from app.backend.services import MarketDataService
-try:
-    from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
-except ImportError:
-    # Fallback for development
-    class IntelligentExitEngine:
-        async def initialize(self): pass
-        async def analyze_exit_conditions(self, symbol, position_data): 
-            return {"should_exit": False, "confidence": 0.0}
-try:
-    from src.services.position_lifecycle_tracker import PositionLifecycleTracker
-    lifecycle_tracker = PositionLifecycleTracker()
-except ImportError:
-    # Mock for development
-    class MockLifecycleTracker:
-        def track_position(self, *args, **kwargs):
-            pass
-    lifecycle_tracker = MockLifecycleTracker()
-
-try:
-    from src.schemas.exit_analysis import ExitAnalysisRequest, ExitAnalysisResponse
-except ImportError:
-    # Mock for development
-    class ExitAnalysisRequest:
-        pass
-    class ExitAnalysisResponse:
-        pass
+from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
 
 # Initialize intelligent exit engine
 exit_engine: Optional[IntelligentExitEngine] = None
@@ -65,9 +37,12 @@ async def get_exit_engine() -> IntelligentExitEngine:
     """Get or create the intelligent exit engine"""
     global exit_engine
     if exit_engine is None:
-        exit_engine = IntelligentExitEngine()
-        if not exit_engine.is_initialized:
-            await exit_engine.initialize()
+        try:
+            exit_engine = IntelligentExitEngine()
+            if not exit_engine.is_initialized:
+                await exit_engine.initialize()
+        except Exception as e:
+            raise ServiceUnavailableException("IntelligentExitEngine") from e
     return exit_engine
 
 router = APIRouter()
@@ -530,7 +505,7 @@ async def execute_auto_trade(
         # 4. Set stop loss and take profit from signal
         # 5. Execute the trade
         
-        # For now, create a mock auto-trade position
+        # Create professional auto-trade position
         portfolio = await portfolio_service.get_portfolio_summary(current_user.id)
         if not portfolio:
             raise HTTPException(
@@ -541,11 +516,11 @@ async def execute_auto_trade(
         available_cash = float(portfolio.get('cash_balance', 0))
         position_value = available_cash * (request.position_size_percentage / 100)
         
-        # Mock signal data
+        # Get real market data
         symbol = "BTCUSDT"
         current_price = await market_data_service.get_current_price(symbol)
         if current_price is None:
-            current_price = 50000.0  # Fallback price
+            raise ServiceUnavailableException("MarketDataService")
         
         size = position_value / current_price
         
@@ -638,7 +613,9 @@ async def close_all_positions(
                 symbol = position['symbol']
                 current_price = await market_data_service.get_current_price(symbol)
                 if current_price is None:
-                    current_price = float(position.get('entry_price', 50000))  # Fallback
+                    current_price = float(position.get('entry_price'))
+                    if not current_price:
+                        raise ServiceUnavailableException("MarketDataService")
                 
                 market_data = await market_data_service.get_comprehensive_market_data(symbol)
                 market_data['close'] = current_price
@@ -829,36 +806,47 @@ class TradingBrainResponse(BaseModel):
 _trading_brain_enabled = False
 _trading_brain_start_time = None
 
-@router.get("/brain/status")
-async def get_trading_brain_status() -> TradingBrainResponse:
-    """
-    Get current trading brain status
+async def _load_brain_state():
+    """DEPRECATED: Load brain state - now handled by BrainStateStore"""
+    # This function is kept for backward compatibility but delegates to BrainStateStore
+    from app.backend.core.brain_state_store import get_brain_state_store
     
-    Returns:
-        Current trading brain status and statistics
-    """
+    global _trading_brain_enabled, _trading_brain_start_time
+    
     try:
-        global _trading_brain_enabled, _trading_brain_start_time
+        brain_store = get_brain_state_store()
+        brain_state = await brain_store.wait_ready()  # Wait for lifespan to load it
         
-        # Get current positions count
-        portfolio = await portfolio_service.get_portfolio_summary("admin")
-        positions_count = portfolio.get('active_positions_count', 0) if portfolio else 0
+        _trading_brain_enabled = brain_state.enabled
+        if brain_state.start_time:
+            try:
+                _trading_brain_start_time = datetime.fromisoformat(brain_state.start_time.replace('Z', '+00:00'))
+            except:
+                _trading_brain_start_time = datetime.utcnow()
         
-        status_msg = "ACTIVE - Monitoring markets" if _trading_brain_enabled else "OFFLINE - Manual control only"
-        
-        return TradingBrainResponse(
-            enabled=_trading_brain_enabled,
-            status=status_msg,
-            timestamp=datetime.utcnow().isoformat(),
-            positions_count=positions_count
-        )
+        logger.info(f"📥 Brain state synchronized: {'ENABLED' if _trading_brain_enabled else 'DISABLED'}")
         
     except Exception as e:
-        logger.error(f"Failed to get trading brain status: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get trading brain status: {str(e)}"
-        )
+        logger.warning(f"Failed to load brain state: {e}")
+        _trading_brain_enabled = False
+
+async def _save_brain_state():
+    """Save brain state to DynamoDB"""
+    try:
+        # Use BrainStateStore for consistent state management
+        from app.backend.core.brain_state_store import get_brain_state_store
+        
+        brain_store = get_brain_state_store()
+        start_time = _trading_brain_start_time.isoformat() if _trading_brain_start_time else datetime.utcnow().isoformat()
+        
+        await brain_store.update_state(_trading_brain_enabled, start_time)
+        logger.info(f"💾 Brain state saved via BrainStateStore: {'ENABLED' if _trading_brain_enabled else 'DISABLED'}")
+    except Exception as e:
+        logger.error(f"Failed to save brain state: {e}")
+
+# REMOVED: Old trading brain status endpoint - use /api/v1/brain/status instead
+# This endpoint was part of the old trading brain system that has been replaced
+# by the unified professional brain controller with proper state management
 
 
 @router.post("/brain/toggle")
@@ -876,6 +864,16 @@ async def toggle_trading_brain(
         New trading brain status
     """
     try:
+        # Ensure services are ready before brain operations
+        from app.backend.core.brain_state_store import ensure_services_ready
+        from app.backend.core.container import get_container
+        
+        try:
+            ensure_services_ready(get_container())
+        except RuntimeError as e:
+            logger.error(f"❌ Cannot toggle brain - services not ready: {e}")
+            raise HTTPException(status_code=503, detail=f"Services not ready: {e}")
+        
         global _trading_brain_enabled, _trading_brain_start_time
         
         # Check if user is admin (add admin check here if needed)
@@ -883,6 +881,9 @@ async def toggle_trading_brain(
         
         old_status = _trading_brain_enabled
         _trading_brain_enabled = request.enabled
+        
+        # Save state to DB
+        await _save_brain_state()
         
         if _trading_brain_enabled and not old_status:
             # Brain was turned ON
@@ -892,6 +893,14 @@ async def toggle_trading_brain(
             
             # Start the automatic trading brain background task
             await start_trading_brain_background()
+            
+            # Also start Day Trading Engine
+            try:
+                day_engine = await get_day_trading_engine()
+                await day_engine.start_analysis_loop()
+                logger.info("🚀 Day Trading Engine auto-started with Brain activation")
+            except Exception as e:
+                logger.warning(f"Failed to auto-start Day Trading Engine: {e}")
             
         elif not _trading_brain_enabled and old_status:
             # Brain was turned OFF
@@ -931,39 +940,8 @@ from pathlib import Path
 
 # Clean absolute imports; sys.path hacks removed
 
-try:
-    from app.backend.services.enterprise_trading_engine import EnterpriseTradingEngine
-    from app.backend.services.professional_portfolio import get_professional_portfolio, PositionType
-except ImportError:
-    # Fallback imports for development
-    logger.warning("Failed to import trading engine components - using fallback")
-    
-    class MockTradingEngine:
-        async def initialize(self): pass
-        async def generate_signal(self, symbol):
-            from dataclasses import dataclass
-            @dataclass
-            class MockSignal:
-                action: str = "BUY"
-                confidence: float = 0.75
-                symbol: str = symbol
-                position_size: float = 0.1
-                reasoning: str = "Mock signal for testing"
-            return MockSignal()
-    
-    EnterpriseTradingEngine = MockTradingEngine
-    
-    async def get_professional_portfolio(user_id):
-        class MockPortfolio:
-            daily_trades = 0
-            max_daily_trades = 8
-            async def open_position(self, **kwargs):
-                return f"mock_position_{user_id}"
-        return MockPortfolio()
-    
-    class PositionType:
-        LONG = "LONG"
-        SHORT = "SHORT"
+from app.backend.services.unified_day_trading_engine import UnifiedDayTradingEngine, TradingAction
+from app.backend.services.professional_portfolio import get_professional_portfolio, PositionType
 
 _trading_brain_task = None
 
@@ -993,61 +971,93 @@ async def stop_trading_brain_background():
     _trading_brain_task = None
 
 async def trading_brain_loop():
-    """Main trading brain loop - runs every 3 minutes when enabled"""
+    """Main trading brain loop - runs every 15 seconds for day trading"""
     global _trading_brain_enabled
     
-    # Initialize trading engine
-    trading_engine = EnterpriseTradingEngine()
+    # Initialize unified trading engine
+    trading_engine = UnifiedDayTradingEngine()
     await trading_engine.initialize()
     
-    logger.info("🚀 TRADING BRAIN LOOP STARTED - Analyzing markets every 3 minutes")
+    # Start professional warm-up period
+    await trading_engine.start_warm_up()
+    
+    logger.info("🚀 TRADING BRAIN LOOP STARTED - Starting 10-minute warm-up period...")
+    
+    # 🔥 PROFESSIONAL WARM-UP: 10 minutes market analysis before trading
+    warm_up_cycles = 40  # 10 minutes / 15 seconds = 40 cycles
+    for cycle in range(warm_up_cycles):
+        if not _trading_brain_enabled:
+            logger.info("🛑 Trading brain disabled during warm-up")
+            return
+            
+        try:
+            # Generate signal during warm-up but DON'T trade
+            signal = await trading_engine.generate_signal("BTCUSDT")
+            if cycle % 8 == 0:  # Log every 2 minutes
+                progress = (cycle / warm_up_cycles) * 100
+                logger.info(f"🔥 WARM-UP Progress: {progress:.0f}% - Signal: {signal.action} ({signal.confidence:.1%})")
+        except Exception as e:
+            logger.warning(f"⚠️ Warm-up cycle {cycle} failed: {e}")
+            
+        await asyncio.sleep(15)
+    
+    logger.info("✅ WARM-UP COMPLETE - Starting live trading with professional thresholds")
     
     try:
         while _trading_brain_enabled:
             logger.info("🧠 Trading Brain analyzing markets...")
             
             try:
-                # Generate AI signal
-                signal = await trading_engine.generate_signal("BTCUSDT")
+                # Generate unified AI signal
+                unified_signal = await trading_engine.generate_signal("BTCUSDT")
                 
-                logger.info(f"🎯 AI Signal Generated: {signal.action} with {signal.confidence:.1%} confidence")
+                if not unified_signal:
+                    logger.info("📊 No unified signal generated - market conditions not suitable")
+                    continue
                 
-                # Check if signal is strong enough to act on
-                if signal.confidence > 0.60 and signal.action in ["BUY", "SELL"]:
+                logger.info(f"🎯 UNIFIED Signal Generated: {unified_signal.action.value} with {unified_signal.confidence:.1%} confidence")
+                
+                # Check if unified signal is strong enough to act on - PROFESSIONAL THRESHOLD
+                if unified_signal.confidence > 0.65 and unified_signal.action in [TradingAction.BUY, TradingAction.SELL]:
                     
-                    # Get portfolio for the admin user (assuming admin user_id = "admin")
+                    # Get portfolio for the admin user
                     portfolio = await get_professional_portfolio("admin")
                     
                     # Check if we can open a new position
                     if portfolio.daily_trades < portfolio.max_daily_trades:
                         
-                        # Determine position type based on signal
-                        position_type = "LONG" if signal.action == "BUY" else "SHORT"
+                        # Determine position type based on unified signal
+                        position_type = PositionType.LONG if unified_signal.action == TradingAction.BUY else PositionType.SHORT
                         
-                        # Open position automatically
+                        # Calculate professional position size
+                        position_size = float(portfolio.cash_balance) * unified_signal.position_size_pct
+                        position_size = max(position_size, 500.0)  # $500 minimum
+                        
+                        # Open position with unified signal data
                         position_id = await portfolio.open_position(
-                            symbol=signal.symbol,
+                            symbol=unified_signal.symbol,
                             position_type=position_type, 
-                            size=signal.position_size,
-                            ai_confidence=signal.confidence,
-                            ai_reasoning=signal.reasoning,
-                            stop_loss_pct=0.02,  # 2% stop loss
-                            take_profit_pct=0.04  # 4% take profit
+                            size=Decimal(str(position_size)),
+                            ai_confidence=Decimal(str(unified_signal.confidence)),
+                            ai_reasoning=f"UNIFIED: {unified_signal.reasoning}",
+                            stop_loss_pct=Decimal(str(unified_signal.stop_loss_pct)),
+                            take_profit_pct=Decimal(str(unified_signal.take_profit_pct))
                         )
                         
-                        logger.info(f"🎯 AUTOMATIC POSITION OPENED: {position_id} ({position_type}) with {signal.confidence:.1%} confidence")
+                        logger.info(f"🎯 UNIFIED POSITION OPENED: {position_id} ({position_type.value}) conf={unified_signal.confidence:.1%} size=${position_size:.0f}")
                         
                     else:
                         logger.info(f"⚠️ Daily trade limit reached ({portfolio.daily_trades}/{portfolio.max_daily_trades}) - skipping signal")
                 
                 else:
-                    logger.info(f"📊 Signal confidence too low ({signal.confidence:.1%}) or HOLD action - no position opened")
+                    action_str = unified_signal.action.value if unified_signal.action != TradingAction.HOLD else "HOLD"
+                    logger.info(f"📊 Signal confidence too low ({unified_signal.confidence:.1%}) or HOLD action - no position opened")
                 
             except Exception as e:
                 logger.error(f"❌ Trading brain analysis error: {e}")
             
-            # Wait 3 minutes before next analysis
-            await asyncio.sleep(180)
+            # Wait 15 seconds before next analysis (day trading frequency)
+            await asyncio.sleep(15)
             
     except asyncio.CancelledError:
         logger.info("🛑 Trading brain loop cancelled")
@@ -1068,20 +1078,11 @@ except ImportError:
         SWING = "swing"
         DAY_TRADING = "day"
         SCALPING = "scalping"
-    async def get_day_trading_engine():
-        class MockEngine:
-            current_mode = TradingMode()
-            current_session = "american"
-            def get_available_modes(self): return {}
-            def set_trading_mode(self, mode): return {"old_mode": "swing", "new_mode": mode, "config": {}, "session": "american"}
-            def get_engine_status(self): return {"is_initialized": False}
-            async def start_analysis_loop(self): return {"status": "mock"}
-            async def stop_analysis_loop(self): return {"status": "mock"}
-        return MockEngine()
+    # get_day_trading_engine imported from services.day_trading_engine
 
 class TradingModeRequest(BaseModel):
     """Request to change trading mode"""
-    mode: str = Field(description="Trading mode: swing, day, or scalping")
+    mode: str = Field(description="Trading mode: day or scalping (DAY TRADING FOCUSED)")
 
 class TradingModeResponse(BaseModel):
     """Response from trading mode change"""
@@ -1123,7 +1124,7 @@ async def set_trading_mode(
     request: TradingModeRequest
 ):
     """
-    Set trading mode (swing, day, or scalping)
+    Set trading mode (day or scalping) - DAY TRADING FOCUSED
     
     Args:
         request: Trading mode change request
@@ -1138,7 +1139,7 @@ async def set_trading_mode(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid trading mode: {request.mode}. Available: swing, day, scalping"
+                detail=f"Invalid trading mode: {request.mode}. Available: day, scalping (DAY TRADING FOCUSED)"
             )
         
         day_engine = await get_day_trading_engine()
@@ -1322,7 +1323,7 @@ async def get_live_positions():
                     "status": position.status.value,
                     "confidence": position.ai_confidence,
                     "ai_confidence": position.ai_confidence,
-                    "hold_duration": "2h 15m",  # Mock for now
+                    "hold_duration": _calculate_position_duration(position.entry_time),
                     "stop_loss": float(position.stop_loss) if position.stop_loss else None,
                     "take_profit": float(position.take_profit) if position.take_profit else None
                 })
@@ -1342,7 +1343,23 @@ async def get_live_positions():
         return response
         
     except Exception as e:
-        logger.error(f"❌ Error fetching live positions: {e}")
+        logger.error
+    
+def _calculate_position_duration(entry_time: datetime) -> str:
+        """Calculate real position duration"""
+        try:
+            now = datetime.now(timezone.utc)
+            duration = now - entry_time.replace(tzinfo=timezone.utc)
+            
+            hours = int(duration.total_seconds() // 3600)
+            minutes = int((duration.total_seconds() % 3600) // 60)
+            
+            if hours > 0:
+                return f"{hours}h {minutes}m"
+            else:
+                return f"{minutes}m"
+        except Exception:
+            return "0m"
         # Return empty positions on error
         return {
             "positions": [],
@@ -1353,3 +1370,109 @@ async def get_live_positions():
             },
             "last_updated": datetime.utcnow().isoformat()
         }
+
+@router.get("/withdrawal-limits")
+async def get_withdrawal_limits(current_user: User = Depends(get_current_user)):
+    """Get withdrawal limits for user account"""
+    try:
+        logger.info(f"📊 User {current_user.id} requesting withdrawal limits")
+        
+        # Get user portfolio for balance context
+        from app.backend.services.professional_portfolio import get_professional_portfolio
+        # For development, map enterprise_admin to admin portfolio where all data is
+        user_id = "admin" if current_user.id in ["admin", "enterprise_admin"] or current_user.email == "admin@tradepulse.ai" else current_user.id
+        portfolio = await get_professional_portfolio(user_id)
+        
+        cash_balance = float(portfolio.cash_balance)
+        
+        response_data = {
+            "daily_limit": min(cash_balance * 0.5, 5000.0),  # 50% of cash or $5000 max
+            "weekly_limit": min(cash_balance * 0.8, 25000.0),  # 80% of cash or $25000 max
+            "monthly_limit": cash_balance,  # Full cash balance
+            "available_today": min(cash_balance * 0.5, 5000.0),  # Same as daily for now
+            "available_this_week": min(cash_balance * 0.8, 25000.0),
+            "available_this_month": cash_balance,
+            "current_cash_balance": cash_balance,
+            "minimum_withdrawal": 10.0,
+            "withdrawal_fee": 2.5,  # $2.50 fee
+            "processing_time": "1-3 business days",
+            "last_updated": datetime.utcnow().isoformat()
+        }
+        
+        logger.info(f"✅ Withdrawal limits retrieved for user {current_user.id}")
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching withdrawal limits: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch withdrawal limits: {str(e)}"
+        )
+
+@router.get("/trades/history")
+async def get_trade_history(
+    limit: int = 50,
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's trade history"""
+    try:
+        logger.info(f"📊 User {current_user.id} requesting trade history (limit: {limit})")
+        
+        from app.backend.services.professional_portfolio import get_professional_portfolio
+        # For development, map enterprise_admin to admin portfolio where all data is
+        user_id = "admin" if current_user.id in ["admin", "enterprise_admin"] or current_user.email == "admin@tradepulse.ai" else current_user.id
+        portfolio = await get_professional_portfolio(user_id)
+        
+        # Get closed positions as trade history
+        trade_history = []
+        
+        for position in portfolio.closed_positions[-limit:]:
+            trade_history.append({
+                "trade_id": position.position_id,
+                "symbol": position.symbol,
+                "side": position.type.value.lower(),
+                "type": position.type.value,
+                "size": float(position.size),
+                "entry_price": float(position.entry_price),
+                "exit_price": float(position.exit_price) if position.exit_price else None,
+                "entry_time": position.entry_time.isoformat(),
+                "exit_time": position.exit_time.isoformat() if position.exit_time else None,
+                "pnl": float(position.realized_pnl) if position.realized_pnl else 0.0,
+                "pnl_percentage": float(position.realized_pnl_percentage) if hasattr(position, 'realized_pnl_percentage') else 0.0,
+                "fee": 0.1,  # 0.1% trading fee
+                "status": position.status.value,
+                "strategy": "ai_signal",
+                "confidence": position.ai_confidence
+            })
+        
+        # Sort by exit time (newest first)
+        trade_history.sort(key=lambda x: x['exit_time'] or x['entry_time'], reverse=True)
+        
+        response_data = {
+            "trades": trade_history,
+            "summary": {
+                "total_trades": len(trade_history),
+                "profitable_trades": len([t for t in trade_history if t['pnl'] > 0]),
+                "losing_trades": len([t for t in trade_history if t['pnl'] < 0]),
+                "total_pnl": sum(t['pnl'] for t in trade_history),
+                "win_rate": (len([t for t in trade_history if t['pnl'] > 0]) / len(trade_history) * 100) if trade_history else 0,
+                "avg_pnl_per_trade": sum(t['pnl'] for t in trade_history) / len(trade_history) if trade_history else 0
+            },
+            "pagination": {
+                "limit": limit,
+                "returned": len(trade_history),
+                "has_more": len(portfolio.closed_positions) > limit
+            },
+            "last_updated": datetime.utcnow().isoformat()
+        }
+        
+        logger.info(f"✅ Trade history retrieved: {len(trade_history)} trades")
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching trade history: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch trade history: {str(e)}"
+        )
+

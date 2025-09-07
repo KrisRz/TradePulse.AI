@@ -1,9 +1,5 @@
-import { useState, useEffect } from 'preact/hooks';
-import { 
-  Wallet, DollarSign, Bitcoin, Download, Upload, RefreshCw, CreditCard,
-  ArrowUpRight, ArrowDownLeft, Clock, Shield, AlertTriangle, CheckCircle,
-  Eye, EyeOff, Copy, ExternalLink, Filter, Search
-} from 'lucide-preact';
+import { useState } from 'preact/hooks';
+import { Wallet, DollarSign, Download, ArrowUp, RefreshCw, ArrowUpRight, ArrowDownLeft, Clock, Shield, AlertTriangle, CheckCircle, EyeOff, Copy, ExternalLink, Filter, Search } from 'lucide-preact';
 
 interface WalletBalance {
   currency: string;
@@ -30,9 +26,18 @@ interface Transaction {
   fee: number;
 }
 
+interface WithdrawalLimits {
+  dailyLimit: number;
+  monthlyLimit: number;
+  minimumAmount: number;
+  processingFee: number;
+  currency: string;
+}
+
 export default function WalletManagement() {
   const [balances, setBalances] = useState<WalletBalance[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [withdrawalLimits, setWithdrawalLimits] = useState<WithdrawalLimits | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState('USD');
   const [activeTab, setActiveTab] = useState('overview');
   const [showValues, setShowValues] = useState(true);
@@ -40,10 +45,45 @@ export default function WalletManagement() {
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawAddress, setWithdrawAddress] = useState('');
   const [loading, setLoading] = useState(true);
+  const [limitsLoading, setLimitsLoading] = useState(false);
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Mock wallet data
+  // Fetch real withdrawal limits from backend - NO MOCKS!
+  const fetchWithdrawalLimits = async () => {
+    try {
+      setLimitsLoading(true);
+      const token = localStorage.getItem('auth_token');
+
+      if (!token) {
+        console.error('❌ No auth token for withdrawal limits');
+        return;
+      }
+
+      const response = await fetch('http://localhost:9002/api/trading/withdrawal-limits', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const limits: WithdrawalLimits = await response.json();
+        console.log('✅ Real withdrawal limits loaded:', limits);
+        setWithdrawalLimits(limits);
+      } else {
+        console.error('❌ Failed to fetch withdrawal limits:', response.status);
+        // NO FALLBACKS - keep null to show error state
+      }
+    } catch (error) {
+      console.error('❌ Error fetching withdrawal limits:', error);
+      // NO FALLBACKS - keep null to show error state
+    } finally {
+      setLimitsLoading(false);
+    }
+  };
+
+  // Mock wallet data (will be replaced with real API calls)
   const mockBalances: WalletBalance[] = [
     {
       currency: 'USD',
@@ -114,15 +154,15 @@ export default function WalletManagement() {
   const loadWalletData = async () => {
     try {
       setLoading(true);
-      
+
       // Load real wallet balances from backend
-      const balanceResponse = await fetch('http://localhost:9001/api/real-trading/wallet/balances', {
+      const balanceResponse = await fetch('http://localhost:9002/api/real-trading/wallet/balances', {
         headers: {
           'Authorization': 'Bearer enterprise_admin_token',
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (balanceResponse.ok) {
         const balanceData = await balanceResponse.json();
         if (balanceData.status === 'success' && balanceData.data.balances) {
@@ -132,9 +172,12 @@ export default function WalletManagement() {
       } else {
         console.error('Failed to load wallet balances:', balanceResponse.status);
       }
+
+      // Load real withdrawal limits - NO FALLBACKS!
+      await fetchWithdrawalLimits();
       
       // Load real transaction history from backend
-      const transactionResponse = await fetch('http://localhost:9001/api/real-trading/wallet/transactions', {
+      const transactionResponse = await fetch('http://localhost:9002/api/real-trading/wallet/transactions', {
         headers: {
           'Authorization': 'Bearer enterprise_admin_token',
           'Content-Type': 'application/json'
@@ -369,7 +412,7 @@ export default function WalletManagement() {
                     onChange={(e) => setSelectedCurrency((e.target as HTMLSelectElement).value)}
                   >
                     <option value="USD">USD (Bank Transfer)</option>
-                    <option value="BTC">Bitcoin (BTC)</option>
+                    <option value="BTC">DollarSign (BTC)</option>
                     <option value="ETH">Ethereum (ETH)</option>
                     <option value="USDT">Tether (USDT)</option>
                   </select>
@@ -451,7 +494,7 @@ export default function WalletManagement() {
                   </label>
                   <select className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                     <option value="USD">USD (Bank Transfer)</option>
-                    <option value="BTC">Bitcoin (BTC)</option>
+                    <option value="BTC">DollarSign (BTC)</option>
                     <option value="ETH">Ethereum (ETH)</option>
                     <option value="USDT">Tether (USDT)</option>
                   </select>
@@ -509,22 +552,44 @@ export default function WalletManagement() {
                 </div>
                 
                 <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Daily Limit:</span>
-                    <span className="text-gray-900 dark:text-white font-medium">$10,000</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Monthly Limit:</span>
-                    <span className="text-gray-900 dark:text-white font-medium">$100,000</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Minimum Amount:</span>
-                    <span className="text-gray-900 dark:text-white font-medium">$50</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Processing Fee:</span>
-                    <span className="text-gray-900 dark:text-white font-medium">$5 + network fees</span>
-                  </div>
+                  {withdrawalLimits ? (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Daily Limit:</span>
+                        <span className="text-gray-900 dark:text-white font-medium">
+                          {withdrawalLimits.currency}{withdrawalLimits.dailyLimit.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Monthly Limit:</span>
+                        <span className="text-gray-900 dark:text-white font-medium">
+                          {withdrawalLimits.currency}{withdrawalLimits.monthlyLimit.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Minimum Amount:</span>
+                        <span className="text-gray-900 dark:text-white font-medium">
+                          {withdrawalLimits.currency}{withdrawalLimits.minimumAmount.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Processing Fee:</span>
+                        <span className="text-gray-900 dark:text-white font-medium">
+                          {withdrawalLimits.currency}{withdrawalLimits.processingFee} + network fees
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center py-4">
+                      {limitsLoading ? (
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      ) : (
+                        <div className="text-red-600 dark:text-red-400 text-sm">
+                          ❌ Unable to load withdrawal limits - no real data available
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
