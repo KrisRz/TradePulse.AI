@@ -1,0 +1,93 @@
+# GitLeaks configuration for TradePulse.AI
+# Detect secrets in code and git history
+
+title = "TradePulse.AI Secret Detection"
+
+[extend]
+# Use default rules as base
+useDefault = true
+
+[[rules]]
+id = "aws-access-key-id"
+description = "AWS Access Key ID"
+regex = '''AKIA[0-9A-Z]{16}'''
+tags = ["key", "AWS"]
+
+[[rules]]
+id = "aws-secret-access-key"
+description = "AWS Secret Access Key"
+regex = '''[0-9a-zA-Z/+]{40}'''
+tags = ["key", "AWS"]
+
+[[rules]]
+id = "binance-api-key"
+description = "Binance API Key"
+regex = '''[0-9a-zA-Z]{64}'''
+tags = ["key", "Binance", "Trading"]
+
+[[rules]]
+id = "jwt-secret"
+description = "JWT Secret Key"
+regex = '''jwt[_-]?secret[_-]?key["\s]*[:=]["\s]*[0-9a-zA-Z/+]{32,}'''
+tags = ["key", "JWT"]
+
+[[rules]]
+id = "database-url"
+description = "Database Connection String"
+regex = '''(mongodb|mysql|postgresql|dynamodb)://[^\s"']+'''
+tags = ["database", "connection"]
+
+[[rules]]
+id = "private-key"
+description = "Private Key"
+regex = '''-----BEGIN [A-Z]+ PRIVATE KEY-----'''
+tags = ["key", "private"]
+
+# Allowlist for false positives
+[[allowlist]]
+description = "Test files and examples"
+paths = [
+    '''.*test.*''',
+    '''.*example.*''',
+    '''.*sample.*''',
+    '''.*mock.*''',
+    '''.*fixture.*''',
+    '''README.*''',
+    '''.*\.md$''',
+]
+
+[[allowlist]]
+description = "GitHub Actions workflow files"
+paths = [
+    '''\.github/workflows/.*'''
+]
+regexes = [
+    '''secrets\.[A-Z_]+''',  # GitHub Secrets references
+    '''\$\{\{ secrets\.[A-Z_]+ \}\}''',  # GitHub Actions syntax
+]
+
+[[allowlist]]
+description = "Terraform variable references"
+paths = [
+    '''infra/terraform/.*'''
+]
+regexes = [
+    '''var\.[a-zA-Z_]+''',  # Terraform variables
+    '''\$\{var\.[a-zA-Z_]+\}''',  # Terraform interpolation
+]
+
+[[allowlist]]
+description = "Environment variable placeholders"
+regexes = [
+    '''<[A-Z_]+>''',  # Placeholder format: <SECRET_NAME>
+    '''\$\{[A-Z_]+\}''',  # Environment variable format: ${SECRET_NAME}
+    '''process\.env\.[A-Z_]+''',  # Node.js env vars
+]
+
+[[allowlist]]
+description = "Common false positives"
+regexes = [
+    '''AKIA[A-Z0-9]{16}.*example''',  # Example AWS keys
+    '''sk-[a-zA-Z0-9]{48}.*test''',  # Test OpenAI keys
+    '''xoxb-[0-9]{12}-[0-9]{12}-[a-zA-Z0-9]{24}.*sample''',  # Sample Slack tokens
+]

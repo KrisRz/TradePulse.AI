@@ -1,0 +1,266 @@
+name: 🚀 Deploy Backend (Development)
+
+on:
+  workflow_run:
+    workflows: ["🔍 Continuous Integration"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+
+env:
+  AWS_REGION: eu-west-2
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  # ================================
+  # PRE-DEPLOYMENT VALIDATION
+  # ================================
+  pre-deployment:
+    name: 🔍 Pre-deployment Validation
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    outputs:
+      deployment-env: ${{ steps.set-env.outputs.environment }}
+      lambda-function: ${{ steps.set-env.outputs.lambda-function }}
+      aws-role: ${{ steps.set-env.outputs.aws-role }}
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🎯 Set environment variables
+        id: set-env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV="${{ github.event.inputs.environment }}"
+          else
+            ENV="development"
+          fi
+          
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          
+          case $ENV in
+            "development")
+              echo "lambda-function=tradepulse-dev-api" >> $GITHUB_OUTPUT
+              echo "aws-role=${{ secrets.AWS_ROLE_ARN_DEV }}" >> $GITHUB_OUTPUT
+              ;;
+            "staging")
+              echo "lambda-function=tradepulse-staging-api" >> $GITHUB_OUTPUT
+              echo "aws-role=${{ secrets.AWS_ROLE_ARN_STAGING }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+          
+      - name: ✅ Validate deployment target
+        run: |
+          echo "🎯 Deployment Environment: ${{ steps.set-env.outputs.environment }}"
+          echo "🔧 Lambda Function: ${{ steps.set-env.outputs.lambda-function }}"
+          echo "🔐 AWS Role: ${{ steps.set-env.outputs.aws-role }}"
+
+  # ================================
+  # BUILD & PACKAGE
+  # ================================
+  build:
+    name: 🏗️ Build & Package
+    runs-on: ubuntu-latest
+    needs: pre-deployment
+    defaults:
+      run:
+        working-directory: app/backend
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt --target ./package
+          
+      - name: 📦 Package Lambda function
+        run: |
+          # Copy application code
+          cp -r . ./package/
+          
+          # Remove unnecessary files
+          find ./package -name "*.pyc" -delete
+          find ./package -name "__pycache__" -type d -exec rm -rf {} +
+          find ./package -name "tests" -type d -exec rm -rf {} +
+          find ./package -name "*.egg-info" -type d -exec rm -rf {} +
+          
+          # Create deployment package
+          cd package
+          zip -r ../backend-${{ github.sha }}.zip . -x "*.git*" "*.pytest_cache*" "*.coverage*"
+          cd ..
+          
+          # Verify package
+          echo "📦 Package size: $(du -h backend-${{ github.sha }}.zip | cut -f1)"
+          echo "📦 Package contents:"
+          unzip -l backend-${{ github.sha }}.zip | head -20
+          
+      - name: 🧪 Test package integrity
+        run: |
+          # Quick smoke test of the package
+          unzip -q backend-${{ github.sha }}.zip -d test-extract
+          cd test-extract
+          python -c "
+          try:
+              from main import app
+              print('✅ Package integrity verified')
+          except Exception as e:
+              print(f'❌ Package integrity failed: {e}')
+              exit(1)
+          "
+          
+      - name: 📊 Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-package-${{ github.sha }}
+          path: app/backend/backend-${{ github.sha }}.zip
+          retention-days: 30
+
+  # ================================
+  # DEPLOY
+  # ================================
+  deploy:
+    name: 🚀 Deploy to ${{ needs.pre-deployment.outputs.deployment-env }}
+    runs-on: ubuntu-latest
+    needs: [pre-deployment, build]
+    environment: ${{ needs.pre-deployment.outputs.deployment-env }}
+    
+    steps:
+      - name: 📥 Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-package-${{ github.sha }}
+          path: ./
+          
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.pre-deployment.outputs.aws-role }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: 🚀 Deploy to Lambda
+        run: |
+          echo "🚀 Deploying to Lambda function: ${{ needs.pre-deployment.outputs.lambda-function }}"
+          
+          aws lambda update-function-code \
+            --function-name "${{ needs.pre-deployment.outputs.lambda-function }}" \
+            --zip-file fileb://backend-${{ github.sha }}.zip \
+            --output json > update-result.json
+            
+          echo "✅ Deployment completed"
+          cat update-result.json
+          
+      - name: ⏳ Wait for deployment completion
+        run: |
+          echo "⏳ Waiting for Lambda function to be ready..."
+          
+          aws lambda wait function-updated \
+            --function-name "${{ needs.pre-deployment.outputs.lambda-function }}"
+            
+          echo "✅ Lambda function is ready"
+
+  # ================================
+  # POST-DEPLOYMENT VALIDATION
+  # ================================
+  validate:
+    name: ✅ Post-deployment Validation
+    runs-on: ubuntu-latest
+    needs: [pre-deployment, deploy]
+    
+    steps:
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.pre-deployment.outputs.aws-role }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: 🔍 Lambda function health check
+        run: |
+          echo "🔍 Checking Lambda function health..."
+          
+          # Get function configuration
+          aws lambda get-function-configuration \
+            --function-name "${{ needs.pre-deployment.outputs.lambda-function }}" \
+            --output json > function-config.json
+            
+          STATE=$(cat function-config.json | jq -r '.State')
+          LAST_UPDATE_STATUS=$(cat function-config.json | jq -r '.LastUpdateStatus')
+          
+          echo "📊 Function State: $STATE"
+          echo "📊 Last Update Status: $LAST_UPDATE_STATUS"
+          
+          if [[ "$STATE" != "Active" ]] || [[ "$LAST_UPDATE_STATUS" != "Successful" ]]; then
+            echo "❌ Lambda function is not healthy"
+            exit 1
+          fi
+          
+          echo "✅ Lambda function is healthy"
+          
+      - name: 🧪 Basic API health check
+        run: |
+          echo "🧪 Testing basic API endpoints..."
+          
+          # Get Lambda function URL (if configured)
+          FUNCTION_URL=$(aws lambda get-function-url-config \
+            --function-name "${{ needs.pre-deployment.outputs.lambda-function }}" \
+            --query 'FunctionUrl' --output text 2>/dev/null || echo "")
+            
+          if [[ -n "$FUNCTION_URL" ]]; then
+            echo "🔗 Function URL: $FUNCTION_URL"
+            
+            # Test health endpoint
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$FUNCTION_URL/health" || echo "000")
+            
+            if [[ "$HTTP_STATUS" == "200" ]]; then
+              echo "✅ Health check passed (HTTP $HTTP_STATUS)"
+            else
+              echo "⚠️ Health check returned HTTP $HTTP_STATUS"
+            fi
+          else
+            echo "ℹ️ No function URL configured, skipping HTTP health check"
+          fi
+
+  # ================================
+  # NOTIFICATION
+  # ================================
+  notify:
+    name: 📢 Notification
+    runs-on: ubuntu-latest
+    needs: [pre-deployment, deploy, validate]
+    if: always()
+    
+    steps:
+      - name: 📢 Deployment notification
+        run: |
+          if [[ "${{ needs.validate.result }}" == "success" ]]; then
+            echo "🎉 Backend deployment to ${{ needs.pre-deployment.outputs.deployment-env }} completed successfully!"
+            echo "✅ Lambda function: ${{ needs.pre-deployment.outputs.lambda-function }}"
+            echo "✅ Commit: ${{ github.sha }}"
+            echo "✅ Environment: ${{ needs.pre-deployment.outputs.deployment-env }}"
+          else
+            echo "❌ Backend deployment to ${{ needs.pre-deployment.outputs.deployment-env }} failed!"
+            echo "🔍 Check the logs for more details"
+            exit 1
+          fi

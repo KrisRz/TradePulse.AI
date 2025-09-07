@@ -215,3 +215,66 @@ check_portfolio.py
 app/frontend/node_modules/
 
 .turbo/
+aws_credentials.txt
+
+# GitHub Actions artifacts and reports
+*.sarif
+*-report.json
+*-report.txt
+*-results.json
+security-reports/
+terraform-outputs.json
+cost-estimate.txt
+infracost.json
+
+# Large binary files and native libraries
+*.dylib
+*.so
+*.dll
+*.jar
+*.tar.gz
+*.zip
+
+# Terraform providers and plugins (large binaries)
+infra/terraform/**/.terraform/
+infra/terraform/**/.terraform.lock.hcl
+infra/terraform/**/terraform.tfstate*
+infra/terraform/**/tfplan*
+infra/terraform/**/destroy-plan*
+
+# DynamoDB Local (large JAR files)
+data/database/dynamodb/
+*.jar
+
+# Large ML model files and training outputs
+app/backend/models/enterprise/backup_before_sklearn_update/
+*.pkl
+*.h5
+*.model
+*.joblib
+*.onnx
+*.pb
+
+# Large log files
+logs/*.out
+logs/debug/*.log
+logs/tradepulse_*.log
+logs/performance_*.json
+
+# Build artifacts and packages
+backend-*.zip
+frontend-build-*/
+terraform-plan-*/
+terraform-apply-*/
+
+# IDE and system files
+.DS_Store
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Temporary development files
+test-extract/
+package/
+dist-temp/
