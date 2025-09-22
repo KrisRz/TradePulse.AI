@@ -218,9 +218,74 @@ class TradePulseApplication:
                         # Override placeholder registration
                         self.container.register_singleton("session_aware_trading_engine", lambda: None)
                     
-                    # PHASE 6: Add Brain Controller (FINAL)
+                    # PHASE 6: Initialize Missing Services
                     await asyncio.sleep(1)
-                    logger.info("🚀 PHASE 6: Adding Brain Controller...")
+                    logger.info("🚀 PHASE 6: Initializing Missing Services...")
+                    
+                    try:
+                        # Initialize all the previously missing services
+                        from app.backend.services.signal_processor import get_signal_processor
+                        from app.backend.services.signal_performance_tracker import get_signal_performance_tracker
+                        from app.backend.services.ai_vs_random_tracker import get_ai_vs_random_tracker
+                        from app.backend.services.pattern_learning_engine import get_pattern_learning_engine
+                        from app.backend.services.user_performance_showcase import get_user_performance_showcase
+                        from app.backend.services.model_performance_metrics import get_model_performance_metrics
+                        from app.backend.services.portfolio_manager import get_portfolio_manager
+                        from app.backend.services.model_loader import get_model_loader
+                        from app.backend.services.user_management_service import get_user_management_service
+                        from app.backend.services.user_analytics_service import get_user_analytics_service
+                        from app.backend.services.audit_compliance_service import get_audit_compliance_service
+                        from app.backend.services.communication_service import get_communication_service
+                        from app.backend.services.portfolio_showcase_engine import get_portfolio_showcase_engine
+                        
+                        # Initialize and register services
+                        signal_processor = get_signal_processor()
+                        self.container.register_singleton("signal_processor", lambda: signal_processor)
+                        
+                        signal_perf_tracker = get_signal_performance_tracker()
+                        self.container.register_singleton("signal_performance_tracker", lambda: signal_perf_tracker)
+                        
+                        ai_vs_random = get_ai_vs_random_tracker()
+                        self.container.register_singleton("ai_vs_random_tracker", lambda: ai_vs_random)
+                        
+                        pattern_engine = get_pattern_learning_engine()
+                        self.container.register_singleton("pattern_learning_engine", lambda: pattern_engine)
+                        
+                        user_showcase = get_user_performance_showcase()
+                        self.container.register_singleton("user_performance_showcase", lambda: user_showcase)
+                        
+                        model_metrics = get_model_performance_metrics()
+                        self.container.register_singleton("model_performance_metrics", lambda: model_metrics)
+                        
+                        portfolio_mgr = get_portfolio_manager()
+                        self.container.register_singleton("portfolio_manager", lambda: portfolio_mgr)
+                        
+                        model_loader_svc = get_model_loader()
+                        self.container.register_singleton("model_loader", lambda: model_loader_svc)
+                        
+                        user_mgmt = get_user_management_service()
+                        self.container.register_singleton("user_management_service", lambda: user_mgmt)
+                        
+                        user_analytics = get_user_analytics_service()
+                        self.container.register_singleton("user_analytics_service", lambda: user_analytics)
+                        
+                        audit_service = get_audit_compliance_service()
+                        self.container.register_singleton("audit_compliance_service", lambda: audit_service)
+                        
+                        comm_service = get_communication_service()
+                        self.container.register_singleton("communication_service", lambda: comm_service)
+                        
+                        portfolio_showcase = get_portfolio_showcase_engine()
+                        self.container.register_singleton("portfolio_showcase_engine", lambda: portfolio_showcase)
+                        
+                        logger.info("✅ PHASE 6 COMPLETE: All missing services initialized and registered")
+                        
+                    except Exception as services_error:
+                        logger.warning(f"⚠️ Some services failed to initialize: {services_error}")
+                    
+                    # PHASE 7: Add Brain Controller (FINAL)
+                    await asyncio.sleep(1)
+                    logger.info("🚀 PHASE 7: Adding Brain Controller...")
                     print("🔍 DEBUG: Starting Brain Controller phase...")
                     
                     try:
@@ -257,7 +322,7 @@ class TradePulseApplication:
                             # Still register it for API access
                             logger.info("📝 Brain Controller registered but not initialized")
                         
-                        logger.info("✅ PHASE 6 COMPLETE: Brain Controller registered")
+                        logger.info("✅ PHASE 7 COMPLETE: Brain Controller registered")
                         print("✅ DEBUG: Brain Controller registered successfully!")
                     except Exception as brain_error:
                         logger.warning(f"⚠️ Brain Controller failed: {brain_error}")

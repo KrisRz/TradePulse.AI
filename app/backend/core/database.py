@@ -1291,6 +1291,19 @@ class TableSchemas:
             ]
         }
 
+    def get_learning_engine_state_schema(self) -> Dict[str, Any]:
+        """Learning engine state table schema"""
+        return {
+            'TableName': 'learning_engine_state',
+            'KeySchema': [
+                {'AttributeName': 'engine_id', 'KeyType': 'HASH'}
+            ],
+            'AttributeDefinitions': [
+                {'AttributeName': 'engine_id', 'AttributeType': 'S'}
+            ],
+            'BillingMode': 'PAY_PER_REQUEST'
+        }
+
     @staticmethod
     def get_health_checks_schema() -> Dict[str, Any]:
         """System health checks table schema used by health monitor."""
@@ -1337,6 +1350,7 @@ class DatabaseManager:
             self.schemas.get_announcements_schema(),
             self.schemas.get_user_notification_preferences_schema(),
             self.schemas.get_notification_templates_schema(),
+            self.schemas.get_learning_engine_state_schema(),
             self.schemas.get_health_checks_schema()
         ]
         
@@ -1674,19 +1688,6 @@ def ensure_table_exists(dynamodb_client, table_name: str, attributes: List[Dict]
         except Exception as e:
             logger.error(f"❌ Failed to create table '{table_name}': {e}")
             return False
-
-    def get_learning_engine_state_schema(self) -> Dict[str, Any]:
-        """Learning engine state table schema"""
-        return {
-            'TableName': 'learning_engine_state',
-            'KeySchema': [
-                {'AttributeName': 'engine_id', 'KeyType': 'HASH'}
-            ],
-            'AttributeDefinitions': [
-                {'AttributeName': 'engine_id', 'AttributeType': 'S'}
-            ],
-            'BillingMode': 'PAY_PER_REQUEST'
-        }
 
 
 def ensure_required_tables() -> bool:

@@ -219,15 +219,43 @@ class EnterpriseTradingEngine:
                 else:
                     logger.warning(f"⚠️ {display_name} model file not found: {filename}")
             
-            # LSTM/TF models (Layer 2) - TEMPORARILY DISABLED to fix recursion
-            logger.info("⚠️ LSTM model loading temporarily disabled to prevent recursion")
-            logger.info("📝 Classical models (Layers 1,3,4,5,6) are sufficient for trading")
+            # LSTM/TF models (Layer 2) - ENABLED with safe loading
+            logger.info("🔄 Loading LSTM models with recursion prevention...")
             
-            # Skip all TensorFlow operations to avoid recursion
-            # The 5 classical models are enough for professional trading
+            try:
+                # Load LSTM models with safe wrapper
+                lstm_models = {
+                    "lstm_1m": "lstm_1m.h5",
+                    "lstm_5m": "lstm_5m.h5"
+                }
+                
+                for model_key, filename in lstm_models.items():
+                    model_file = self.model_path / filename
+                    if model_file.exists():
+                        try:
+                            # Use safe LSTM loading
+                            from app.backend.core.safe_lstm import SafeLSTM
+                            import tensorflow as tf
+                            
+                            # Load model with minimal verbose output
+                            keras_model = tf.keras.models.load_model(str(model_file), compile=False)
+                            safe_model = SafeLSTM(keras_model)
+                            
+                            self.models[model_key] = safe_model
+                            logger.info(f"✅ {model_key} loaded with safe wrapper")
+                            
+                        except Exception as lstm_error:
+                            logger.warning(f"⚠️ Failed to load {model_key}: {lstm_error}")
+                            # Continue without this LSTM model
+                    else:
+                        logger.warning(f"⚠️ LSTM model not found: {filename}")
+                
+                logger.info("✅ LSTM model loading completed with safe wrappers")
+                
+            except Exception as lstm_error:
+                logger.warning(f"⚠️ LSTM loading failed, continuing with classical models: {lstm_error}")
             
-            # Skip model counting and validation to avoid any object operations
-            logger.info("✅ Model loading completed - 5 classical AI layers operational")
+            logger.info("✅ Model loading completed - AI layers operational")
             
         except Exception as e:
             logger.error(f"Failed to load models: {e}")
