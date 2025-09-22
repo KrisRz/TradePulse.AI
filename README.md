@@ -490,5 +490,57 @@ LIVE_TRADING_STATUS = {
 
 ---
 
+## 🚀 Quick Start for Recruiters
+
+### **Prerequisites (5 minutes):**
+```bash
+# macOS setup:
+brew install python@3.13 openjdk@17 node@18
+
+# Set Java environment (add to ~/.zshrc):
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export PATH="$JAVA_HOME/bin:$PATH"
+```
+
+### **One-Command Startup:**
+```bash
+git clone <your-repo-url>
+cd TradePulse.AI
+
+# 1. Setup DynamoDB Local (auto-downloads)
+./start_dynamodb.sh
+
+# 2. Start Backend (wait for DynamoDB)
+./start_backend.sh
+
+# 3. Start Frontend (wait for Backend)
+cd app/frontend && npm install && npm run dev
+```
+
+### **Access Points:**
+- **Frontend Dashboard**: http://localhost:4321
+- **Admin Dashboard**: http://localhost:4321/admin/dashboard
+- **Backend API**: http://localhost:9002 (FastAPI docs at /docs)
+- **Health Check**: http://localhost:9002/health
+
+### **What You'll See:**
+- ✅ **Live Bitcoin Trading**: Real-time price data from Binance
+- ✅ **AI Trading Engines**: 6-layer AI signal generation
+- ✅ **Professional Dashboard**: Real-time portfolio management
+- ✅ **Autonomous Operation**: Brain Controller FSM orchestration
+
+### **Demo Credentials:**
+- **Username**: admin@tradepulse.ai
+- **Password**: admin123
+- **Role**: Administrator (full access)
+
+### **Troubleshooting:**
+- **Java not found**: `brew install openjdk@17`
+- **Python errors**: `cd app/backend && pip install -r requirements.txt`
+- **Frontend errors**: `cd app/frontend && npm install`
+- **Port conflicts**: Kill existing processes on ports 8000, 9002, 4321
+
+---
+
 **TradePulse.AI** - Autonomous AI Day Trading Platform - **Live Bitcoin trading with Brain Controller orchestration** 🚀
 

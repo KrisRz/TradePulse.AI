@@ -13,8 +13,14 @@ pkill -f "DynamoDBLocal" || true
 # Create database directory if it doesn't exist
 mkdir -p data/database/dynamodb
 
-# Start DynamoDB Local with explicit dbPath
+# Auto-download DynamoDB Local if not present
 cd data/database/dynamodb
+if [ ! -f "DynamoDBLocal.jar" ] || [ ! -d "DynamoDBLocal_lib" ]; then
+    echo "📦 DynamoDB Local not found, downloading..."
+    cd /Applications/Projects/TradePulse.AI
+    ./scripts/setup_dynamodb_local.sh
+    cd data/database/dynamodb
+fi
 echo "Starting DynamoDB Local on port 8000..."
 java -Djava.library.path=./DynamoDBLocal_lib -jar DynamoDBLocal.jar -sharedDb -dbPath . -port 8000 -cors '*' &
 
