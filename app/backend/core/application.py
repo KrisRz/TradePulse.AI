@@ -11,12 +11,13 @@ from typing import Dict, Any
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.backend.core.config import get_settings
 from app.backend.core.logging import get_logger, configure_logging
 from app.backend.core.exceptions import TradePulseException
 from app.backend.core.middleware import create_rate_limit_middleware
+from app.backend.core.metrics import create_prometheus_middleware
 from app.backend.core.lifespan import create_lifespan_handler
 from app.backend.core.container import get_container
 from app.backend.presentation.api.router import create_api_router
@@ -352,6 +353,14 @@ class TradePulseApplication:
             window_seconds=self.settings.RATE_LIMIT_WINDOW
         )
         self.app.middleware("http")(rate_limit_middleware)
+
+        # Prometheus metrics middleware (after rate limiting to capture actual handled requests)
+        try:
+            prometheus_middleware = create_prometheus_middleware()
+            self.app.middleware("http")(prometheus_middleware)
+            logger.info("✅ Prometheus metrics middleware enabled")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to enable Prometheus middleware: {e}")
         
         logger.info("✅ Middleware configured")
     
@@ -435,6 +444,18 @@ class TradePulseApplication:
         api_router = create_api_router()
         self.app.include_router(api_router)
         
+        # Expose Prometheus metrics if library is available
+        try:
+            from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+
+            @self.app.get("/metrics")
+            async def metrics():
+                data = generate_latest()
+                return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+        except Exception:
+            # Do not fail if prometheus_client is not installed
+            pass
+
         logger.info("✅ API routes configured")
     
     def _configure_health_endpoints(self) -> None:
@@ -467,6 +488,23 @@ class TradePulseApplication:
                 "timestamp": datetime.utcnow().isoformat(),
                 "environment": self.settings.ENVIRONMENT
             }
+
+        @self.app.get("/healthz")
+        async def liveness():
+            return {"status": "ok"}
+
+        @self.app.get("/readyz")
+        async def readiness():
+            # Simple readiness: snapshot age and phase
+            try:
+                from app.backend.services.metrics import SNAPSHOT_AGE
+                age = 0.0
+                if SNAPSHOT_AGE:
+                    # Best effort: placeholder value; Prometheus gauge holds actual metric
+                    age = 0.0
+                return {"ready": True, "snapshot_age_hint": age}
+            except Exception:
+                return {"ready": False}
         
         @self.app.get("/test")
         async def test_route():

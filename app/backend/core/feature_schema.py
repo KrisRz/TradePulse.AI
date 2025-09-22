@@ -69,18 +69,21 @@ def predict_lgbm_safe(model, features_dict: Dict[str, Any]) -> float:
     try:
         X = make_X_live(features_dict)
         
-        # Validate schema if possible
-        if hasattr(model, 'feature_name_'):
-            model_features = list(model.feature_name_)
-            if model_features != FEATURE_COLUMNS:
-                logger.warning(f"LightGBM schema mismatch: {model_features[:3]}... vs {FEATURE_COLUMNS[:3]}...")
+        # Check if model was trained with feature names
+        model_has_feature_names = (
+            hasattr(model, 'feature_names_in_') or 
+            (hasattr(model, 'booster_') and hasattr(model.booster_, 'feature_names')) or
+            hasattr(model, 'feature_name_')
+        )
         
-        # LightGBM expects DataFrame with named columns
+        # Use DataFrame only if model was trained with feature names, otherwise use numpy array
+        prediction_data = X if model_has_feature_names else X.values
+        
         if hasattr(model, 'predict_proba'):
-            proba = model.predict_proba(X)[0]
+            proba = model.predict_proba(prediction_data)[0]
             return float(proba[1]) if len(proba) > 1 else float(proba[0])
         else:
-            pred = model.predict(X)[0]
+            pred = model.predict(prediction_data)[0]
             return float(pred)
             
     except Exception as e:
@@ -142,3 +145,19 @@ def log_schema_info():
     """Log schema information for debugging"""
     logger.info(f"🔍 FEATURE_SCHEMA={SCHEMA_HASH} columns={len(FEATURE_COLUMNS)}")
     logger.debug(f"🔍 Schema columns: {FEATURE_COLUMNS}")
+
+# COMPATIBILITY SHIM: Legacy function name support
+# After refactor, some code still imports build_feature_row
+def build_feature_row(features_dict: Dict[str, Any], model=None) -> pd.DataFrame:
+    """
+    Legacy compatibility function for build_feature_row.
+    
+    Args:
+        features_dict: Feature dictionary
+        model: Model (ignored, kept for compatibility)
+        
+    Returns:
+        Standardized DataFrame
+    """
+    logger.warning("Using legacy build_feature_row - update to make_X_live")
+    return make_X_live(features_dict)

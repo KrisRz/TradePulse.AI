@@ -5,17 +5,56 @@ Uses Pydantic Settings for environment variable management
 
 import os
 from typing import List, Optional
+from pathlib import Path
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 from pydantic import Field
 import structlog
 
 logger = structlog.get_logger()
 
+# ---------------------------------------------------------------------------
+# Load environment variables from root .env first, then backend config .env
+# This ensures professional/live keys stored at project root are picked up.
+# ---------------------------------------------------------------------------
+try:
+    project_root = Path(__file__).resolve().parents[3]
+    candidate_env_files = [
+        project_root / ".env",  # root .env (Professional Mode keys live here)
+        project_root / "app/backend/config/development.env",
+        project_root / "app/backend/config/production.env",
+        project_root / "app/backend/config/.env",
+    ]
+
+    loaded_any = False
+    for env_path in candidate_env_files:
+        if env_path.exists():
+            load_dotenv(dotenv_path=str(env_path), override=False)
+            loaded_any = True
+            # Log once per file for traceability
+            try:
+                logger.info("ENV loaded", path=str(env_path))
+            except Exception:
+                pass
+
+    if not loaded_any:
+        try:
+            logger.warning("No .env files found - relying on process env")
+        except Exception:
+            pass
+except Exception as env_err:
+    try:
+        logger.warning("ENV preload failed", error=str(env_err))
+    except Exception:
+        pass
+
 class Settings(BaseSettings):
     """Application settings from environment variables"""
     
+    # We preload .env files above using python-dotenv to allow multiple sources.
+    # Avoid hard-coding a single env_file path here.
     model_config = {
-        "env_file": "/Applications/Projects/TradePulse.AI/app/backend/config/development.env",
+        "env_file": None,
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
         "extra": "allow"  # Allow extra fields from environment
@@ -74,6 +113,18 @@ class Settings(BaseSettings):
     MAX_POSITION_SIZE_PERCENTAGE: float = Field(default=25.0, env="MAX_POSITION_SIZE_PERCENTAGE")
     DEFAULT_STOP_LOSS_PERCENTAGE: float = Field(default=2.0, env="DEFAULT_STOP_LOSS_PERCENTAGE")
     DEFAULT_TAKE_PROFIT_PERCENTAGE: float = Field(default=4.0, env="DEFAULT_TAKE_PROFIT_PERCENTAGE")
+
+    # Duplicate suppression defaults (can be overridden by runtime config)
+    DUP_ACTIVE_WINDOW_SEC: int = Field(default=30, env="DUP_ACTIVE_WINDOW_SEC")
+    DUP_ACTIVE_PRICE_DELTA_PCT: float = Field(default=0.003, env="DUP_ACTIVE_PRICE_DELTA_PCT")
+    DUP_CLOSED_WINDOW_SEC: int = Field(default=600, env="DUP_CLOSED_WINDOW_SEC")
+    DUP_CLOSED_PRICE_DELTA_PCT: float = Field(default=0.008, env="DUP_CLOSED_PRICE_DELTA_PCT")
+
+    # Entry cooldown
+    ENTRY_COOLDOWN_SECONDS: int = Field(default=10, env="ENTRY_COOLDOWN_SECONDS")
+
+    # Position limits
+    MAX_CONCURRENT_POSITIONS: int = Field(default=9, env="MAX_CONCURRENT_POSITIONS")
     
     # Logging settings
     LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")

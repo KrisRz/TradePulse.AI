@@ -156,15 +156,24 @@ class HistoricalMarketContextService:
             with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
             
-            # Check if cache is less than 24 hours old
+            # DAY TRADING: Cache is valid for only 3 hours (not 24 hours)
+            # This ensures fresh data for active trading decisions
             cache_time = datetime.fromisoformat(metadata.get("created_at", "2020-01-01"))
             age_hours = (datetime.now(timezone.utc) - cache_time).total_seconds() / 3600
             
-            if age_hours > 24:
-                logger.info(f"🔄 Cache is {age_hours:.1f} hours old, needs refresh")
+            # FORCE INVALIDATION: If cache was created with old logic, invalidate it
+            cache_version = metadata.get("version", "0.0.0")
+            current_version = "2.0.0"  # Updated version for day trading optimization
+            
+            if cache_version != current_version:
+                logger.info(f"🔄 Cache version mismatch: {cache_version} vs {current_version}, invalidating")
                 return False
             
-            logger.info(f"✅ Cache is {age_hours:.1f} hours old, still valid")
+            if age_hours > 3:  # 3 hours max for day trading
+                logger.info(f"🔄 Cache is {age_hours:.1f} hours old, needs refresh (max 3h for day trading)")
+                return False
+            
+            logger.info(f"✅ Cache is {age_hours:.1f} hours old, still valid for day trading")
             return True
             
         except Exception as e:
@@ -172,53 +181,67 @@ class HistoricalMarketContextService:
             return False
     
     async def _pre_calculate_historical_data(self):
-        """Pre-calculate all historical market context data"""
-        logger.info("📈 Loading 3.97M historical records...")
+        """Pre-calculate all historical market context data from LIVE DynamoDB"""
+        logger.info("📈 Loading LIVE historical data from DynamoDB Local...")
         
-        # SMART: Load only RECENT relevant data (last 6 months max)
-        # Bitcoin price has changed dramatically - 2018 data is irrelevant for $110k+ prices
-        data_file = self.data_path / "processed" / "BTCUSDT_1m_complete.parquet"
-        if not data_file.exists():
-            data_file = self.data_path / "BTCUSDT_1m_complete.parquet"
+        # CRITICAL FIX: Use LIVE data from DynamoDB Local instead of stale parquet files
+        # The parquet files are 6 weeks old (July 26, 2025) - we need current data!
         
-        if not data_file.exists():
-            raise FileNotFoundError("Historical data file not found")
-        
-        # Load only RECENT data (last 6 months) for relevance to current $110k+ prices
-        df = pd.read_parquet(data_file)
-        logger.info(f"📊 Loaded {len(df):,} total historical records")
-        
-        # CRITICAL OPTIMIZATION: Use only $100k+ ERA data (December 2024 onwards)
-        # Bitcoin first hit $100k on Dec 4-5, 2024 (~9 months ago)
-        # Since it won't go under $100k anymore, only $100k+ patterns are relevant!
-        
-        # Strategy: Use data from December 2024 onwards (the $100k+ era)
-        cutoff_date = pd.Timestamp('2024-12-01')  # Start of $100k era
-        
-        if 'open_time' in df.columns:
-            df['datetime'] = pd.to_datetime(df['open_time'])
-            df = df[df['datetime'] >= cutoff_date]
-        elif df.index.dtype.kind == 'M':  # DateTime index
-            df = df[df.index >= cutoff_date]
-        else:
-            # Keep only last ~9 months worth of data (December 2024 onwards)
-            # Approximate: 9 months * 30 days * 24 hours * 60 minutes = ~388,800 minutes
-            df = df.tail(400000)
-        
-        # CRITICAL: Filter by $100k+ price relevance ONLY
-        if 'close' in df.columns:
-            pre_filter_count = len(df)
-            df_100k = df[df['close'] >= 100000]  # Only $100k+ era data
+        self._data_source = "unknown"
+        try:
+            # Try to get live data from DynamoDB Local first
+            df = await self._load_live_data_from_dynamodb()
+            self._data_source = "DynamoDB_Local"
+            logger.info(f"📊 Loaded {len(df):,} LIVE records from DynamoDB Local")
             
-            if len(df_100k) > 10000:  # If we have enough $100k+ data
-                df = df_100k
-                logger.info(f"🎯 $100k+ ERA FILTER: {pre_filter_count:,} → {len(df):,} records (pure $100k+ era)")
-            else:
-                # Fallback: Use $95k+ data if not enough $100k+ data
-                df = df[df['close'] >= 95000]
-                logger.info(f"📊 Fallback to $95k+ data: {pre_filter_count:,} → {len(df):,} records")
+        except Exception as db_error:
+            logger.warning(f"⚠️ DynamoDB Local not available: {db_error}")
+            logger.info("🔄 Falling back to parquet file (may be stale)")
+            self._data_source = "BTCUSDT_1m_complete.parquet"
+            
+            # Fallback to parquet file
+            data_file = self.data_path / "BTCUSDT_1m_2025_complete.parquet"
+            if not data_file.exists():
+                data_file = self.data_path / "processed" / "BTCUSDT_1m_complete.parquet"
+            
+            if not data_file.exists():
+                raise FileNotFoundError("No data source available - neither DynamoDB Local nor parquet files")
+            
+            df = pd.read_parquet(data_file)
+            logger.info(f"📊 Loaded {len(df):,} records from parquet file (STALE DATA WARNING)")
+            
+            # Check data freshness
+            if hasattr(df.index, 'max'):
+                latest_data = df.index.max()
+                data_age = (pd.Timestamp.now() - latest_data).days
+                if data_age > 7:
+                    logger.warning(f"⚠️ DATA FRESHNESS WARNING: Latest data is {data_age} days old!")
+                    logger.warning(f"📅 Latest data: {latest_data}, Current: {pd.Timestamp.now()}")
+                    logger.warning("🔧 Consider starting DynamoDB Local for fresh data")
         
-        logger.info(f"🚀 PROFESSIONAL FILTERING: Using {len(df):,} records from $100k+ era (Dec 2024+) - PERFECT for current $110k+ market!")
+        # DAY TRADING OPTIMIZATION: Use only RECENT data (last 3 days max)
+        # For day trading, only recent patterns are relevant - old data creates bias
+        # Current issue: $111k looks "cheap" vs $118k recent average, blocking entries
+        
+        # Strategy: Use only last 3 days of data for day trading decisions
+        cutoff_hours = 72  # 3 days = 72 hours
+        cutoff_minutes = cutoff_hours * 60  # Convert to minutes for 1m data
+        
+        pre_filter_count = len(df)
+        
+        # Keep only last 3 days of data
+        df = df.tail(cutoff_minutes)
+        
+        logger.info(f"🎯 DAY TRADING FILTER: {pre_filter_count:,} → {len(df):,} records (last {cutoff_hours}h only)")
+        logger.info(f"📊 Date range after filter: {df.index.min()} to {df.index.max()}")
+        
+        # Verify we have recent price context
+        if 'close' in df.columns and len(df) > 0:
+            recent_price_range = f"${df['close'].min():,.0f} - ${df['close'].max():,.0f}"
+            recent_price_mean = df['close'].mean()
+            logger.info(f"🚀 DAY TRADING CONTEXT: Price range {recent_price_range}, mean ${recent_price_mean:,.0f}")
+        
+        logger.info(f"✅ OPTIMIZED FOR DAY TRADING: Using only {len(df):,} records from last {cutoff_hours} hours")
         
         # Pre-calculate price ranges
         await self._calculate_price_ranges(df)
@@ -236,6 +259,59 @@ class HistoricalMarketContextService:
         await self._calculate_volatility_percentiles(df)
         
         logger.info("✅ Historical data pre-calculation completed")
+    
+    async def _load_live_data_from_dynamodb(self) -> pd.DataFrame:
+        """Load live data from DynamoDB Local for fresh historical context"""
+        try:
+            # Import DynamoDB client directly
+            from app.backend.core.database import DynamoDBClient
+            
+            # Get DynamoDB client
+            db_client = DynamoDBClient()
+            
+            # Get last 3 days of 1-minute candles (4320 records)
+            hours_back = 72  # 3 days
+            minutes_back = hours_back * 60
+            
+            # Query recent candles from DynamoDB Local
+            logger.info(f"📡 Querying last {hours_back}h ({minutes_back} minutes) from DynamoDB Local...")
+            
+            # Get candles from live_candles table
+            candles = db_client.scan_table('live_candles')
+            
+            if not candles or len(candles) < 100:
+                raise ValueError(f"Insufficient live data: {len(candles) if candles else 0} candles")
+            
+            # Convert to DataFrame
+            df_data = []
+            for candle in candles:
+                # Convert timestamp from milliseconds to seconds if needed
+                timestamp = candle['timestamp']
+                if isinstance(timestamp, (int, str)) and len(str(timestamp)) == 13:
+                    # Timestamp is in milliseconds, convert to seconds
+                    timestamp = int(timestamp) / 1000
+                
+                df_data.append({
+                    'timestamp': pd.to_datetime(timestamp, unit='s'),
+                    'open': float(candle['open']),
+                    'high': float(candle['high']),
+                    'low': float(candle['low']),
+                    'close': float(candle['close']),
+                    'volume': float(candle['volume'])
+                })
+            
+            df = pd.DataFrame(df_data)
+            df.set_index('timestamp', inplace=True)
+            df.sort_index(inplace=True)
+            
+            logger.info(f"✅ LIVE DATA: {len(df)} candles from {df.index.min()} to {df.index.max()}")
+            logger.info(f"📊 LIVE PRICE RANGE: ${df['close'].min():,.0f} - ${df['close'].max():,.0f}")
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"Failed to load live data from DynamoDB: {e}")
+            raise
     
     async def _calculate_price_ranges(self, df: pd.DataFrame):
         """Calculate price ranges for different time periods"""
@@ -740,8 +816,10 @@ class HistoricalMarketContextService:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "records_processed": len(self.price_ranges),
             "patterns_calculated": len(self.pattern_success_rates),
-            "data_source": "BTCUSDT_1m_complete.parquet",
-            "version": "1.0.0"
+            "data_source": getattr(self, '_data_source', "unknown"),
+            "version": "2.0.0",  # Updated for day trading optimization
+            "optimization": "day_trading_3h_window",
+            "cutoff_hours": 72
         }
         
         metadata_file = self.cache_path / "cache_metadata.json"

@@ -1177,36 +1177,162 @@ def _add_performance_method():
 _add_performance_method()
 
 def get_performance_metrics_standalone(self) -> Dict[str, Any]:
-        """Get comprehensive performance metrics"""
+    """Get comprehensive performance metrics"""
+    try:
+        total_requests = sum(m.message_count for m in self.metrics.values())
+        total_errors = sum(m.error_count for m in self.metrics.values())
+        
+        # Calculate cache hit rate
+        cache_requests = len(self.live_data_cache) + sum(len(cache) for cache in self.candle_cache.values())
+        cache_hit_rate = (cache_requests / max(total_requests, 1)) * 100
+        
+        # Calculate error rate
+        error_rate = (total_errors / max(total_requests, 1)) * 100
+        
+        return {
+            "rest_requests": total_requests,
+            "cache_hits": cache_requests,
+            "error_rate": round(error_rate, 2),
+            "circuit_breakers": {
+                name: {
+                    "state": cb.state,
+                    "failure_count": cb.failure_count,
+                    "threshold": cb.failure_threshold
+                }
+                for name, cb in self.circuit_breakers.items()
+            },
+            "connections": {
+                name: state.value for name, state in self.ws_state.items()
+            },
+            "uptime_seconds": time.time() - self.metrics.get("client", ConnectionMetrics()).connect_time
+        }
+        
+    except Exception as e:
+        logger.error(f"Performance metrics calculation failed: {e}")
+        return {"error": str(e)}
+
+    # --- Trading (Signed REST) -------------------------------------------------
+    async def _sign_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Sign params for Binance REST using HMAC-SHA256."""
         try:
-            total_requests = sum(m.message_count for m in self.metrics.values())
-            total_errors = sum(m.error_count for m in self.metrics.values())
-            
-            # Calculate cache hit rate
-            cache_requests = len(self.live_data_cache) + sum(len(cache) for cache in self.candle_cache.values())
-            cache_hit_rate = (cache_requests / max(total_requests, 1)) * 100
-            
-            # Calculate error rate
-            error_rate = (total_errors / max(total_requests, 1)) * 100
-            
-            return {
-                "rest_requests": total_requests,
-                "cache_hits": cache_requests,
-                "error_rate": round(error_rate, 2),
-                "circuit_breakers": {
-                    name: {
-                        "state": cb.state,
-                        "failure_count": cb.failure_count,
-                        "threshold": cb.failure_threshold
-                    }
-                    for name, cb in self.circuit_breakers.items()
-                },
-                "connections": {
-                    name: state.value for name, state in self.ws_state.items()
-                },
-                "uptime_seconds": time.time() - self.metrics.get("client", ConnectionMetrics()).connect_time
-            }
-            
+            import hmac, hashlib, time
+            from urllib.parse import urlencode
+            params = dict(params)
+            params["timestamp"] = int(time.time() * 1000)
+            query = urlencode(params, doseq=True)
+            signature = hmac.new(self.secret_key.encode("utf-8"), query.encode("utf-8"), hashlib.sha256).hexdigest()
+            params["signature"] = signature
+            return params
         except Exception as e:
-            logger.error(f"Performance metrics calculation failed: {e}")
-            return {"error": str(e)}
+            raise RuntimeError(f"Signing failed: {e}")
+
+    def _rest_base_url(self) -> str:
+        from app.backend.core.config import get_settings
+        s = get_settings()
+        if s.BINANCE_TESTNET:
+            return "https://testnet.binance.vision/api"
+        return "https://api.binance.com/api"
+
+    async def place_order(self,
+                          symbol: str,
+                          side: str,
+                          order_type: str,
+                          quantity: Optional[str] = None,
+                          quote_order_qty: Optional[str] = None,
+                          price: Optional[str] = None,
+                          time_in_force: Optional[str] = None,
+                          new_client_order_id: Optional[str] = None,
+                          recv_window: int = 5000) -> Dict[str, Any]:
+        """Place an order on Binance (MARKET/LIMIT). Quantity must be provided as string.
+        Supports either quantity or quoteOrderQty for MARKET orders."""
+        try:
+            if not self.rest_session:
+                await self._init_rest_session()
+            headers = {"X-MBX-APIKEY": self.api_key or ""}
+            params: Dict[str, Any] = {
+                "symbol": symbol,
+                "side": side.upper(),
+                "type": order_type.upper(),
+                "recvWindow": recv_window,
+            }
+            if new_client_order_id:
+                params["newClientOrderId"] = new_client_order_id
+            if time_in_force and order_type.upper() == "LIMIT":
+                params["timeInForce"] = time_in_force
+            if price and order_type.upper() == "LIMIT":
+                params["price"] = price
+            if quantity:
+                params["quantity"] = quantity
+            if quote_order_qty:
+                params["quoteOrderQty"] = quote_order_qty
+            signed = await self._sign_params(params)
+            url = f"{self._rest_base_url()}/v3/order"
+            async with self.rest_session.post(url, params=signed, headers=headers, timeout=15) as resp:
+                data = await resp.json()
+                if resp.status >= 400:
+                    raise RuntimeError(f"Order failed {resp.status}: {data}")
+                return data
+        except Exception as e:
+            logger.error(f"place_order error: {e}")
+            raise
+
+    async def cancel_order(self, symbol: str, order_id: Optional[int] = None, client_order_id: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            if not self.rest_session:
+                await self._init_rest_session()
+            headers = {"X-MBX-APIKEY": self.api_key or ""}
+            params: Dict[str, Any] = {"symbol": symbol}
+            if order_id is not None:
+                params["orderId"] = order_id
+            if client_order_id is not None:
+                params["origClientOrderId"] = client_order_id
+            signed = await self._sign_params(params)
+            url = f"{self._rest_base_url()}/v3/order"
+            async with self.rest_session.delete(url, params=signed, headers=headers, timeout=10) as resp:
+                data = await resp.json()
+                if resp.status >= 400:
+                    raise RuntimeError(f"Cancel failed {resp.status}: {data}")
+                return data
+        except Exception as e:
+            logger.error(f"cancel_order error: {e}")
+            raise
+
+    async def get_order(self, symbol: str, order_id: Optional[int] = None, client_order_id: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            if not self.rest_session:
+                await self._init_rest_session()
+            headers = {"X-MBX-APIKEY": self.api_key or ""}
+            params: Dict[str, Any] = {"symbol": symbol}
+            if order_id is not None:
+                params["orderId"] = order_id
+            if client_order_id is not None:
+                params["origClientOrderId"] = client_order_id
+            signed = await self._sign_params(params)
+            url = f"{self._rest_base_url()}/v3/order"
+            async with self.rest_session.get(url, params=signed, headers=headers, timeout=10) as resp:
+                data = await resp.json()
+                if resp.status >= 400:
+                    raise RuntimeError(f"Get order failed {resp.status}: {data}")
+                return data
+        except Exception as e:
+            logger.error(f"get_order error: {e}")
+            raise
+
+    async def get_open_orders(self, symbol: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            if not self.rest_session:
+                await self._init_rest_session()
+            headers = {"X-MBX-APIKEY": self.api_key or ""}
+            params: Dict[str, Any] = {}
+            if symbol:
+                params["symbol"] = symbol
+            signed = await self._sign_params(params)
+            url = f"{self._rest_base_url()}/v3/openOrders"
+            async with self.rest_session.get(url, params=signed, headers=headers, timeout=10) as resp:
+                data = await resp.json()
+                if resp.status >= 400:
+                    raise RuntimeError(f"Get open orders failed {resp.status}: {data}")
+                return data
+        except Exception as e:
+            logger.error(f"get_open_orders error: {e}")
+            raise

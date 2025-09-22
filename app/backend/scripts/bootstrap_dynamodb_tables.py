@@ -147,7 +147,8 @@ def bootstrap_all_tables():
         schemas.get_message_deliveries_schema(),
         schemas.get_announcements_schema(),
         schemas.get_user_notification_preferences_schema(),
-        schemas.get_notification_templates_schema()
+        schemas.get_notification_templates_schema(),
+        TableSchemas.get_health_checks_schema()
     ]
     
     success_count = 0

@@ -112,12 +112,12 @@ class IntelligentExitEngine:
         self.current_mode = "scalping"  # NEW: Set scalping as default
         self.mode_parameters = {
             "day": {
-                "consensus_threshold": 0.60,  # DAY TRADING: Lower consensus for quicker exits (60%)
+                "consensus_threshold": 0.45,  # DAY TRADING: AGGRESSIVE - 45% consensus for quick exits
                 "atr_k": 2.0,                 # DAY TRADING: Tighter trailing stop for quick profits
                 "time_multiplier": 1.5        # DAY TRADING: 1.5x duration = 45 minutes max
             },
             "scalping": {
-                "consensus_threshold": 0.40,  # SCALPING: Quick exits (was 0.35)
+                "consensus_threshold": 0.50,  # SCALPING: MODERATE - 50% consensus (was 35%)
                 "atr_k": 1.5,                 # SCALPING: Tight trailing stop (was 1.2)
                 "time_multiplier": 0.6        # SCALPING: 60% of position duration = ~9 minutes
             }
@@ -141,13 +141,10 @@ class IntelligentExitEngine:
         logger.info("🧠 Intelligent Exit Engine initialized")
     
     async def _get_current_trading_mode(self) -> str:
-        """Get current trading mode from day trading engine"""
-        try:
-            from app.backend.services.day_trading_engine import get_day_trading_engine
-            engine = await get_day_trading_engine()
-            return engine.current_mode.value
-        except Exception:
-            return "day"  # Default mode - DAY TRADING ONLY
+        """Get current trading mode - USE DAY TRADING MODE for balanced exits"""
+        # USE DAY TRADING MODE for balanced exits with proper Bitcoin volatility tolerance
+        # This ensures 45% consensus threshold instead of 35% (scalping mode)
+        return "day"  # BALANCED: Use day trading mode for Bitcoin volatility tolerance
     
     async def _get_mode_parameters(self) -> Dict[str, Any]:
         """Get parameters for current trading mode"""
@@ -811,7 +808,7 @@ class IntelligentExitEngine:
                 from app.backend.services.live_market_data import get_live_market_data
                 live_data = await get_live_market_data()
                 
-                # Build feature set for model (8 features - exclude price_change_24h)
+                # Build feature set for model (EXACTLY 8 features for reversal model)
                 features_dict = {
                     "close": current_price,
                     "volume": live_data.get("volume", 1000000),
@@ -821,13 +818,25 @@ class IntelligentExitEngine:
                     "volatility": live_data.get("volatility", 0.02),
                     "trend_strength": live_data.get("trend_strength", 0.0),
                     "volume_ratio": live_data.get("volume_ratio", 1.0)
-                    # REMOVED: price_change_24h - model expects 8 features
+                    # CRITICAL: NO price_change_24h - reversal model expects exactly 8 features
                 }
                 
-                # Use feature schema for exact model compatibility
-                from app.backend.core.feature_schema import make_X_live
-                feature_df = make_X_live(features_dict)
-                feature_array = feature_df.values
+                # FIXED: Use direct feature array creation to avoid extra features
+                from app.backend.services.feature_specification import FeatureRegistry
+                feature_registry = FeatureRegistry()
+                
+                # Get EXACT 8-feature order for reversal model
+                reversal_feature_order = [
+                    "close", "volume", "rsi", "macd", 
+                    "bb_position", "volatility", "trend_strength", "volume_ratio"
+                ]
+                
+                # Create feature array in exact order (8 features only)
+                feature_array = np.array([
+                    features_dict[feature] for feature in reversal_feature_order
+                ], dtype=np.float32).reshape(1, -1)
+                
+                logger.debug(f"🔍 REVERSAL MODEL: Feature array shape: {feature_array.shape} (expecting: (1, 8))")
 
                 # Get raw prediction and apply adaptive confidence calibration
                 raw_proba = self.models["reversal"].predict_proba(feature_array)[0][1]
@@ -853,29 +862,53 @@ class IntelligentExitEngine:
                 bollinger_position = market_data.get("bb_position", 0.5)
                 reversal_prob = 0.5  # Default for fallback
         
-            # Calculate reversal signals
+            # Calculate reversal signals - ENHANCED FOR BITCOIN TOPS
             reversal_signals = 0
-            if rsi > 70:  # Overbought
+            
+            # RSI Analysis (Bitcoin overbought detection)
+            if rsi > 75:  # EXTREME overbought - Bitcoin at top!
+                reversal_signals += 2  # Strong signal
+            elif rsi > 70:  # Standard overbought
                 reversal_signals += 1
-            elif rsi < 30:  # Oversold
+            elif rsi < 30:  # Oversold (good buy opportunity)
                 reversal_signals -= 1
                 
-            if macd < 0:  # Bearish MACD
+            # MACD Analysis (momentum change detection)
+            if macd < -0.01:  # Strong bearish MACD - momentum turning down
+                reversal_signals += 2
+            elif macd < 0:  # Bearish MACD
                 reversal_signals += 1
             
-            if bollinger_position > 0.8:  # Near upper band
+            # Bollinger Bands (price extreme detection)
+            if bollinger_position > 0.85:  # VERY near upper band - extreme top!
+                reversal_signals += 2
+            elif bollinger_position > 0.8:  # Near upper band
                 reversal_signals += 1
             elif bollinger_position < 0.2:  # Near lower band
                 reversal_signals -= 1
+                
+            # Volume Analysis (distribution at tops)
+            volume_ratio = features_dict.get("volume_ratio", 1.0) if 'reversal' in self.models else market_data.get("volume_ratio", 1.0)
+            if volume_ratio > 1.5 and rsi > 70:  # High volume + overbought = distribution!
+                reversal_signals += 2
+                logger.info(f"📊 HIGH VOLUME DISTRIBUTION DETECTED: Vol ratio={volume_ratio:.1f}, RSI={rsi:.1f}")
             
-            # Determine recommendation
-            if reversal_signals >= 2:
+            # Determine recommendation - BALANCED FOR BITCOIN VOLATILITY
+            if reversal_signals >= 4:  # Very strong reversal signal - IMMEDIATE EXIT!
                 recommendation = "exit"
-                confidence = 0.7
-            elif reversal_signals <= -2:
+                confidence = 0.9
+                logger.info(f"🚨 VERY STRONG REVERSAL DETECTED: {reversal_signals} signals - IMMEDIATE EXIT!")
+            elif reversal_signals >= 3:  # Strong reversal signal - EXIT
+                recommendation = "exit"
+                confidence = 0.75
+                logger.info(f"🔴 STRONG REVERSAL DETECTED: {reversal_signals} signals - EXIT!")
+            elif reversal_signals >= 2:  # Medium reversal signal - consider exit
+                recommendation = "exit"
+                confidence = 0.6
+            elif reversal_signals <= -2:  # Strong bullish signal
                 recommendation = "hold"
-                confidence = 0.7
-            else:
+                confidence = 0.8
+            else:  # Neutral
                 recommendation = "hold"
                 confidence = 0.4
             
@@ -1004,40 +1037,51 @@ class IntelligentExitEngine:
         volume = market_data.get("volume", 1000)
         avg_volume = market_data.get("avg_volume", 1000)
         time_of_day = datetime.now().hour
+        volatility = market_data.get("volatility", 0.02)  # Current volatility
         
         # DAY TRADING: Optimized timing factors for quick profits
         high_volume = volume > avg_volume * 1.1  # Lower volume threshold
+        high_volatility = volatility > 0.015  # High volatility = exit opportunities
+        extreme_volatility = volatility > 0.03  # Extreme volatility = immediate exit
         market_hours = True  # Bitcoin trades 24/7 - always market hours
-        position_mature = position_age > 0.5  # DAY TRADING: 30 minutes = mature
+        position_mature = position_age > 0.17  # DAY TRADING: 10 minutes = mature (scalping)
         
-        # DAY TRADING: Optimized for $500 profit targets (0.8% take profit)
-        excellent_profit = current_pnl_pct > 0.8  # 0.8%+ = target profit reached ($500)
-        good_profit = current_pnl_pct > 0.6      # 0.6%+ = good profit, consider exit
-        small_profit = current_pnl_pct > 0.3     # 0.3%+ = take small profits quickly  
-        stop_loss_hit = current_pnl_pct < -1.0   # 1.0% stop loss (matching entry engine)
-        profitable = current_pnl_pct > 0.0       # Any profit at all
+        # DAY TRADING: AGGRESSIVE SCALPING - więcej trades, mniejsze zyski
+        excellent_profit = current_pnl_pct > 0.4  # 0.4%+ = quick profit target ($240-300)
+        good_profit = current_pnl_pct > 0.25     # 0.25%+ = good profit, exit quickly
+        small_profit = current_pnl_pct > 0.15    # 0.15%+ = take any profit fast
+        stop_loss_hit = current_pnl_pct < -1.5   # 1.5% stop loss (wider for Bitcoin volatility)
+        profitable = current_pnl_pct > 0.05      # 0.05%+ = any profit counts in scalping
         
-        # DAY TRADING: Aggressive exit logic for quick profits
-        if excellent_profit and high_volume:
+        # DAY TRADING: AGGRESSIVE SCALPING EXIT LOGIC WITH VOLATILITY
+        if extreme_volatility and profitable:  # High volatility + any profit = EXIT NOW!
             recommendation = "exit"
-            confidence = 0.9
-            timing_score = 0.95
-        elif good_profit and position_mature:  # 30+ minutes with good profit
-            recommendation = "exit"
-            confidence = 0.8
-            timing_score = 0.85
-        elif small_profit and position_age > 1.0:  # 1+ hour with any profit
-            recommendation = "exit"
-            confidence = 0.7
-            timing_score = 0.75
-        elif stop_loss_hit:  # Stop loss for day trading
+            confidence = 0.98
+            timing_score = 0.98
+        elif excellent_profit:  # 0.4%+ profit = immediate exit
             recommendation = "exit"
             confidence = 0.95
+            timing_score = 0.95
+        elif good_profit and (position_mature or high_volatility):  # 0.25%+ profit + conditions
+            recommendation = "exit"
+            confidence = 0.9
             timing_score = 0.9
+        elif small_profit and (position_age > 0.33 or high_volatility):  # 0.15%+ profit + conditions
+            recommendation = "exit"
+            confidence = 0.85
+            timing_score = 0.8
+        elif profitable and position_age > 0.5:  # Any profit after 30 minutes
+            recommendation = "exit"
+            confidence = 0.8
+            timing_score = 0.75
+        elif stop_loss_hit:  # 1.5% stop loss hit
+            recommendation = "exit"
+            confidence = 0.98
+            timing_score = 0.95
         else:
             recommendation = "hold"
-            confidence = 0.4
-            timing_score = 0.3
+            confidence = 0.3
+            timing_score = 0.2
         
         return {
             "recommendation": recommendation,
@@ -1049,7 +1093,7 @@ class IntelligentExitEngine:
             "market_hours": market_hours,
             "position_mature": position_mature,
             "profitable": profitable,
-            "reasoning": f"Timing score: {timing_score:.1f}, PnL: {current_pnl_pct:+.1f}%, Age: {position_age:.1f}h"
+            "reasoning": f"Timing score: {timing_score:.1f}, PnL: {current_pnl_pct:+.1f}%, Age: {position_age:.1f}h, Vol: {volatility:.1%}"
         }
     
     async def _calculate_exit_consensus(self, layer_results: Dict[str, Any]) -> Dict[str, Any]:
@@ -1130,6 +1174,23 @@ class IntelligentExitEngine:
             "severity": "normal"
         }
         
+        # VOLATILITY-BASED EMERGENCY EXIT - DISABLED FOR BITCOIN
+        # Bitcoin is naturally volatile (2-5%), so we disable aggressive volatility exits
+        # Only trigger on EXTREME volatility (>10%) with significant losses
+        try:
+            volatility = market_data.get("volatility", 0.02)
+            current_pnl_pct = ((current_price - entry_price) / entry_price) * 100
+            
+            # Only exit on EXTREME volatility + significant loss (Bitcoin crash scenario)
+            if volatility > 0.10 and current_pnl_pct < -2.0:  # 10% volatility + 2% loss
+                emergency_conditions["emergency_exit"] = True
+                emergency_conditions["reasons"].append("extreme_volatility_crash_protection")
+                emergency_conditions["severity"] = "critical"
+                logger.critical(f"🌪️ EXTREME VOLATILITY CRASH: Vol={volatility:.1%}, PnL={current_pnl_pct:+.2f}%")
+                
+        except Exception as e:
+            logger.debug(f"Volatility emergency check failed: {e}")
+        
         # Check stop loss
         if stop_loss:
             if position_type == "LONG" and current_price <= stop_loss:
@@ -1161,7 +1222,7 @@ class IntelligentExitEngine:
         
         # Check extreme loss - DAY TRADING: More tolerant for Bitcoin volatility
         pnl_pct = self._calculate_pnl_percentage(position_data, current_price)
-        if pnl_pct < -10.0:  # DAY TRADING: 10% loss tolerance for Bitcoin volatility
+        if pnl_pct < -5.0:  # DAY TRADING: 5% loss tolerance for Bitcoin volatility (was 10%)
             emergency_conditions["emergency_exit"] = True
             emergency_conditions["reasons"].append("extreme_loss")
             emergency_conditions["severity"] = "critical"

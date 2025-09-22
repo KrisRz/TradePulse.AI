@@ -1,0 +1,887 @@
+2025-09-22 17:47:29 [info     ] ENV loaded                     path=/Applications/Projects/TradePulse.AI/.env
+2025-09-22 17:47:29 [info     ] ENV loaded                     path=/Applications/Projects/TradePulse.AI/app/backend/config/development.env
+SignalProcessor not available
+signal_performance_tracker not available
+ai_vs_random_tracker not available
+pattern_learning_engine not available
+user_performance_showcase not available
+model_performance_metrics not available
+portfolio_manager not available
+model_loader not available
+user_management_service not available
+user_analytics_service not available
+audit_compliance_service not available
+communication_service not available
+portfolio_showcase_engine not available
+VirtualPortfolioManager not available - using placeholder
+2025-09-22 17:47:31 [info     ] Registered health check: database
+2025-09-22 17:47:31 [info     ] Registered health check: memory
+2025-09-22 17:47:31 [info     ] Registered health check: disk
+2025-09-22 17:47:31 [info     ] Registered health check: cpu
+2025-09-22 17:47:31 [info     ] 🔄 PIPELINE DEBUG: Connections check disabled (macOS permissions)
+2025-09-22 17:47:32 [info     ] Using DynamoDB Local on http://localhost:8000 with optimized connection pooling
+2025-09-22 17:47:32 [info     ] ✅ DynamoDB connection verified
+2025-09-22 17:47:32 [debug    ] 🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test
+2025-09-22 17:47:32 [debug    ] 🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test
+2025-09-22 17:47:32 [debug    ] 🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test
+2025-09-22 17:47:32 [debug    ] 🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test
+2025-09-22 17:47:32 [debug    ] 🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test
+2025-09-22 17:47:32 [debug    ] 🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test
+🔥 DEBUG: real_trading.py module is being imported!
+2025-09-22 17:47:32 [debug    ] 🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test
+2025-09-22 17:47:32 [debug    ] 🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test
+2025-09-22 17:47:32 [info     ] 🔧 Registering core services in DI container
+2025-09-22 17:47:32 [debug    ] Registered singleton service: settings
+2025-09-22 17:47:32 [debug    ] Registered singleton service: database_client
+2025-09-22 17:47:32 [debug    ] Registered singleton service: database_manager
+2025-09-22 17:47:32 [debug    ] Registered singleton service: tensorflow_async_service
+2025-09-22 17:47:32 [info     ] ✅ Core services registered
+{"event": "\ud83d\ude80 Creating TradePulse.AI Enterprise Application", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.280146Z"}
+{"event": "\ud83d\udd27 Configuring middleware", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.280299Z"}
+{"event": "\u2705 Prometheus metrics middleware enabled", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.280337Z"}
+{"event": "\u2705 Middleware configured", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.280358Z"}
+{"event": "\ud83d\udd27 Configuring error handlers", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.280376Z"}
+{"event": "\u2705 Error handlers configured", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.280399Z"}
+{"event": "\ud83d\udd27 Configuring API routes", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.280415Z"}
+{"event": "\ud83d\udd27 Creating API router with all existing routes", "logger": "app.backend.presentation.api.router", "level": "info", "timestamp": "2025-09-22T16:47:32.280458Z"}
+{"event": "\u2705 API router created with all existing routes preserved", "logger": "app.backend.presentation.api.router", "level": "info", "timestamp": "2025-09-22T16:47:32.321409Z"}
+{"event": "\u2705 API routes configured", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.354637Z"}
+{"event": "Registered singleton service: session_aware_trading_engine", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:32.354940Z"}
+{"event": "Registered singleton service: brain_controller", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:32.354972Z"}
+{"event": "Registered singleton service: continuous_learning_engine", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:32.354993Z"}
+{"event": "\u2705 TradePulse.AI Application created successfully", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.355028Z"}
+{"event": "\ud83d\ude80 Starting TradePulse.AI Enterprise Backend - PROFESSIONAL LIVE DATA MODE", "logger": "__main__", "level": "info", "timestamp": "2025-09-22T16:47:32.355054Z"}
+{"event": "\ud83c\udfaf Target: Real-time Bitcoin analysis with professional AI models", "logger": "__main__", "level": "info", "timestamp": "2025-09-22T16:47:32.355082Z"}
+{"event": "\ud83e\udd16 AUTO-START: All trading engines will start automatically", "logger": "__main__", "level": "info", "timestamp": "2025-09-22T16:47:32.355099Z"}
+====================================================================================================
+🔥 TRADEPULSE.AI PIPELINE DEBUG - COMPREHENSIVE COMPONENT TRACKING
+====================================================================================================
+🎯 Application: TradePulse.AI Enterprise Backend v1.0.0
+🎯 Mode: Professional Live Data Mode (NO MOCKS/FALLBACKS)
+🎯 Startup Time: 2025-09-22T16:47:32.279863+00:00
+🎯 Registered Components: 8
+====================================================================================================
+📊 PIPELINE ARCHITECTURE:
+  🧠 BRAIN Controller → FSM Orchestrator (INIT→WARMUP→RUNNING→HALT→COOLDOWN)
+  🤖 Enterprise Trading Engine → 6-Layer AI Signal Generation
+  📈 Intelligent Entry Engine → Entry Point Optimization
+  📉 Intelligent Exit Engine → Position Exit Management
+  🎯 Day Trading Engine → High-Frequency Coordination
+  📊 Live Market Data Service → Real-time WebSocket Streaming
+  🛡️ Dynamic Risk Manager → Risk Assessment & Controls
+  🚨 Emergency Control System → Safety & Circuit Breakers
+====================================================================================================
+🚀 Starting uvicorn on 0.0.0.0:9002
+🔧 App module: main:app
+🔧 Working directory: /Applications/Projects/TradePulse.AI/app/backend
+🤖 AUTO-START: Day Trading + Brain Controller will start automatically
+📊 PIPELINE DEBUG: Registered component 'BRAIN Controller' (brain_controller)
+📊 PIPELINE DEBUG: Registered component 'Enterprise Trading Engine' (enterprise_engine)
+📊 PIPELINE DEBUG: Registered component 'Intelligent Entry Engine' (entry_engine)
+📊 PIPELINE DEBUG: Registered component 'Intelligent Exit Engine' (exit_engine)
+📊 PIPELINE DEBUG: Registered component 'Day Trading Engine' (day_trading_engine)
+📊 PIPELINE DEBUG: Registered component 'Live Market Data Service' (market_data)
+📊 PIPELINE DEBUG: Registered component 'Dynamic Risk Manager' (risk_manager)
+📊 PIPELINE DEBUG: Registered component 'Emergency Control System' (emergency_controls)
+{"event": "\ud83d\ude80 Creating TradePulse.AI Enterprise Application", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.384576Z"}
+{"event": "\ud83d\udd27 Configuring middleware", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.384655Z"}
+{"event": "\u2705 Prometheus metrics middleware enabled", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.384691Z"}
+{"event": "\u2705 Middleware configured", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.384709Z"}
+{"event": "\ud83d\udd27 Configuring error handlers", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.384735Z"}
+{"event": "\u2705 Error handlers configured", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.384753Z"}
+{"event": "\ud83d\udd27 Configuring API routes", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.384769Z"}
+{"event": "\ud83d\udd27 Creating API router with all existing routes", "logger": "app.backend.presentation.api.router", "level": "info", "timestamp": "2025-09-22T16:47:32.384785Z"}
+{"event": "\u2705 API router created with all existing routes preserved", "logger": "app.backend.presentation.api.router", "level": "info", "timestamp": "2025-09-22T16:47:32.419477Z"}
+{"event": "\u2705 API routes configured", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.452360Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service session_aware_trading_engine already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:32.452601Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service brain_controller already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:32.452669Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service continuous_learning_engine already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:32.452703Z"}
+{"event": "\u2705 TradePulse.AI Application created successfully", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.452746Z"}
+INFO:     Started server process [5439]
+INFO:     Waiting for application startup.
+{"event": "\ud83d\udee1\ufe0f Configuring log filtering...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.452985Z"}
+🛡️ Log filtering configured
+🔧 Development mode: Minimal log redaction
+{"event": "\u2705 Log filtering configured", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.453952Z"}
+{"event": "\ud83d\udd27 Ensuring required database tables exist...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.453973Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:32.454022Z"}
+{"event": "\u274c Error ensuring required tables: 'TableSchemas' object has no attribute 'get_learning_engine_state_schema'", "logger": "app.backend.core.database", "level": "error", "timestamp": "2025-09-22T16:47:32.454086Z"}
+{"event": "\u274c Some database tables could not be created", "logger": "app.backend.core.application", "level": "error", "timestamp": "2025-09-22T16:47:32.454107Z"}
+{"event": "\ud83d\ude80 Starting enterprise engine initialization (with completion tracking)...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.454123Z"}
+🔍 DEBUG: Running engine initialization with completion tracking
+{"event": "\ud83d\ude80 PHASE 1: Adding Enterprise Trading Engine...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.454184Z"}
+{"event": "Registered singleton service: enterprise_trading_engine", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:32.454235Z"}
+🧠 Initializing Enterprise Trading Engine...
+📊 PIPELINE DEBUG: Enterprise Trading Engine - Starting initialization sequence
+🎯 PIPELINE DEBUG: Enterprise Trading Engine - Component: Enterprise Trading Engine v1.0.0
+🎯 PIPELINE DEBUG: Enterprise Trading Engine - Purpose: 6-Layer AI signal generation
+🤖 PIPELINE DEBUG: Enterprise Trading Engine - Loading 6-layer AI models...
+✅ Feature scalers loaded for professional deployment
+🔄 Loading Layer 1 (Market Regime) (priority 1)...
+Legacy model format detected: /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/layer_1_regime.pkl
+✅ Layer 1 (Market Regime) loaded (legacy format): XGBClassifier
+🔄 Loading Layer 3 (Reversal Detection) (priority 3)...
+Legacy model format detected: /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/layer_3_reversal.pkl
+✅ Layer 3 (Reversal Detection) loaded (legacy format): LGBMClassifier
+🔄 Loading Layer 4 (Technical Filters) (priority 4)...
+Legacy model format detected: /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/layer_4_filters.pkl
+✅ Layer 4 (Technical Filters) loaded (legacy format): RandomForestClassifier
+🔄 Loading Layer 5 (Confidence Scoring) (priority 5)...
+Legacy model format detected: /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/layer_5_confidence.pkl
+✅ Layer 5 (Confidence Scoring) loaded (legacy format): XGBRegressor
+🔄 Loading Layer 6 (Adaptive Timing) (priority 6)...
+Legacy model format detected: /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/layer_6_timing.pkl
+✅ Layer 6 (Adaptive Timing) loaded (legacy format): LGBMRegressor
+⚠️ LSTM model loading temporarily disabled to prevent recursion
+📝 Classical models (Layers 1,3,4,5,6) are sufficient for trading
+✅ Model loading completed - 5 classical AI layers operational
+✅ Models loaded successfully, initializing market service...
+✅ PIPELINE DEBUG: Enterprise Trading Engine - AI models loaded successfully
+🔍 FEATURE_SCHEMA=67df9301 columns=9
+🔍 Schema columns: ['close', 'volume', 'rsi', 'macd', 'bb_position', 'volatility', 'trend_strength', 'volume_ratio', 'price_change_24h']
+📈 PIPELINE DEBUG: Enterprise Trading Engine - Initializing market data service...
+🚀 Starting live market data service...
+📊 PIPELINE DEBUG: Market Data Service - Starting initialization sequence
+🎯 PIPELINE DEBUG: Market Data Service - Component: Live Market Data Service v1.0.0
+🎯 PIPELINE DEBUG: Market Data Service - Purpose: Real-time market data streaming
+🗄️ PIPELINE DEBUG: Market Data Service - Pre-populating cache from database...
+🔄 Pre-populating cache from DB for LSTM...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:32.725923Z"}
+📊 Found 800 total candles in DB
+✅ Cache populated: 800 candles from DB (target: 800+)
+🎯 TARGET ACHIEVED: 800+ candles loaded for LSTM models!
+✅ PIPELINE DEBUG: Market Data Service - Cache populated from database
+📊 PIPELINE DEBUG: Market Data Service - Checking candles backfill need...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:32.741715Z"}
+📊 PIPELINE DEBUG: Sufficient candles: 800/800
+✅ PIPELINE DEBUG: Market Data Service - Backfill check completed
+📈 PIPELINE DEBUG: Market Data Service - Starting ticker stream...
+✅ PIPELINE DEBUG: Market Data Service - Ticker stream started
+✅ Live market data service started
+✅ Market data service initialized
+✅ PIPELINE DEBUG: Enterprise Trading Engine - Market data service connected
+🎯 PIPELINE DEBUG: Enterprise Trading Engine - READY FOR OPERATIONS
+🎯 PIPELINE DEBUG: Enterprise Trading Engine - Status: INITIALIZED & OPERATIONAL
+✅ Enterprise Trading Engine initialized successfully
+{"event": "\u2705 Enterprise Trading Engine initialized successfully", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.756146Z"}
+{"event": "\u2705 PHASE 1 COMPLETE: Enterprise Trading Engine ready", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:32.756177Z"}
+📡 Connecting to ticker stream: btcusdt@ticker (attempt 1)
+= connection is CONNECTING
+📊 PIPELINE DEBUG: Added subscription for kline_1m
+📡 Connecting to candle stream: btcusdt@kline_1m (attempt 1)
+= connection is CONNECTING
+> GET /ws/btcusdt@kline_1m HTTP/1.1
+> Host: stream.binance.com:9443
+> Upgrade: websocket
+> Connection: Upgrade
+> Sec-WebSocket-Key: qSj+/lzlv3THm1CUkyZCwQ==
+> Sec-WebSocket-Version: 13
+> Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits
+> User-Agent: Python/3.11 websockets/15.0.1
+> GET /ws/btcusdt@ticker HTTP/1.1
+> Host: stream.binance.com:9443
+> Upgrade: websocket
+> Connection: Upgrade
+> Sec-WebSocket-Key: zaJsab8GcnD9UIGVBITGAw==
+> Sec-WebSocket-Version: 13
+> Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits
+> User-Agent: Python/3.11 websockets/15.0.1
+< HTTP/1.1 101 Switching Protocols
+< Date: Mon, 22 Sep 2025 16:47:33 GMT
+< Connection: upgrade
+< Upgrade: websocket
+< Sec-WebSocket-Accept: LXc8YmSiHQ1Zeih6cNuicM+JBMY=
+< Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_max_window_bits=15
+= connection is OPEN
+✅ Candle stream connected (1m)
+< HTTP/1.1 101 Switching Protocols
+< Date: Mon, 22 Sep 2025 16:47:33 GMT
+< Connection: upgrade
+< Upgrade: websocket
+< Sec-WebSocket-Accept: n3xdKOnBc03+Ebo5VT43vYpYr4c=
+< Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_max_window_bits=15
+= connection is OPEN
+➕ Added WebSocket subscription: ticker_BTCUSDT
+✅ Ticker stream connected
+< TEXT '{"e":"24hrTicker","E":1758559654022,"s":"BTCUSD...5249291626,"n":2830248}' [436 bytes]
+< TEXT '{"e":"kline","E":1758559654029,"s":"BTCUSDT","k...241.64206120","B":"0"}}' [332 bytes]
+📊 Processed ticker update: $112767.52000000
+{"event": "\ud83d\ude80 PHASE 2: Adding Day Trading Engine...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:34.757457Z"}
+🚀 Day Trading Engine initialized
+{"event": "Registered singleton service: day_trading_engine", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:34.757770Z"}
+🚀 Initializing Day Trading Engine...
+📊 PIPELINE DEBUG: Day Trading Engine - Starting initialization sequence
+🎯 PIPELINE DEBUG: Day Trading Engine - Component: Day Trading Engine v1.0.0
+🎯 PIPELINE DEBUG: Day Trading Engine - Purpose: High-frequency trading coordination
+🔗 PIPELINE DEBUG: Day Trading Engine - Connecting to DI container...
+✅ PIPELINE DEBUG: Day Trading Engine - DI container connected
+🤖 PIPELINE DEBUG: Day Trading Engine - Retrieving Enterprise Engine...
+✅ Enterprise engine retrieved from DI container
+✅ PIPELINE DEBUG: Day Trading Engine - Enterprise Engine connected
+🤖 PIPELINE DEBUG: Day Trading Engine - Ensuring AI services are initialized...
+{"event": "\ud83d\udd27 Initializing TensorFlow Async Service...", "logger": "app.backend.services.tensorflow_async_service", "level": "info", "timestamp": "2025-09-22T16:47:34.758229Z"}
+{"event": "\ud83d\udd04 TensorFlow prediction worker started", "logger": "app.backend.services.tensorflow_async_service", "level": "info", "timestamp": "2025-09-22T16:47:34.758504Z"}
+{"event": "\ud83d\udcda Loading LSTM models asynchronously...", "logger": "app.backend.services.tensorflow_async_service", "level": "info", "timestamp": "2025-09-22T16:47:34.758628Z"}
+Creating converter from 3 to 5
+{"event": "Failed to load model /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/lstm_1h.h5: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 16 for '{{node sequential_1/lstm_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_1/lstm_1/strided_slice_1, sequential_1/lstm_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [16,512].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 128), dtype=float32)', 'tf.Tensor(shape=(1, 128), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "error", "timestamp": "2025-09-22T16:47:34.862380Z"}
+{"event": "\u26a0\ufe0f Failed to load lstm_1h: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 16 for '{{node sequential_1/lstm_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_1/lstm_1/strided_slice_1, sequential_1/lstm_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [16,512].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 128), dtype=float32)', 'tf.Tensor(shape=(1, 128), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "warning", "timestamp": "2025-09-22T16:47:34.862560Z"}
+{"event": "Failed to load model /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/lstm_4h.h5: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 16 for '{{node sequential_1_1/lstm_2_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_1_1/lstm_2_1/strided_slice_1, sequential_1_1/lstm_2_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [16,384].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 96), dtype=float32)', 'tf.Tensor(shape=(1, 96), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "error", "timestamp": "2025-09-22T16:47:34.920693Z"}
+{"event": "\u26a0\ufe0f Failed to load lstm_4h: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 16 for '{{node sequential_1_1/lstm_2_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_1_1/lstm_2_1/strided_slice_1, sequential_1_1/lstm_2_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [16,384].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 96), dtype=float32)', 'tf.Tensor(shape=(1, 96), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "warning", "timestamp": "2025-09-22T16:47:34.920865Z"}
+{"event": "Failed to load model /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/lstm_24h.h5: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 16 for '{{node sequential_2_1/lstm_4_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_2_1/lstm_4_1/strided_slice_1, sequential_2_1/lstm_4_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [16,256].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 64), dtype=float32)', 'tf.Tensor(shape=(1, 64), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "error", "timestamp": "2025-09-22T16:47:34.977172Z"}
+{"event": "\u26a0\ufe0f Failed to load lstm_24h: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 16 for '{{node sequential_2_1/lstm_4_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_2_1/lstm_4_1/strided_slice_1, sequential_2_1/lstm_4_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [16,256].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 64), dtype=float32)', 'tf.Tensor(shape=(1, 64), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "warning", "timestamp": "2025-09-22T16:47:34.977343Z"}
+{"event": "Failed to load model /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/lstm_1m.h5: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 11 for '{{node sequential_30_1/lstm_60_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_30_1/lstm_60_1/strided_slice_1, sequential_30_1/lstm_60_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [11,192].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 48), dtype=float32)', 'tf.Tensor(shape=(1, 48), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "error", "timestamp": "2025-09-22T16:47:35.015129Z"}
+{"event": "\u26a0\ufe0f Failed to load lstm_1m: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 11 for '{{node sequential_30_1/lstm_60_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_30_1/lstm_60_1/strided_slice_1, sequential_30_1/lstm_60_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [11,192].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 48), dtype=float32)', 'tf.Tensor(shape=(1, 48), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "warning", "timestamp": "2025-09-22T16:47:35.015290Z"}
+{"event": "Failed to load model /Applications/Projects/TradePulse.AI/app/backend/models/enterprise/lstm_5m.h5: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 11 for '{{node sequential_30_1/lstm_60_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_30_1/lstm_60_1/strided_slice_1, sequential_30_1/lstm_60_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [11,256].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 64), dtype=float32)', 'tf.Tensor(shape=(1, 64), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "error", "timestamp": "2025-09-22T16:47:35.051142Z"}
+{"event": "\u26a0\ufe0f Failed to load lstm_5m: Exception encountered when calling LSTMCell.call().\n\n\u001b[1mDimensions must be equal, but are 1 and 11 for '{{node sequential_30_1/lstm_60_1/lstm_cell_1/MatMul}} = MatMul[T=DT_FLOAT, grad_a=false, grad_b=false, transpose_a=false, transpose_b=false](sequential_30_1/lstm_60_1/strided_slice_1, sequential_30_1/lstm_60_1/lstm_cell_1/Cast/ReadVariableOp)' with input shapes: [1,1], [11,256].\u001b[0m\n\nArguments received by LSTMCell.call():\n  \u2022 inputs=tf.Tensor(shape=(1, 1), dtype=float32)\n  \u2022 states=('tf.Tensor(shape=(1, 64), dtype=float32)', 'tf.Tensor(shape=(1, 64), dtype=float32)')\n  \u2022 training=False", "logger": "app.backend.services.tensorflow_async_service", "level": "warning", "timestamp": "2025-09-22T16:47:35.051299Z"}
+{"event": "\ud83d\udcca Loaded 0 LSTM models successfully", "logger": "app.backend.services.tensorflow_async_service", "level": "info", "timestamp": "2025-09-22T16:47:35.051338Z"}
+{"event": "\u2705 TensorFlow Async Service initialized successfully", "logger": "app.backend.services.tensorflow_async_service", "level": "info", "timestamp": "2025-09-22T16:47:35.051361Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service tensorflow_async_service already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:35.051382Z"}
+{"event": "\u2705 TensorFlow async service initialized", "logger": "app.backend.core.container", "level": "info", "timestamp": "2025-09-22T16:47:35.051399Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:35.051441Z"}
+🧠 Continuous Learning Engine created - awaiting initialization
+🚀 Initializing Continuous Learning Engine...
+✅ Continuous learning state loaded from database
+📊 Continuous learning optimization loop started
+🤖 Model monitoring loop started
+✅ Continuous Learning Engine initialized and running
+🧠 Continuous Learning Engine initialized and started
+{"event": "\ud83e\udde0 Continuous Learning Engine periodic optimization loop is running", "logger": "app.backend.core.container", "level": "info", "timestamp": "2025-09-22T16:47:35.053567Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service continuous_learning_engine already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:35.053590Z"}
+{"event": "\u2705 Continuous Learning Engine initialized and started", "logger": "app.backend.core.container", "level": "info", "timestamp": "2025-09-22T16:47:35.053608Z"}
+🎯 UPGRADED Intelligent Entry Engine initialized with predictive analysis
+🚀 Initializing Enhanced Intelligent Entry Engine...
+📊 PIPELINE DEBUG: Entry Engine - Starting initialization sequence
+🎯 PIPELINE DEBUG: Entry Engine - Component: Intelligent Entry Engine v1.0.0
+🎯 PIPELINE DEBUG: Entry Engine - Purpose: 6-Layer AI entry point optimization
+🤖 PIPELINE DEBUG: Entry Engine - Loading 6-layer AI models...
+✅ Loaded regime entry model
+✅ Loaded lstm entry model
+✅ Loaded patterns entry model
+✅ Loaded technical entry model
+✅ Loaded momentum entry model
+✅ Loaded timing entry model
+✅ Loaded 6/6 entry models
+✅ PIPELINE DEBUG: Entry Engine - AI models loaded successfully
+📊 Initializing historical market context service...
+📊 PIPELINE DEBUG: Entry Engine - Connecting to historical context service...
+📊 Historical Market Context Service initialized
+🚀 Initializing Historical Market Context Service...
+✅ Cache is 0.2 hours old, still valid for day trading
+✅ Loading pre-calculated historical data from cache...
+✅ Loaded 6 price ranges and 0 pattern success rates from cache
+✅ Historical Market Context Service ready for instant lookups
+✅ Historical context service ready
+✅ PIPELINE DEBUG: Entry Engine - Historical context service connected
+🏥 PIPELINE DEBUG: Entry Engine - Initializing health monitoring...
+✅ PIPELINE DEBUG: Entry Engine - Health monitoring active
+⏰ PIPELINE DEBUG: Entry Engine - Starting warmup period...
+🔥 Starting OPTIMIZED 3-minute phase-based warmup for day trading...
+📊 Phase 1 (1 min): Collect price history + higher thresholds
+📊 Phase 2 (2 min): Normal operation + medium thresholds
+📊 Phase 3 (3+ min): Full optimization + standard thresholds
+✅ PIPELINE DEBUG: Entry Engine - Warmup period initiated
+✅ PIPELINE DEBUG: Entry Engine - Background price poller started (5s interval)
+✅ Enhanced Intelligent Entry Engine initialized successfully
+🎯 PIPELINE DEBUG: Entry Engine - READY FOR OPERATIONS
+🎯 PIPELINE DEBUG: Entry Engine - Status: INITIALIZED & OPERATIONAL
+{"event": "Registered singleton service: entry_engine", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:35.061214Z"}
+{"event": "\u2705 Intelligent Entry Engine initialized", "logger": "app.backend.core.container", "level": "info", "timestamp": "2025-09-22T16:47:35.061236Z"}
+🧠 Intelligent Exit Engine initialized
+🚀 Initializing Intelligent Exit Engine...
+📊 PIPELINE DEBUG: Exit Engine - Starting initialization sequence
+🎯 PIPELINE DEBUG: Exit Engine - Component: Intelligent Exit Engine v1.0.0
+🎯 PIPELINE DEBUG: Exit Engine - Purpose: 6-Layer AI position exit optimization
+🤖 PIPELINE DEBUG: Exit Engine - Loading 6-layer AI models...
+✅ Loaded regime exit model
+✅ Loaded lstm exit model
+✅ Loaded reversal exit model
+✅ Loaded filters exit model
+✅ Loaded confidence exit model
+✅ Loaded timing exit model
+✅ PIPELINE DEBUG: Exit Engine - AI models loaded successfully
+🏥 PIPELINE DEBUG: Exit Engine - Initializing health monitoring...
+✅ PIPELINE DEBUG: Exit Engine - Health monitoring active
+✅ Intelligent Exit Engine initialized successfully
+🎯 PIPELINE DEBUG: Exit Engine - READY FOR OPERATIONS
+🎯 PIPELINE DEBUG: Exit Engine - Status: INITIALIZED & OPERATIONAL
+{"event": "Registered singleton service: exit_engine", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:35.067073Z"}
+{"event": "\u2705 Intelligent Exit Engine initialized", "logger": "app.backend.core.container", "level": "info", "timestamp": "2025-09-22T16:47:35.067093Z"}
+{"event": "\u2705 AI services initialized with REAL MODELS", "logger": "app.backend.core.container", "level": "info", "timestamp": "2025-09-22T16:47:35.067109Z"}
+🤖 PIPELINE DEBUG: Day Trading Engine - Retrieving Entry Engine from DI...
+❌ Entry engine DI retrieval failed: 'IntelligentEntryEngine' object is not callable
+⚠️ PIPELINE DEBUG: Day Trading Engine - Creating and registering Entry Engine
+🎯 UPGRADED Intelligent Entry Engine initialized with predictive analysis
+🚀 Initializing Enhanced Intelligent Entry Engine...
+📊 PIPELINE DEBUG: Entry Engine - Starting initialization sequence
+🎯 PIPELINE DEBUG: Entry Engine - Component: Intelligent Entry Engine v1.0.0
+🎯 PIPELINE DEBUG: Entry Engine - Purpose: 6-Layer AI entry point optimization
+🤖 PIPELINE DEBUG: Entry Engine - Loading 6-layer AI models...
+✅ Loaded regime entry model
+✅ Loaded lstm entry model
+✅ Loaded patterns entry model
+✅ Loaded technical entry model
+✅ Loaded momentum entry model
+✅ Loaded timing entry model
+✅ Loaded 6/6 entry models
+✅ PIPELINE DEBUG: Entry Engine - AI models loaded successfully
+📊 Initializing historical market context service...
+📊 PIPELINE DEBUG: Entry Engine - Connecting to historical context service...
+✅ Historical context service ready
+✅ PIPELINE DEBUG: Entry Engine - Historical context service connected
+🏥 PIPELINE DEBUG: Entry Engine - Initializing health monitoring...
+✅ PIPELINE DEBUG: Entry Engine - Health monitoring active
+⏰ PIPELINE DEBUG: Entry Engine - Starting warmup period...
+🔥 Starting OPTIMIZED 3-minute phase-based warmup for day trading...
+📊 Phase 1 (1 min): Collect price history + higher thresholds
+📊 Phase 2 (2 min): Normal operation + medium thresholds
+📊 Phase 3 (3+ min): Full optimization + standard thresholds
+✅ PIPELINE DEBUG: Entry Engine - Warmup period initiated
+✅ PIPELINE DEBUG: Entry Engine - Background price poller started (5s interval)
+✅ Enhanced Intelligent Entry Engine initialized successfully
+🎯 PIPELINE DEBUG: Entry Engine - READY FOR OPERATIONS
+🎯 PIPELINE DEBUG: Entry Engine - Status: INITIALIZED & OPERATIONAL
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service entry_engine already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:35.073067Z"}
+✅ Entry Engine registered in DI container
+✅ Exit engine retrieved from DI container
+🛡️ Getting professional risk management from DI...
+⚠️ Risk manager not in DI, creating local instance
+📊 Dynamic Risk Manager initialized
+🚀 Initializing Dynamic Risk Manager...
+🔄 Binance Hybrid Client initialized
+🚀 Initializing Binance Hybrid Client...
+🌐 REST session initialized with connection pooling
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:35.073273Z"}
+📊 Database connected: DynamoDB Local accessible
+🔄 Pre-populating cache from database...
+📈 Loaded 800 historical candles
+🚀 PHASE-BASED WARMUP: Starting optimized day trading warmup...
+🔥 PHASE 1: Collecting basic price history (higher thresholds)
+💰 Fresh BTC price from WebSocket (BTCUSDT): $112,767.52
+📈 Price history updated: 112767.52 (1 points)
+🚀 PHASE-BASED WARMUP: Starting optimized day trading warmup...
+🔥 PHASE 1: Collecting basic price history (higher thresholds)
+💰 Using cached BTC price: $112,767.52 (age: 0.0s)
+📈 Price history updated: 112767.52 (1 points)
+🔄 PRE-LOADING: Historical context data in background...
+💰 Using cached BTC price: $112,767.52 (age: 0.0s)
+   1D range position: 100.0%
+   7D range position: 100.0%
+   30D range position: 100.0%
+✅ PRE-LOADED: 5 support, 5 resistance levels
+✅ PRE-LOADING: Historical context data ready
+🔄 PRE-LOADING: Historical context data in background...
+💰 Using cached BTC price: $112,767.52 (age: 0.0s)
+   1D range position: 100.0%
+   7D range position: 100.0%
+   30D range position: 100.0%
+✅ PRE-LOADED: 5 support, 5 resistance levels
+✅ PRE-LOADING: Historical context data ready
+< TEXT '{"e":"24hrTicker","E":1758559655022,"s":"BTCUSD...5249291631,"n":2830250}' [436 bytes]
+📊 Processed ticker update: $112767.53000000
+❌ BINANCE AUTHENTICATION FAILED: 401 - {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action."}
+✅ Binance Hybrid Client initialized successfully
+✅ Dynamic Risk Manager initialized successfully
+🚨 Initializing emergency control system...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:35.715700Z"}
+🛡️ Emergency Control System initialized
+🚀 Initializing Emergency Control System...
+✅ Emergency Control System initialized successfully
+🚀 Starting emergency_monitoring (first time)
+🔍 Starting emergency monitoring...
+✅ emergency_monitoring started successfully
+📊 Initializing performance tracking system...
+📊 Trading Performance Tracker initialized
+🚀 Initializing Trading Performance Tracker...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:35.716776Z"}
+✅ Historical performance data loaded
+✅ Learning system initialized
+✅ Performance tasks setup complete
+✅ Trading Performance Tracker initialized successfully
+🚀 Starting real-time performance tracking...
+✅ Performance tracking started with 3 tasks
+✅ Day Trading Engine with professional risk management initialized successfully
+🚀 Starting day trading analysis (every 12 seconds)
+{"event": "\u2705 PHASE 2 COMPLETE: Day Trading Engine operational", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:35.717066Z"}
+🔍 Emergency monitoring loop started
+📊 Technical indicators calculated: RSI=54.7, MACD=-0.8597, BB_pos=1.00
+💰 Using cached BTC price: $112,767.52 (age: 0.6s)
+{"event": "\ud83c\udfd7\ufe0f Creating new portfolio instance for admin", "logger": "app.backend.services.professional_portfolio", "level": "info", "timestamp": "2025-09-22T16:47:35.720140Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:35.720246Z"}
+{"event": "\ud83d\udcb0 Loaded balance from DynamoDB for admin: $50,000.00", "logger": "app.backend.services.professional_portfolio", "level": "info", "timestamp": "2025-09-22T16:47:35.725630Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:35.725764Z"}
+{"event": "\ud83d\udcbe Portfolio persistence initialized - positions loaded on-demand", "logger": "app.backend.services.professional_portfolio", "level": "debug", "timestamp": "2025-09-22T16:47:35.725810Z"}
+{"user_id": "admin", "initial_balance": 50000.0, "max_risk_per_trade": 0.02, "event": "Professional portfolio initialized", "logger": "app.backend.services.professional_portfolio", "level": "info", "timestamp": "2025-09-22T16:47:35.725856Z"}
+{"event": "\ud83d\udd0d Loading positions from DynamoDB for user_id: admin", "logger": "app.backend.services.professional_portfolio", "level": "debug", "timestamp": "2025-09-22T16:47:35.725900Z"}
+{"event": "\ud83d\udd0d Found 79 positions for user admin", "logger": "app.backend.services.professional_portfolio", "level": "debug", "timestamp": "2025-09-22T16:47:35.735084Z"}
+{"event": "\ud83d\udd0d Found 0 open positions", "logger": "app.backend.services.professional_portfolio", "level": "debug", "timestamp": "2025-09-22T16:47:35.735195Z"}
+{"event": "\ud83d\udce5 Loaded 79 closed positions from history", "logger": "app.backend.services.professional_portfolio", "level": "info", "timestamp": "2025-09-22T16:47:35.744035Z"}
+{"event": "\ud83d\udcb0 Portfolio loaded: 0 open positions, 79 closed", "logger": "app.backend.services.professional_portfolio", "level": "info", "timestamp": "2025-09-22T16:47:35.744166Z"}
+{"event": "\ud83d\udcb0 Cash balance: $49260.99 (initial: $50000.00, realized P&L: $-739.01, in positions: $0.00)", "logger": "app.backend.services.professional_portfolio", "level": "info", "timestamp": "2025-09-22T16:47:35.744206Z"}
+{"event": "\u2705 Portfolio instance created and cached for admin", "logger": "app.backend.services.professional_portfolio", "level": "info", "timestamp": "2025-09-22T16:47:35.744264Z"}
+{"event": "\ud83d\udd04 Attempting to save item to table 'emergency_state'", "logger": "app.backend.core.database", "level": "info", "timestamp": "2025-09-22T16:47:35.744332Z"}
+{"event": "\ud83d\udcdd Item data: ['emergency_stop_active', 'emergency_stop_reason', 'active_breakers', 'total_emergencies', 'automatic_recoveries', 'last_updated', 'id'] - ID: emergency_state_global", "logger": "app.backend.core.database", "level": "info", "timestamp": "2025-09-22T16:47:35.744363Z"}
+{"event": "\u2705 Got table reference for 'emergency_state'", "logger": "app.backend.core.database", "level": "info", "timestamp": "2025-09-22T16:47:35.744738Z"}
+{"event": "\u2705 Successfully saved item to 'emergency_state' - ID: emergency_state_global", "logger": "app.backend.core.database", "level": "info", "timestamp": "2025-09-22T16:47:35.748663Z"}
+✅ Item saved to emergency_state
+💾 Emergency state updated (changed)
+📊 Getting fresh market data...
+💰 Using cached BTC price: $112,767.52 (age: 0.7s)
+📊 Technical indicators calculated: RSI=54.7, MACD=-0.8597, BB_pos=1.00
+🎯 Tick: BTCUSDT @$112767.52, Candles: 800 loaded
+📉 Volume z=-0.55 | on>=3.50 off<=2.00 (safe_ticks=0/3)
+🎯 Generating AI signal for BTCUSDT...
+🎯 PIPELINE DEBUG: Enterprise Trading Engine - Generating signal for BTCUSDT
+📊 PIPELINE DEBUG: Enterprise Trading Engine - Starting 6-layer AI analysis
+📈 PIPELINE DEBUG: Enterprise Trading Engine - Fetching live market data...
+💰 Using cached BTC price: $112,767.52 (age: 0.7s)
+💰 PIPELINE DEBUG: Enterprise Trading Engine - Current Bitcoin price: $112,767.52
+🔍 PIPELINE DEBUG: Enterprise Trading Engine - Extracting market features...
+🧩 Using SSOT market snapshot for features (no local recompute)
+📊 PIPELINE DEBUG: Enterprise Trading Engine - Market features extracted: 9 features
+🤖 PIPELINE DEBUG: Enterprise Trading Engine - Running 6-layer AI analysis...
+🔍 L3 FIXED - Raw: 1.0000 → Dynamic: 0.5100
+✅ L4 SUCCESS - Filter score: 0.0000
+🔍 L5 DEBUG - Raw prediction: 0.4958597421646118
+🔍 L5 DEBUG - Final confidence: 0.4958597421646118
+🔍 L6 FIXED - Raw: 21.0714 → Normalized: 0.8000
+✅ PIPELINE DEBUG: Enterprise Trading Engine - 6-layer analysis completed
+🔍 DECISION DEBUG - confidence=0.496, timing=0.800, reversal=0.510, filter=0.200
+🔍 THRESHOLDS - primary=0.45, exploratory=0.35, consensus=0.55, risk_thresh=0.80
+DAY TRADING CHECKS - conf:True, reversal_opp:False, reversal_safe:True, filter:True, timing_buy:True, timing_sell:False
+✅ DAY TRADING SIGNAL: BUY (standard_buy)
+✅ AI signal generated: BUY with 49.6% confidence
+🧠 ENTERPRISE: L1=sideways/1.00 L3_rev=0.51 L4_filt=0.20 L5_conf=0.50 L6_time=0.80 → BUY (0.50)
+{"event": "\ud83d\udd04 Using existing portfolio instance for admin", "logger": "app.backend.services.professional_portfolio", "level": "debug", "timestamp": "2025-09-22T16:47:35.789441Z"}
+🛡️ Risk assessment: score=0.45
+{"event": "\ud83d\udd04 Using existing portfolio instance for admin", "logger": "app.backend.services.professional_portfolio", "level": "debug", "timestamp": "2025-09-22T16:47:35.789548Z"}
+🎯 Signal: BUY conf=0.50 → 0.57 (session=american)
+🔍 THRESHOLD CHECK: 0.57 > 0.45 ? signal_type=primary playbook=none
+💰 Using cached BTC price: $112,767.52 (age: 0.7s)
+🎯 UPGRADED ENTRY ENGINE - Analyzing predictive entry opportunity for BTCUSDT
+📊 PIPELINE DEBUG: Entry Engine - Signal data keys: ['action', 'confidence', 'reasoning', 'signal_type', 'layer_analysis']
+💼 PIPELINE DEBUG: Entry Engine - Portfolio data available: True
+💰 Using cached BTC price: $112,767.52 (age: 0.7s)
+📈 Price history updated: 112767.52 (2 points)
+📈 PREDICTIVE ANALYSIS: Current price 112767.52, Signal: BUY, History points: 2
+🔥 PHASE 1 WARMUP: Entry blocked - collecting price history (2/5)
+⏰ PIPELINE DEBUG: Entry Engine - PHASE 1 ACTIVE - Need more price data
+🚦 ENTRY: WAIT conf=0.00 reason=Day trading analysis: poor_timing
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:35.790005Z"}
+🔄 PIPELINE DEBUG: Normalized day: str -> S
+🔄 PIPELINE DEBUG: Normalized timestamp: str -> S
+🔄 PIPELINE DEBUG: Normalized day: str -> S
+🔄 PIPELINE DEBUG: Normalized timestamp: str -> S
+✅ PIPELINE DEBUG: Item validation passed for trading_decisions
+✅ PIPELINE DEBUG: Successfully wrote item to trading_decisions
+📝 Decision audited: entry_rejected
+{"event": "\ud83d\udd04 Using existing portfolio instance for admin", "logger": "app.backend.services.professional_portfolio", "level": "debug", "timestamp": "2025-09-22T16:47:35.793282Z"}
+< TEXT '{"e":"kline","E":1758559656017,"s":"BTCUSDT","k...568.66789820","B":"0"}}' [332 bytes]
+< TEXT '{"e":"24hrTicker","E":1758559656022,"s":"BTCUSD...5249291634,"n":2830248}' [436 bytes]
+📊 Processed ticker update: $112767.53000000
+< TEXT '{"e":"24hrTicker","E":1758559657023,"s":"BTCUSD...5249291638,"n":2830248}' [436 bytes]
+📊 Processed ticker update: $112767.53000000
+{"event": "\ud83d\ude80 PHASE 3: Adding Continuous Learning Engine...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:37.717783Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service continuous_learning_engine already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:37.718094Z"}
+{"event": "\u2705 PHASE 3 COMPLETE: Continuous Learning operational", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:37.718209Z"}
+< TEXT '{"e":"24hrTicker","E":1758559658022,"s":"BTCUSD...5249291825,"n":2830431}' [436 bytes]
+📊 Processed ticker update: $112758.50000000
+< TEXT '{"e":"kline","E":1758559658024,"s":"BTCUSDT","k...417.45593280","B":"0"}}' [332 bytes]
+{"event": "\ud83d\ude80 PHASE 4: Adding missing core services...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:38.719248Z"}
+🎯 UPGRADED Intelligent Entry Engine initialized with predictive analysis
+🚀 Initializing Enhanced Intelligent Entry Engine...
+📊 PIPELINE DEBUG: Entry Engine - Starting initialization sequence
+🎯 PIPELINE DEBUG: Entry Engine - Component: Intelligent Entry Engine v1.0.0
+🎯 PIPELINE DEBUG: Entry Engine - Purpose: 6-Layer AI entry point optimization
+🤖 PIPELINE DEBUG: Entry Engine - Loading 6-layer AI models...
+✅ Loaded regime entry model
+✅ Loaded lstm entry model
+✅ Loaded patterns entry model
+✅ Loaded technical entry model
+✅ Loaded momentum entry model
+✅ Loaded timing entry model
+✅ Loaded 6/6 entry models
+✅ PIPELINE DEBUG: Entry Engine - AI models loaded successfully
+📊 Initializing historical market context service...
+📊 PIPELINE DEBUG: Entry Engine - Connecting to historical context service...
+✅ Historical context service ready
+✅ PIPELINE DEBUG: Entry Engine - Historical context service connected
+🏥 PIPELINE DEBUG: Entry Engine - Initializing health monitoring...
+✅ PIPELINE DEBUG: Entry Engine - Health monitoring active
+⏰ PIPELINE DEBUG: Entry Engine - Starting warmup period...
+🔥 Starting OPTIMIZED 3-minute phase-based warmup for day trading...
+📊 Phase 1 (1 min): Collect price history + higher thresholds
+📊 Phase 2 (2 min): Normal operation + medium thresholds
+📊 Phase 3 (3+ min): Full optimization + standard thresholds
+✅ PIPELINE DEBUG: Entry Engine - Warmup period initiated
+✅ PIPELINE DEBUG: Entry Engine - Background price poller started (5s interval)
+✅ Enhanced Intelligent Entry Engine initialized successfully
+🎯 PIPELINE DEBUG: Entry Engine - READY FOR OPERATIONS
+🎯 PIPELINE DEBUG: Entry Engine - Status: INITIALIZED & OPERATIONAL
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service entry_engine already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:38.735118Z"}
+🧠 Intelligent Exit Engine initialized
+🚀 Initializing Intelligent Exit Engine...
+📊 PIPELINE DEBUG: Exit Engine - Starting initialization sequence
+🎯 PIPELINE DEBUG: Exit Engine - Component: Intelligent Exit Engine v1.0.0
+🎯 PIPELINE DEBUG: Exit Engine - Purpose: 6-Layer AI position exit optimization
+🤖 PIPELINE DEBUG: Exit Engine - Loading 6-layer AI models...
+✅ Loaded regime exit model
+✅ Loaded lstm exit model
+✅ Loaded reversal exit model
+✅ Loaded filters exit model
+✅ Loaded confidence exit model
+✅ Loaded timing exit model
+✅ PIPELINE DEBUG: Exit Engine - AI models loaded successfully
+🏥 PIPELINE DEBUG: Exit Engine - Initializing health monitoring...
+✅ PIPELINE DEBUG: Exit Engine - Health monitoring active
+✅ Intelligent Exit Engine initialized successfully
+🎯 PIPELINE DEBUG: Exit Engine - READY FOR OPERATIONS
+🎯 PIPELINE DEBUG: Exit Engine - Status: INITIALIZED & OPERATIONAL
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service exit_engine already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:38.745955Z"}
+📊 Dynamic Risk Manager initialized
+🚀 Initializing Dynamic Risk Manager...
+🚀 PHASE-BASED WARMUP: Starting optimized day trading warmup...
+🔥 PHASE 1: Collecting basic price history (higher thresholds)
+💰 Fresh BTC price from WebSocket (BTCUSDT): $112,758.50
+📈 Price history updated: 112758.50 (1 points)
+🔄 PRE-LOADING: Historical context data in background...
+💰 Using cached BTC price: $112,758.50 (age: 0.0s)
+   1D range position: 100.0%
+   7D range position: 100.0%
+   30D range position: 100.0%
+✅ PRE-LOADED: 5 support, 5 resistance levels
+✅ PRE-LOADING: Historical context data ready
+✅ Dynamic Risk Manager initialized successfully
+📊 Starting dynamic risk monitoring...
+{"event": "Registered singleton service: risk_manager", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:38.986343Z"}
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:38.986505Z"}
+🛡️ Emergency Control System initialized
+🚀 Initializing Emergency Control System...
+✅ Emergency Control System initialized successfully
+{"event": "Registered singleton service: emergency_controls", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:38.986668Z"}
+🔄 PIPELINE DEBUG: Market Data Service - initialize() called (alias for start())
+🚀 Starting live market data service...
+📊 PIPELINE DEBUG: Market Data Service - Starting initialization sequence
+🎯 PIPELINE DEBUG: Market Data Service - Component: Live Market Data Service v1.0.0
+🎯 PIPELINE DEBUG: Market Data Service - Purpose: Real-time market data streaming
+🗄️ PIPELINE DEBUG: Market Data Service - Pre-populating cache from database...
+🔄 Pre-populating cache from DB for LSTM...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:38.987054Z"}
+📊 Found 800 total candles in DB
+✅ Cache populated: 800 candles from DB (target: 800+)
+🎯 TARGET ACHIEVED: 800+ candles loaded for LSTM models!
+✅ PIPELINE DEBUG: Market Data Service - Cache populated from database
+📊 PIPELINE DEBUG: Market Data Service - Checking candles backfill need...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:39.016781Z"}
+📊 PIPELINE DEBUG: Sufficient candles: 800/800
+✅ PIPELINE DEBUG: Market Data Service - Backfill check completed
+📈 PIPELINE DEBUG: Market Data Service - Starting ticker stream...
+✅ PIPELINE DEBUG: Market Data Service - Ticker stream started
+✅ Live market data service started
+{"event": "Registered singleton service: live_market_data", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:39.036916Z"}
+{"event": "\u2705 PHASE 4 COMPLETE: All core services ready", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:39.036961Z"}
+📊 Risk monitoring loop started
+🔄 Already subscribed to ticker_BTCUSDT
+🔄 Already subscribed to ticker_BTCUSDT, skipping duplicate
+📊 PIPELINE DEBUG: Added subscription for kline_1m
+📡 Connecting to candle stream: btcusdt@kline_1m (attempt 1)
+= connection is CONNECTING
+< TEXT '{"e":"24hrTicker","E":1758559659022,"s":"BTCUSD...5249291827,"n":2830429}' [436 bytes]
+📊 Processed ticker update: $112758.50000000
+> GET /ws/btcusdt@kline_1m HTTP/1.1
+> Host: stream.binance.com:9443
+> Upgrade: websocket
+> Connection: Upgrade
+> Sec-WebSocket-Key: vWFaiPwJfZGKEZa6rz87/Q==
+> Sec-WebSocket-Version: 13
+> Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits
+> User-Agent: Python/3.11 websockets/15.0.1
+< HTTP/1.1 101 Switching Protocols
+< Date: Mon, 22 Sep 2025 16:47:39 GMT
+< Connection: upgrade
+< Upgrade: websocket
+< Sec-WebSocket-Accept: 6wEGx9pNNZWybkNJg2BVQP2gWbs=
+< Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_max_window_bits=15
+= connection is OPEN
+✅ Candle stream connected (1m)
+{"event": "\ud83d\ude80 PHASE 5: Adding Session-Aware Trading Engine...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:40.037194Z"}
+🎯 Session-Aware Trading Engine initialized
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service session_aware_trading_engine already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:40.037667Z"}
+🚀 Initializing Session-Aware Trading Engine...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:40.037928Z"}
+✅ Day trading engine retrieved from DI container
+✅ Enterprise engine retrieved from DI container
+✅ Risk manager retrieved from DI container
+✅ Core trading engines initialized
+🏗️ Creating new Integrated Market Pipeline instance...
+🚀 Starting Integrated Market Data Pipeline...
+🔧 Initializing market data services...
+🔧 Starting LiveMarketDataService...
+🚀 Starting live market data service...
+📊 PIPELINE DEBUG: Market Data Service - Starting initialization sequence
+🎯 PIPELINE DEBUG: Market Data Service - Component: Live Market Data Service v1.0.0
+🎯 PIPELINE DEBUG: Market Data Service - Purpose: Real-time market data streaming
+🗄️ PIPELINE DEBUG: Market Data Service - Pre-populating cache from database...
+🔄 Pre-populating cache from DB for LSTM...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:40.041434Z"}
+📊 Found 800 total candles in DB
+✅ Cache populated: 800 candles from DB (target: 800+)
+🎯 TARGET ACHIEVED: 800+ candles loaded for LSTM models!
+✅ PIPELINE DEBUG: Market Data Service - Cache populated from database
+📊 PIPELINE DEBUG: Market Data Service - Checking candles backfill need...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:40.070475Z"}
+📊 PIPELINE DEBUG: Sufficient candles: 800/800
+✅ PIPELINE DEBUG: Market Data Service - Backfill check completed
+📈 PIPELINE DEBUG: Market Data Service - Starting ticker stream...
+✅ PIPELINE DEBUG: Market Data Service - Ticker stream started
+✅ Live market data service started
+✅ LiveMarketDataService started
+🔧 Starting BinanceHybridClient...
+🔄 Binance Hybrid Client initialized
+🚀 Initializing Binance Hybrid Client...
+🌐 REST session initialized with connection pooling
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:40.090562Z"}
+📊 Database connected: DynamoDB Local accessible
+🔄 Pre-populating cache from database...
+📈 Loaded 800 historical candles
+✅ Binance Hybrid Client initialized successfully
+✅ BinanceHybridClient started
+🔧 Starting EnhancedMarketPersistence...
+🚀 Enhanced Market Persistence Engine initialized
+⚡ Initializing Enhanced Persistence Engine...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:40.108542Z"}
+🔍 Data Quality Validator initialized
+📊 Real-Time Analytics Engine initialized
+🗄️ Storage Tier Manager initialized
+🗜️ Compression Manager initialized
+✅ Enhanced Persistence Engine initialized
+✅ EnhancedMarketPersistence started
+✅ Market data services initialized (3/3 working)
+📡 Starting unified data streams...
+📡 Subscribed to ticker updates
+✅ Data streams configured
+📊 Initializing real-time analytics...
+✅ Real-time analytics initialized
+🔍 Starting pipeline monitoring...
+✅ Pipeline monitoring started
+✅ Integrated Market Data Pipeline started successfully
+✅ Market data pipeline initialized
+✅ Session configurations loaded
+✅ Current session detected: american
+✅ Performance tracking initialized
+Session tables verified/created
+✅ Session persistence initialized
+✅ Session-Aware Trading Engine initialized successfully
+🚀 Starting Session-Aware Trading Engine...
+🔄 Trading mode changed: day → day
+📊 New config: 12s intervals, 35.0% confidence threshold
+🎯 Applied session config: conf_thresh=0.690, pos_size=0.055, interval=15s
+✅ Session-aware trading activated
+✅ Session-Aware Trading started in american mode
+{"event": "\u2705 PHASE 5 COMPLETE: Session-Aware Engine operational", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:40.108955Z"}
+🔄 Already subscribed to ticker_BTCUSDT
+🔄 Already subscribed to ticker_BTCUSDT, skipping duplicate
+📊 PIPELINE DEBUG: Added subscription for kline_1m
+📡 Connecting to candle stream: btcusdt@kline_1m (attempt 1)
+= connection is CONNECTING
+🔄 Starting ingestion processing loop
+📊 Starting analytics processing loop
+🗄️ Starting archival management loop
+🧹 Starting cleanup maintenance loop
+No data available for interval 1m
+🎯 SESSION STATUS [AMERICAN]: Vol=moderate Liq=moderate Trades=0 WinRate=0.0% PnL=$0.00 Conf=1.32
+{"event": "\ud83d\udd04 Using existing portfolio instance for admin", "logger": "app.backend.services.professional_portfolio", "level": "debug", "timestamp": "2025-09-22T16:47:40.113780Z"}
+Session state persisted: american_20250922_16
+💰 Using cached BTC price: $112,758.50 (age: 1.4s)
+📈 Price history updated: 112758.50 (2 points)
+💰 Using cached BTC price: $112,758.50 (age: 1.4s)
+📈 Price history updated: 112758.50 (3 points)
+< TEXT '{"e":"kline","E":1758559660017,"s":"BTCUSDT","k...914.88881280","B":"0"}}' [332 bytes]
+< TEXT '{"e":"kline","E":1758559660017,"s":"BTCUSDT","k...914.88881280","B":"0"}}' [332 bytes]
+< TEXT '{"e":"24hrTicker","E":1758559660024,"s":"BTCUSD...5249292031,"n":2830626}' [436 bytes]
+📊 Processed ticker update: $112747.91000000
+> GET /ws/btcusdt@kline_1m HTTP/1.1
+> Host: stream.binance.com:9443
+> Upgrade: websocket
+> Connection: Upgrade
+> Sec-WebSocket-Key: ZY7IvfZYnUeqmuThfV6BJQ==
+> Sec-WebSocket-Version: 13
+> Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits
+> User-Agent: Python/3.11 websockets/15.0.1
+< HTTP/1.1 101 Switching Protocols
+< Date: Mon, 22 Sep 2025 16:47:40 GMT
+< Connection: upgrade
+< Upgrade: websocket
+< Sec-WebSocket-Accept: tdbupDaG3hK1jsuxoOJpxhMvC3A=
+< Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_max_window_bits=15
+= connection is OPEN
+{"event": "\ud83d\ude80 PHASE 6: Adding Brain Controller...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:41.108637Z"}
+🔍 DEBUG: Starting Brain Controller phase...
+✅ Candle stream connected (1m)
+< TEXT '{"e":"24hrTicker","E":1758559661022,"s":"BTCUSD...5249292104,"n":2830692}' [437 bytes]
+📊 Processed ticker update: $112747.55000000
+< TEXT '{"e":"kline","E":1758559662014,"s":"BTCUSDT","k...297.10186160","B":"0"}}' [332 bytes]
+< TEXT '{"e":"kline","E":1758559662014,"s":"BTCUSDT","k...297.10186160","B":"0"}}' [332 bytes]
+< TEXT '{"e":"kline","E":1758559662014,"s":"BTCUSDT","k...297.10186160","B":"0"}}' [332 bytes]
+< TEXT '{"e":"24hrTicker","E":1758559662022,"s":"BTCUSD...5249292321,"n":2830908}' [437 bytes]
+📊 Processed ticker update: $112740.00000000
+{"event": "\u26a0\ufe0f DI container not initialized, forcing initialization...", "logger": "app.backend.core.application", "level": "warning", "timestamp": "2025-09-22T16:47:43.109547Z"}
+{"event": "\u2705 DI container manually marked as initialized", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:43.109768Z"}
+{"event": "\ud83d\udd04 Creating simplified Brain Controller for registration...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:43.109834Z"}
+🧠 BRAIN Controller initialized with automatic startup enabled
+{"event": "\ud83d\udd04 PIPELINE DEBUG: Service brain_controller already registered, skipping", "logger": "app.backend.core.container", "level": "debug", "timestamp": "2025-09-22T16:47:43.110026Z"}
+{"event": "\ud83d\udd27 Brain Controller registered in DI container", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:43.110063Z"}
+{"event": "\ud83d\udd04 Initializing Brain Controller with automatic startup...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:43.110098Z"}
+🚀 BRAIN Controller initialization starting...
+🔄 BRAIN State: init → warmup
+[brain_controller] State changed: init → warmup
+📚 Initializing core trading services...
+🚀 Initializing Unified Day Trading Engine...
+🚀 Unified Day Trading Engine initialized with professional parameters
+🧠 Initializing Unified Day Trading Engine...
+✅ TensorFlow 2.16.1 stable - LSTM Layer 2 enabled
+✅ Loaded regime model
+✅ Loaded patterns model
+✅ Loaded technical model
+✅ Loaded confidence model
+✅ Loaded timing model
+✅ Registered lstm_1h TensorFlow model path
+✅ Registered lstm_4h TensorFlow model path
+✅ Registered lstm_24h TensorFlow model path
+✅ Feature scalers loaded
+💰 Fresh BTC price from WebSocket (BTCUSDT): $112,740.00
+📊 Technical indicators calculated: RSI=54.7, MACD=-0.8597, BB_pos=1.00
+✅ Data validation passed: $112,740.00, 200 candles
+✅ Unified Day Trading Engine initialized successfully
+✅ Unified Day Trading Engine initialized
+🚪 Initializing exit engine...
+🧠 Intelligent Exit Engine initialized
+🚀 Initializing Intelligent Exit Engine...
+📊 PIPELINE DEBUG: Exit Engine - Starting initialization sequence
+🎯 PIPELINE DEBUG: Exit Engine - Component: Intelligent Exit Engine v1.0.0
+🎯 PIPELINE DEBUG: Exit Engine - Purpose: 6-Layer AI position exit optimization
+🤖 PIPELINE DEBUG: Exit Engine - Loading 6-layer AI models...
+✅ Loaded regime exit model
+✅ Loaded lstm exit model
+✅ Loaded reversal exit model
+✅ Loaded filters exit model
+✅ Loaded confidence exit model
+✅ Loaded timing exit model
+✅ PIPELINE DEBUG: Exit Engine - AI models loaded successfully
+🏥 PIPELINE DEBUG: Exit Engine - Initializing health monitoring...
+✅ PIPELINE DEBUG: Exit Engine - Health monitoring active
+✅ Intelligent Exit Engine initialized successfully
+🎯 PIPELINE DEBUG: Exit Engine - READY FOR OPERATIONS
+🎯 PIPELINE DEBUG: Exit Engine - Status: INITIALIZED & OPERATIONAL
+✅ Exit engine initialized
+🛡️ Initializing risk management system...
+📊 Dynamic Risk Manager initialized
+🚀 Initializing Dynamic Risk Manager...
+< TEXT '{"e":"24hrTicker","E":1758559663022,"s":"BTCUSD...5249292326,"n":2830907}' [437 bytes]
+📊 Processed ticker update: $112740.01000000
+✅ Dynamic Risk Manager initialized successfully
+📊 Starting dynamic risk monitoring...
+✅ Risk management system initialized
+🚨 Initializing emergency control system...
+{"event": "\ud83d\udd04 PIPELINE DEBUG: DynamoDB connection already verified, skipping test", "logger": "app.backend.core.database", "level": "debug", "timestamp": "2025-09-22T16:47:43.466181Z"}
+🛡️ Emergency Control System initialized
+🚀 Initializing Emergency Control System...
+✅ Emergency Control System initialized successfully
+🔒 emergency_monitoring already started, skipping
+✅ Emergency control system initialized
+🚀 STREAMLINED: Core services initialized - ready for trading
+ℹ️ Enhanced persistence not yet available in container (will initialize later)
+✅ Session-aware engine linked from container
+ℹ️ Performance tracker not yet available in container
+✅ Enhanced services linking completed
+✅ STREAMLINED BRAIN: Core trading services ready for immediate operation
+🔍 Validating system readiness...
+📊 Risk monitoring loop started
+✅ BRAIN market data validation: BTCUSDT @$112,740.01
+📡 Setting up event handlers...
+Handler registered for api_failure
+Handler registered for connection_lost
+Handler registered for emergency_triggered
+✅ Event handlers configured
+✅ BRAIN Controller initialization complete
+🚀 INDUSTRY STANDARD: Starting automatic warmup timer (3 minutes)
+✅ Automatic warmup timer started - will auto-transition to RUNNING
+{"event": "\u2705 Brain Controller initialization completed", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:43.723696Z"}
+{"event": "\ud83d\ude80 AUTOMATIC STARTUP: Brain Controller will start trading automatically after warmup", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:43.723752Z"}
+{"event": "\u2705 PHASE 6 COMPLETE: Brain Controller registered", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:43.723781Z"}
+✅ DEBUG: Brain Controller registered successfully!
+{"event": "\ud83c\udf89 ALL PHASES COMPLETE: Full professional backend restored!", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:43.723809Z"}
+🎉 DEBUG: All phases completed!
+🚀 AUTOMATIC WARMUP TIMER: Started (3 minutes)
+💰 Using cached BTC price: $112,740.00 (age: 0.6s)
+📈 Price history updated: 112740.00 (2 points)
+< PING '1758559663705' [text, 13 bytes]
+> PONG '1758559663705' [text, 13 bytes]
+< TEXT '{"e":"kline","E":1758559664017,"s":"BTCUSDT","k...877.71291310","B":"0"}}' [332 bytes]
+< TEXT '{"e":"kline","E":1758559664017,"s":"BTCUSDT","k...877.71291310","B":"0"}}' [332 bytes]
+< TEXT '{"e":"24hrTicker","E":1758559664022,"s":"BTCUSD...5249292329,"n":2830909}' [437 bytes]
+📊 Processed ticker update: $112740.00000000
+< TEXT '{"e":"kline","E":1758559664017,"s":"BTCUSDT","k...877.71291310","B":"0"}}' [332 bytes]
+🔄 PIPELINE DEBUG: Volatility calculation - insufficient data points: 1
+💰 Using cached BTC price: $112,740.00 (age: 2.0s)
+📈 Price history updated: 112740.00 (3 points)
+💰 Using cached BTC price: $112,740.00 (age: 2.0s)
+📈 Price history updated: 112740.00 (4 points)
+< TEXT '{"e":"24hrTicker","E":1758559665022,"s":"BTCUSD...5249292362,"n":2830938}' [437 bytes]
+📊 Processed ticker update: $112739.74000000
+< TEXT '{"e":"kline","E":1758559666018,"s":"BTCUSDT","k...058.07653340","B":"0"}}' [332 bytes]
+< TEXT '{"e":"kline","E":1758559666018,"s":"BTCUSDT","k...058.07653340","B":"0"}}' [332 bytes]
+< TEXT '{"e":"kline","E":1758559666018,"s":"BTCUSDT","k...058.07653340","B":"0"}}' [332 bytes]
+< TEXT '{"e":"24hrTicker","E":1758559666022,"s":"BTCUSD...5249292504,"n":2831074}' [437 bytes]
+📊 Processed ticker update: $112728.86000000
+{"event": "\ud83d\ude80 INDUSTRY AUTO-START: Starting Brain Controller trading after all phases complete", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:46.724102Z"}
+{"event": "\u26a0\ufe0f Brain Controller not available for auto-start", "logger": "app.backend.core.application", "level": "warning", "timestamp": "2025-09-22T16:47:46.724321Z"}
+< TEXT '{"e":"24hrTicker","E":1758559667014,"s":"BTCUSD...5249292528,"n":2831098}' [436 bytes]
+📊 Processed ticker update: $112728.86000000
+{"event": "\ud83d\udd0d FINAL CHECK: Verifying all engines...", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:47.725906Z"}
+{"event": "   enterprise_trading_engine: \u2705 Available", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:47.726046Z"}
+{"event": "   day_trading_engine: \u2705 Available", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:47.726083Z"}
+{"event": "   continuous_learning_engine: \u274c None", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:47.726109Z"}
+{"event": "   session_aware_trading_engine: \u274c None", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:47.726131Z"}
+{"event": "   brain_controller: \u274c None", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:47.726151Z"}
+{"event": "\ud83d\udd0d FINAL CHECK COMPLETE", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:47.726170Z"}
+{"event": "\u2705 Engine initialization completed successfully", "logger": "app.backend.core.application", "level": "info", "timestamp": "2025-09-22T16:47:47.726649Z"}
+INFO:     Application startup complete.
+ERROR:    [Errno 48] error while attempting to bind on address ('0.0.0.0', 9002): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+🛑 Continuous learning optimization loop cancelled
+🛑 day analysis loop cancelled
+🛑 AUTOMATIC WARMUP TIMER: Cancelled
+🛑 Emergency monitoring loop cancelled
+🛑 Risk monitoring loop cancelled
+> CLOSE 1000 (OK) [2 bytes]
+= connection is CLOSING
+🛑 Risk monitoring loop cancelled
+> CLOSE 1000 (OK) [2 bytes]
+= connection is CLOSING
+> CLOSE 1000 (OK) [2 bytes]
+= connection is CLOSING
+🛑 Model monitoring loop cancelled
+> CLOSE 1000 (OK) [2 bytes]
+= connection is CLOSING
+< CLOSE 1000 (OK) [2 bytes]
+< CLOSE 1000 (OK) [2 bytes]
+< CLOSE 1000 (OK) [2 bytes]
+< CLOSE 1000 (OK) [2 bytes]
+< EOF
+> EOF
+= connection is CLOSED
+x closing TCP connection
+➖ Removed WebSocket subscription: ticker_BTCUSDT
+< EOF
+> EOF
+= connection is CLOSED
+x closing TCP connection
+< EOF
+> EOF
+= connection is CLOSED
+x closing TCP connection
+< EOF
+> EOF
+= connection is CLOSED
+x closing TCP connection

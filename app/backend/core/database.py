@@ -1291,6 +1291,20 @@ class TableSchemas:
             ]
         }
 
+    @staticmethod
+    def get_health_checks_schema() -> Dict[str, Any]:
+        """System health checks table schema used by health monitor."""
+        return {
+            'TableName': 'health_checks',
+            'BillingMode': 'PAY_PER_REQUEST',
+            'KeySchema': [
+                {'AttributeName': 'check_id', 'KeyType': 'HASH'}
+            ],
+            'AttributeDefinitions': [
+                {'AttributeName': 'check_id', 'AttributeType': 'S'}
+            ]
+        }
+
 class DatabaseManager:
     """Database manager for table operations and data management"""
     
@@ -1322,7 +1336,8 @@ class DatabaseManager:
             self.schemas.get_message_deliveries_schema(),
             self.schemas.get_announcements_schema(),
             self.schemas.get_user_notification_preferences_schema(),
-            self.schemas.get_notification_templates_schema()
+            self.schemas.get_notification_templates_schema(),
+            self.schemas.get_health_checks_schema()
         ]
         
         success = True
@@ -1711,6 +1726,7 @@ def ensure_required_tables() -> bool:
             schemas.get_announcements_schema(),
             schemas.get_user_notification_preferences_schema(),
             schemas.get_notification_templates_schema(),
+            TableSchemas.get_health_checks_schema(),
             schemas.get_learning_engine_state_schema()
         ]
         

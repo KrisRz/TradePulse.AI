@@ -14,13 +14,13 @@ logger = structlog.get_logger(__name__)
 class ConfidenceThresholds:
     """Unified confidence thresholds for all trading decisions"""
     
-    # PRIMARY SIGNAL THRESHOLDS (High confidence trades)
-    BUY_THRESHOLD: float = 0.65      # 65% confidence required for BUY signals
-    SELL_THRESHOLD: float = 0.65     # 65% confidence required for SELL signals
+    # PRIMARY SIGNAL THRESHOLDS (Bitcoin scalping optimized)
+    BUY_THRESHOLD: float = 0.45      # 45% confidence required for BUY signals (was 65% - too high!)
+    SELL_THRESHOLD: float = 0.45     # 45% confidence required for SELL signals (was 65% - too high!)
     
     # EXPLORATORY SIGNAL THRESHOLDS (Lower confidence for smaller positions)
-    EXPLORATORY_BUY: float = 0.45    # 45% confidence for exploratory BUY
-    EXPLORATORY_SELL: float = 0.45   # 45% confidence for exploratory SELL
+    EXPLORATORY_BUY: float = 0.35    # 35% confidence for exploratory BUY (was 45%)
+    EXPLORATORY_SELL: float = 0.35   # 35% confidence for exploratory SELL (was 45%)
     
     # HOLD DECISION THRESHOLDS
     HOLD_LOWER_BOUND: float = 0.35   # Below 35% = potential SELL signal

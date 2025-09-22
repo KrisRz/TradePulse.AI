@@ -223,13 +223,16 @@ class ModelPerformanceOptimizer:
         """Run actual model inference"""
         try:
             # Handle different model types
+            # Convert DataFrame to numpy array to avoid sklearn feature name warning
+            prediction_array = feature_array.values if hasattr(feature_array, 'values') else feature_array
+            
             if hasattr(model, 'predict_proba'):
                 # Classification model
-                probabilities = model.predict_proba(feature_array)
+                probabilities = model.predict_proba(prediction_array)
                 return probabilities[0] if len(probabilities) > 0 else [0.5, 0.5]
             elif hasattr(model, 'predict'):
                 # Regression model or other
-                prediction = model.predict(feature_array)
+                prediction = model.predict(prediction_array)
                 return prediction[0] if len(prediction) > 0 else 0.0
             else:
                 logger.error(f"Unknown model type for {model_name}")

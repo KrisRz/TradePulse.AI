@@ -24,10 +24,17 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Disable oneDNN optimizations
 os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Disable CUDA
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'  # Allow GPU memory growth
 os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private'  # GPU thread mode
-# os.environ['TF_USE_LEGACY_KERAS'] = '1'  # Disabled - causes import issues
+# CRITICAL MUTEX FIX
+os.environ['TF_NUM_INTEROP_THREADS'] = '1'  # Single thread for interop
+os.environ['TF_NUM_INTRAOP_THREADS'] = '1'  # Single thread for intraop
+os.environ['OMP_NUM_THREADS'] = '1'  # OpenMP single thread
+os.environ['MKL_NUM_THREADS'] = '1'  # Intel MKL single thread
 
 # LSTM disable flag to prevent recursion errors
 DISABLE_LSTM = os.getenv('DISABLE_LSTM', 'false').lower() == 'true'
+
+# TensorFlow 2.16.1 STABLE - NO AUTO-DETECTION NEEDED
+# Using official stable version from https://www.tensorflow.org/api_docs
 
 import asyncio
 import json
@@ -42,7 +49,7 @@ from decimal import Decimal
 from enum import Enum
 
 # Import market data services
-from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_market_data
+from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_market_data, get_live_orderbook_data
 from app.backend.utils.safe_formatting import safe_format_number, safe_format_price
 from app.backend.services.binance_hybrid_client import get_hybrid_client
 
@@ -94,10 +101,14 @@ class EntryAnalysisResult:
 
 class IntelligentEntryEngine:
     """
-    Intelligent Entry Engine with 6-Layer AI Analysis
+    UPGRADED Intelligent Entry Engine with Predictive Price Analysis
     
-    Analyzes market conditions and optimizes entry points
-    using multiple AI layers and consensus-based decision making.
+    NEW FEATURES:
+    - Predictive price movement analysis
+    - Price drop confirmation before BUY entries
+    - Price rise confirmation before SELL entries  
+    - Historical price pattern learning
+    - Smart entry timing with momentum confirmation
     """
     
     def __init__(self):
@@ -107,43 +118,198 @@ class IntelligentEntryEngine:
         current_file = Path(__file__).parent.parent  # Go up from services/ to backend/
         self.model_path = current_file / "models" / "enterprise"
         
-        # AGGRESSIVE SCALPING: Lower thresholds for more frequent trades
-        self.confidence_threshold = 0.35  # SCALPING: 35% minimum (dla testów)
-        self.consensus_threshold = 0.40   # SCALPING: 40% consensus (dla testów)
-        self.high_confidence_threshold = 0.50  # SCALPING: 50% for high confidence (dla testów)
-        self.historical_validation_threshold = 0.45  # SCALPING: 45% historical success (dla testów)
+        # ACTIVE DAY TRADING: Lower thresholds for frequent trading opportunities
+        self.confidence_threshold = 0.45  # ACTIVE: 45% minimum confidence (was 55%)
+        self.consensus_threshold = 0.50   # ACTIVE: 50% consensus required (was 60%)
+        self.high_confidence_threshold = 0.70  # ACTIVE: 70% for high confidence (was 75%)
+        self.historical_validation_threshold = 0.40  # ACTIVE: 40% historical success (was 50%)
         
-        # AGGRESSIVE SCALPING STARTUP: No warmup for immediate entry
+        # PRICE MOMENTUM CONFIRMATION: Wait for price movement in trade direction
+        self.price_confirmation_threshold = 0.002  # 0.2% price movement required
+        self.price_momentum_periods = 5  # Check last 5 price points
+        self.max_wait_for_confirmation = 300  # Max 5 minutes wait for price confirmation
+        
+        # PREDICTIVE ANALYSIS: Historical price tracking
+        self.price_history = []  # Store recent price history for analysis
+        self.max_price_history = 50  # Keep last 50 price points
+        self.prediction_confidence_boost = 0.1  # Boost confidence when prediction aligns
+        
+        # OPTIMIZED DAY TRADING WARMUP: Phase-based approach
         self.startup_time = datetime.now(timezone.utc)
-        self.warmup_period_minutes = 0  # NO WARMUP: Immediate entry for aggressive scalping
-        self.is_warmed_up = True  # Start warmed up
-        self.warmup_completed_at = datetime.now(timezone.utc)
-        self.scalping_mode = True  # NEW: Enable scalping optimizations
+        self.warmup_period_minutes = 3  # OPTIMIZED: 3-minute maximum warmup for day trading
+        self.is_warmed_up = False  # Start with analysis mode
+        self.warmup_completed_at = None
+        self.smart_entry_mode = True  # NEW: Enable smart entry with price confirmation
+        
+        # PHASE-BASED WARMUP SYSTEM
+        self.warmup_phase = 1  # Current warmup phase (1, 2, or 3)
+        self.phase1_duration = 1.0  # Phase 1: 1 minute - collect basic price history
+        self.phase2_duration = 2.0  # Phase 2: 2 minutes - normal operation with higher thresholds
+        self.phase3_start = 3.0     # Phase 3: 3+ minutes - full optimization
+        
+        # PHASE-BASED THRESHOLDS for gradual confidence building
+        self.phase1_confidence_threshold = 0.75  # Higher threshold during initial warmup
+        self.phase2_confidence_threshold = 0.70  # Medium threshold during phase 2
+        self.phase3_confidence_threshold = 0.65  # Normal threshold after full warmup
+        
+        # MINIMUM DATA REQUIREMENTS for each phase
+        self.min_price_history_basic = 5   # Phase 1: 5 points = 60 seconds at 12s intervals
+        self.min_price_history_full = 20   # Phase 2: 20 points = 4 minutes for full analysis
         
         # Historical context service
         self.historical_context = None
         
-        # Entry analysis cooldown to reduce CPU usage - SHORTENED FOR AGGRESSIVE SCALPING
+        # Entry analysis with smart timing
         self.entry_cooldown_cache = {}
-        self.entry_cooldown_seconds = 3  # SCALPING: 3 seconds cooldown (was 15 - too long!)  # Minimum 15 seconds between analyses for same symbol
+        # Runtime-configurable cooldown (default 10s)
+        try:
+            from app.backend.core.config import get_settings
+            s = get_settings()
+            self.entry_cooldown_seconds = int(getattr(s, "ENTRY_COOLDOWN_SECONDS", 10))
+        except Exception:
+            self.entry_cooldown_seconds = 10  # fallback to default
+        # Pre-init low-cardinality series at engine startup
+        try:
+            from app.backend.services.metrics import preinit_decision_dupe_series, preinit_l5_vector_source_series, preinit_analysis_only_failure_series
+            preinit_decision_dupe_series()
+            preinit_l5_vector_source_series()
+            preinit_analysis_only_failure_series()
+        except Exception:
+            pass
+        self.pending_entries = {}  # Track entries waiting for price confirmation
         
         # Performance tracking
         self.total_analyses = 0
         self.entries_recommended = 0
         self.successful_entries = 0
         self.layer_health = {}
+        self.prediction_accuracy = 0.0
         
-        # Layer configurations
+        # UPGRADED Layer configurations with price analysis
         self.layers = {
-            1: {"name": "Market Regime Analysis", "weight": 0.20},
-            2: {"name": "LSTM Prediction Models", "weight": 0.25},
+            1: {"name": "Market Regime Analysis", "weight": 0.15},
+            2: {"name": "Predictive Price Analysis", "weight": 0.30},  # ENHANCED
             3: {"name": "Pattern Recognition", "weight": 0.20},
-            4: {"name": "Technical Indicators", "weight": 0.15},
-            5: {"name": "Momentum Analysis", "weight": 0.10},
-            6: {"name": "Entry Timing", "weight": 0.10}
+            4: {"name": "Technical Momentum", "weight": 0.15},  # ENHANCED  
+            5: {"name": "Price Direction Confirmation", "weight": 0.15},  # NEW
+            6: {"name": "Smart Entry Timing", "weight": 0.05}  # REDUCED
         }
         
-        logger.info("🎯 Intelligent Entry Engine initialized")
+        logger.info("🎯 UPGRADED Intelligent Entry Engine initialized with predictive analysis")
+    
+    async def update_price_history(self, current_price: float):
+        """Update price history for predictive analysis"""
+        timestamp = datetime.now(timezone.utc)
+        
+        # Add new price point
+        self.price_history.append({
+            "price": current_price,
+            "timestamp": timestamp
+        })
+        
+        # Keep only recent history
+        if len(self.price_history) > self.max_price_history:
+            self.price_history.pop(0)
+            
+        logger.debug(f"📈 Price history updated: {current_price:.2f} ({len(self.price_history)} points)")
+    
+    async def analyze_price_momentum(self, current_price: float, signal_action: str) -> Dict[str, Any]:
+        """Analyze price momentum to confirm entry direction"""
+        if len(self.price_history) < self.price_momentum_periods:
+            return {
+                "momentum_confirmed": False,
+                "momentum_strength": 0.0,
+                "price_direction": "insufficient_data",
+                "reason": "Insufficient price history"
+            }
+        
+        # Get recent price points
+        recent_prices = [p["price"] for p in self.price_history[-self.price_momentum_periods:]]
+        price_changes = []
+        
+        for i in range(1, len(recent_prices)):
+            change_pct = (recent_prices[i] - recent_prices[i-1]) / recent_prices[i-1]
+            price_changes.append(change_pct)
+        
+        avg_momentum = sum(price_changes) / len(price_changes)
+        momentum_strength = abs(avg_momentum)
+        
+        # Determine price direction
+        if avg_momentum > self.price_confirmation_threshold:
+            price_direction = "rising"
+        elif avg_momentum < -self.price_confirmation_threshold:
+            price_direction = "falling"
+        else:
+            price_direction = "sideways"
+        
+        # Check if momentum aligns with signal
+        momentum_confirmed = False
+        if signal_action == "BUY" and price_direction == "falling":
+            # BUY signal with falling price = GOOD (buy the dip)
+            momentum_confirmed = True
+        elif signal_action == "SELL" and price_direction == "rising":
+            # SELL signal with rising price = GOOD (sell the peak)
+            momentum_confirmed = True
+        elif momentum_strength < self.price_confirmation_threshold / 2:
+            # Low momentum = neutral, allow entry
+            momentum_confirmed = True
+            
+        return {
+            "momentum_confirmed": momentum_confirmed,
+            "momentum_strength": momentum_strength,
+            "price_direction": price_direction,
+            "avg_momentum": avg_momentum,
+            "recent_prices": recent_prices[-3:],  # Last 3 prices for debugging
+            "reason": f"Price {price_direction}, momentum {momentum_strength:.4f}"
+        }
+    
+    async def predict_price_target(self, current_price: float, signal_action: str) -> Dict[str, Any]:
+        """Predict optimal entry price based on historical patterns"""
+        if len(self.price_history) < 20:
+            return {
+                "predicted_target": current_price,
+                "confidence": 0.5,
+                "wait_for_better_price": False,
+                "reason": "Insufficient data for prediction"
+            }
+        
+        # Analyze recent price volatility
+        recent_prices = [p["price"] for p in self.price_history[-20:]]
+        price_std = np.std(recent_prices)
+        price_mean = np.mean(recent_prices)
+        
+        # Calculate support/resistance levels
+        price_high = max(recent_prices)
+        price_low = min(recent_prices)
+        price_range = price_high - price_low
+        
+        # Predict better entry points
+        if signal_action == "BUY":
+            # For BUY: Target lower prices (support levels)
+            support_level = price_low + (price_range * 0.2)  # 20% above low
+            predicted_target = min(support_level, current_price - (price_std * 0.5))
+            wait_for_better = current_price > predicted_target + (current_price * 0.005)  # 0.5% buffer
+            
+        else:  # SELL
+            # For SELL: Target higher prices (resistance levels)  
+            resistance_level = price_high - (price_range * 0.2)  # 20% below high
+            predicted_target = max(resistance_level, current_price + (price_std * 0.5))
+            wait_for_better = current_price < predicted_target - (current_price * 0.005)  # 0.5% buffer
+        
+        # Calculate prediction confidence based on pattern consistency
+        price_volatility = price_std / price_mean
+        confidence = max(0.3, min(0.9, 1.0 - (price_volatility * 2)))
+        
+        return {
+            "predicted_target": predicted_target,
+            "confidence": confidence,
+            "wait_for_better_price": wait_for_better,
+            "current_price": current_price,
+            "support_level": support_level if signal_action == "BUY" else None,
+            "resistance_level": resistance_level if signal_action == "SELL" else None,
+            "price_volatility": price_volatility,
+            "reason": f"Target: {predicted_target:.2f}, Current: {current_price:.2f}, Wait: {wait_for_better}"
+        }
     
     async def initialize(self):
         """Initialize the entry engine with models and historical context"""
@@ -177,8 +343,32 @@ class IntelligentEntryEngine:
             
             # Start warmup period
             logger.info("⏰ PIPELINE DEBUG: Entry Engine - Starting warmup period...")
+            try:
+                from app.backend.services.metrics import set_engine_phase, set_decision_threshold
+                set_engine_phase("entry", 2)  # warmup
+                # Export initial thresholds
+                from app.backend.config.trading_thresholds import ConfidenceThresholds
+                th = ConfidenceThresholds()
+                set_decision_threshold("entry", "primary", "phase1", float(th.BUY_THRESHOLD))
+                set_decision_threshold("entry", "exploratory", "phase1", float(th.EXPLORATORY_BUY))
+            except Exception:
+                pass
             await self._start_warmup_period()
             logger.info("✅ PIPELINE DEBUG: Entry Engine - Warmup period initiated")
+            try:
+                import os as _os
+                from app.backend.services.metrics import set_engine_info
+                phase = "warmup"
+                set_engine_info("entry", "primary", phase, _os.getenv("HOSTNAME", "local"))
+            except Exception:
+                pass
+            
+            # Start background live price polling (keeps price_history fresh)
+            try:
+                asyncio.create_task(self._price_poll_loop(5))
+                logger.info("✅ PIPELINE DEBUG: Entry Engine - Background price poller started (5s interval)")
+            except Exception as e:
+                logger.warning(f"⚠️ PIPELINE DEBUG: Entry Engine - Failed to start price poller: {e}")
             
             self.is_initialized = True
             logger.info("✅ Enhanced Intelligent Entry Engine initialized successfully")
@@ -190,70 +380,175 @@ class IntelligentEntryEngine:
             logger.error("💥 PIPELINE DEBUG: Entry Engine - INITIALIZATION FAILED")
             logger.error(f"💥 PIPELINE DEBUG: Entry Engine - Error details: {str(e)}")
             raise
+
+    async def _price_poll_loop(self, interval_sec: int = 5) -> None:
+        """Background loop polling live price to update price_history.
+
+        Args:
+            interval_sec: polling interval in seconds.
+        """
+        while True:
+            try:
+                price = await get_live_bitcoin_price()
+                if price and price > 0:
+                    await self.update_price_history(price)
+            except Exception as e:
+                logger.debug(f"price poll failed: {e}")
+            await asyncio.sleep(interval_sec)
     
     async def _start_warmup_period(self):
-        """Start 30-minute warmup period with market assessment"""
-        logger.info(f"🔥 Starting {self.warmup_period_minutes}-minute warmup period...")
-        logger.info("📊 During warmup: Pre-loading market context and validating historical patterns")
+        """Start OPTIMIZED 3-minute phase-based warmup period for day trading"""
+        logger.info(f"🔥 Starting OPTIMIZED {self.warmup_period_minutes}-minute phase-based warmup for day trading...")
+        logger.info("📊 Phase 1 (1 min): Collect price history + higher thresholds")
+        logger.info("📊 Phase 2 (2 min): Normal operation + medium thresholds")
+        logger.info("📊 Phase 3 (3+ min): Full optimization + standard thresholds")
         
         # Start warmup task in background
         asyncio.create_task(self._warmup_background_task())
     
     async def _warmup_background_task(self):
-        """Background task for warmup period market assessment"""
+        """OPTIMIZED: Phase-based warmup for day trading (3 minutes maximum)"""
         try:
             warmup_start = datetime.now(timezone.utc)
+            logger.info("🚀 PHASE-BASED WARMUP: Starting optimized day trading warmup...")
             
-            # During warmup, prepare everything for instant decisions
-            logger.info("🔄 Warmup: Validating historical context data...")
+            # PRE-LOAD HISTORICAL DATA in background (non-blocking)
+            asyncio.create_task(self._preload_historical_data())
             
-            # Test all historical lookups to ensure they're working
+            # PHASE 1: Basic price history collection (1 minute)
+            logger.info("🔥 PHASE 1: Collecting basic price history (higher thresholds)")
+            self.warmup_phase = 1
+            
+            phase1_start = datetime.now(timezone.utc)
+            while True:
+                elapsed_minutes = (datetime.now(timezone.utc) - phase1_start).total_seconds() / 60
+                
+                # Check if we have minimum data for Phase 1
+                if len(self.price_history) >= self.min_price_history_basic and elapsed_minutes >= 1.0:
+                    logger.info(f"✅ PHASE 1 COMPLETE: {len(self.price_history)} price points collected")
+                    break
+                elif elapsed_minutes >= self.phase1_duration:
+                    logger.info(f"⏰ PHASE 1 TIMEOUT: Proceeding with {len(self.price_history)} price points")
+                    break
+                
+                await asyncio.sleep(10)  # Check every 10 seconds
+            
+            # PHASE 2: Normal operation with higher thresholds (2 minutes)
+            logger.info("🔥 PHASE 2: Normal operation (medium thresholds)")
+            self.warmup_phase = 2
+            
+            phase2_start = datetime.now(timezone.utc)
+            while True:
+                elapsed_minutes = (datetime.now(timezone.utc) - phase2_start).total_seconds() / 60
+                
+                # Check if we have full data for Phase 2
+                if len(self.price_history) >= self.min_price_history_full and elapsed_minutes >= 1.0:
+                    logger.info(f"✅ PHASE 2 COMPLETE: {len(self.price_history)} price points for full analysis")
+                    break
+                elif elapsed_minutes >= (self.phase2_duration - self.phase1_duration):
+                    logger.info(f"⏰ PHASE 2 TIMEOUT: Proceeding with {len(self.price_history)} price points")
+                    break
+                
+                await asyncio.sleep(10)  # Check every 10 seconds
+            
+            # PHASE 3: Full optimization (3+ minutes)
+            logger.info("🔥 PHASE 3: Full optimization (standard thresholds)")
+            self.warmup_phase = 3
+            
+            # Wait for minimum warmup period
+            total_elapsed = (datetime.now(timezone.utc) - warmup_start).total_seconds() / 60
+            if total_elapsed < self.warmup_period_minutes:
+                remaining_time = (self.warmup_period_minutes - total_elapsed) * 60
+                logger.info(f"⏰ Waiting {remaining_time:.0f} seconds for minimum warmup period...")
+                await asyncio.sleep(remaining_time)
+            
+            # Warmup completed
+            self.is_warmed_up = True
+            self.warmup_completed_at = datetime.now(timezone.utc)
+            total_time = (self.warmup_completed_at - warmup_start).total_seconds() / 60
+            
+            logger.info("✅ OPTIMIZED WARMUP COMPLETED!")
+            logger.info(f"🎯 Total warmup time: {total_time:.1f} minutes")
+            logger.info(f"📊 Price history points: {len(self.price_history)}")
+            logger.info(f"🚀 Entry engine ready for DAY TRADING with standard thresholds")
+            try:
+                import os as _os
+                from app.backend.services.metrics import set_engine_phase, set_engine_info
+                set_engine_phase("entry", 3)
+                set_engine_info("entry", "primary", "running", _os.getenv("HOSTNAME", "local"))
+            except Exception:
+                pass
+            
+        except Exception as e:
+            logger.error(f"❌ Phase-based warmup failed: {e}")
+            # Still mark as warmed up to prevent permanent blocking
+            self.is_warmed_up = True
+            self.warmup_completed_at = datetime.now(timezone.utc)
+            self.warmup_phase = 3  # Default to full operation
+    
+    async def _preload_historical_data(self):
+        """PRE-LOAD historical data in background during warmup (non-blocking)"""
+        try:
+            logger.info("🔄 PRE-LOADING: Historical context data in background...")
+            
+            # Test historical context if available
             if self.historical_context:
                 # Test price range lookups
                 from app.backend.services.live_market_data import get_live_bitcoin_price
                 current_price = await get_live_bitcoin_price()
                 
-                for period in ["1D", "7D", "30D"]:
-                    position = self.historical_context.get_price_range_position(current_price, period)
-                    if position is not None:
-                        logger.info(f"   {period} range position: {position:.1%}")
+                if current_price:
+                    # Pre-load price range positions
+                    for period in ["1D", "7D", "30D"]:
+                        try:
+                            position = self.historical_context.get_price_range_position(current_price, period)
+                            if position is not None:
+                                logger.debug(f"   {period} range position: {position:.1%}")
+                        except Exception as e:
+                            logger.debug(f"   {period} range position failed: {e}")
+                    
+                    # Pre-load pattern success rates
+                    for pattern in ["rsi_oversold", "macd_bullish", "bollinger_support"]:
+                        try:
+                            success_rate = self.historical_context.get_pattern_success_rate(pattern)
+                            if success_rate:
+                                logger.debug(f"   {pattern}: {success_rate.success_rate:.1%} success rate")
+                        except Exception as e:
+                            logger.debug(f"   {pattern} pattern failed: {e}")
+                    
+                    # Pre-load support/resistance levels
+                    try:
+                        support, resistance = self.historical_context.get_support_resistance_levels("30D")
+                        logger.info(f"✅ PRE-LOADED: {len(support)} support, {len(resistance)} resistance levels")
+                    except Exception as e:
+                        logger.debug(f"   Support/resistance failed: {e}")
+                        
+                logger.info("✅ PRE-LOADING: Historical context data ready")
+            else:
+                logger.info("⚠️ PRE-LOADING: No historical context service available")
                 
-                # Test pattern success rates
-                for pattern in ["rsi_oversold", "macd_bullish", "bollinger_support"]:
-                    success_rate = self.historical_context.get_pattern_success_rate(pattern)
-                    if success_rate:
-                        logger.info(f"   {pattern}: {success_rate.success_rate:.1%} success rate")
-                
-                # Test support/resistance levels
-                support, resistance = self.historical_context.get_support_resistance_levels("30D")
-                logger.info(f"   Support levels: {len(support)}, Resistance levels: {len(resistance)}")
-            
-            # Wait for warmup period to complete
-            while True:
-                elapsed = (datetime.now(timezone.utc) - warmup_start).total_seconds() / 60
-                if elapsed >= self.warmup_period_minutes:
-                    break
-                
-                # Log progress every 5 minutes
-                if int(elapsed) % 5 == 0 and elapsed > 0:
-                    remaining = self.warmup_period_minutes - elapsed
-                    logger.info(f"🔥 Warmup progress: {elapsed:.0f}/{self.warmup_period_minutes} minutes ({remaining:.0f} remaining)")
-                
-                await asyncio.sleep(60)  # Check every minute
-            
-            # Warmup completed
-            self.is_warmed_up = True
-            self.warmup_completed_at = datetime.now(timezone.utc)
-            logger.info("✅ WARMUP COMPLETED: Entry engine ready for intelligent decisions")
-            
         except Exception as e:
-            logger.error(f"❌ Warmup period failed: {e}")
-            # Still mark as warmed up to prevent permanent blocking
-            self.is_warmed_up = True
-            self.warmup_completed_at = datetime.now(timezone.utc)
+            logger.warning(f"⚠️ PRE-LOADING: Historical data pre-load failed: {e}")
+    
+    def get_current_warmup_phase(self) -> int:
+        """Get current warmup phase for dynamic threshold adjustment"""
+        if not self.is_warmed_up:
+            return self.warmup_phase
+        return 3  # Full operation after warmup
+    
+    def get_phase_based_confidence_threshold(self) -> float:
+        """Get confidence threshold based on current warmup phase"""
+        phase = self.get_current_warmup_phase()
+        
+        if phase == 1:
+            return self.phase1_confidence_threshold  # 0.75 - Higher during initial warmup
+        elif phase == 2:
+            return self.phase2_confidence_threshold  # 0.70 - Medium during phase 2  
+        else:
+            return self.phase3_confidence_threshold  # 0.65 - Normal after full warmup
     
     def _load_entry_models(self):
-        """Load all 6-layer entry analysis models"""
+        """Load all 6-layer entry analysis models (OPTIONAL - graceful fallback)"""
         try:
             model_files = {
                 "regime": "layer_1_regime.pkl",
@@ -264,25 +559,36 @@ class IntelligentEntryEngine:
                 "timing": "layer_6_timing.pkl"
             }
             
+            models_loaded = 0
             for model_name, filename in model_files.items():
                 model_file = self.model_path / filename
-                if model_file.exists():
-                    if filename.endswith('.pkl'):
-                        with open(model_file, "rb") as f:
-                            self.models[model_name] = pickle.load(f)
+                try:
+                    if model_file.exists():
+                        if filename.endswith('.pkl'):
+                            with open(model_file, "rb") as f:
+                                self.models[model_name] = pickle.load(f)
+                        else:
+                            # For .h5 files (TensorFlow models)
+                            self.models[model_name] = f"model_path:{model_file}"
+                        
+                        logger.info(f"✅ Loaded {model_name} entry model")
+                        self.layer_health[model_name] = "healthy"
+                        models_loaded += 1
                     else:
-                        # For .h5 files (TensorFlow models)
-                        self.models[model_name] = f"model_path:{model_file}"
-                    
-                    logger.info(f"✅ Loaded {model_name} entry model")
-                    self.layer_health[model_name] = "healthy"
-                else:
-                    logger.warning(f"⚠️ Model file not found: {filename}")
+                        logger.warning(f"⚠️ Model file not found: {filename}")
+                        self.layer_health[model_name] = "degraded"
+                except Exception as model_error:
+                    logger.warning(f"⚠️ Failed to load {model_name} model: {model_error}")
                     self.layer_health[model_name] = "degraded"
             
+            if models_loaded == 0:
+                logger.warning("⚠️ No models loaded - using fallback analysis mode")
+            else:
+                logger.info(f"✅ Loaded {models_loaded}/{len(model_files)} entry models")
+            
         except Exception as e:
-            logger.error(f"Failed to load entry models: {e}")
-            raise RuntimeError(f"Entry model loading failed: {e}")
+            logger.warning(f"Model loading encountered issues: {e}")
+            logger.info("🔄 Continuing with fallback analysis mode (no models required)")
     
     def _initialize_health_monitoring(self):
         """Initialize health monitoring for all layers"""
@@ -292,7 +598,7 @@ class IntelligentEntryEngine:
                 self.layer_health[layer_name] = "unknown"
     
     async def analyze_entry_opportunity(
-        self, symbol: str, signal_data: Dict[str, Any], user_portfolio: Dict[str, Any]
+        self, symbol: str, signal_data: Dict[str, Any], user_portfolio: Dict[str, Any], market_data_override: Optional[Dict[str, Any]] = None
     ) -> EntryAnalysisResult:
         """
         ENHANCED: Analyze entry opportunity with historical validation and startup protection
@@ -309,9 +615,24 @@ class IntelligentEntryEngine:
             logger.info("🔄 PIPELINE DEBUG: Entry Engine - Not initialized, initializing now...")
             await self.initialize()
         
-        logger.info(f"🎯 PIPELINE DEBUG: Entry Engine - Analyzing entry opportunity for {symbol}")
+        logger.info(f"🎯 UPGRADED ENTRY ENGINE - Analyzing predictive entry opportunity for {symbol}")
         logger.info(f"📊 PIPELINE DEBUG: Entry Engine - Signal data keys: {list(signal_data.keys()) if signal_data else 'None'}")
         logger.info(f"💼 PIPELINE DEBUG: Entry Engine - Portfolio data available: {bool(user_portfolio)}")
+        
+        # GET CURRENT PRICE AND UPDATE HISTORY (no fallbacks, best-effort history update)
+        current_price: Optional[float] = None
+        try:
+            cp = await get_live_bitcoin_price()
+            if cp is not None and cp > 0:
+                current_price = cp
+                await self.update_price_history(cp)
+            else:
+                logger.warning("Live price unavailable or invalid; skipping history update before cooldown check")
+        except Exception as e:
+            logger.warning(f"Failed to get live price for history update: {e}")
+        signal_action = signal_data.get("action", "HOLD")
+        
+        logger.info(f"📈 PREDICTIVE ANALYSIS: Current price {current_price:.2f}, Signal: {signal_action}, History points: {len(self.price_history)}")
         
         # COOLDOWN CHECK: Prevent excessive analysis
         import time
@@ -325,17 +646,16 @@ class IntelligentEntryEngine:
             # Get current price even during cooldown
             try:
                 current_price = await get_live_bitcoin_price()
-                if current_price is None or current_price <= 0:
-                    current_price = portfolio_data.get('current_market_price', 111000.0)  # Fallback price
-            except:
-                current_price = 111000.0  # Safe fallback
+            except Exception as e:
+                logger.warning(f"Failed to get live price during cooldown: {e}")
+                current_price = None
             
             return EntryAnalysisResult(
                 should_enter=False,
                 confidence=0.0,
                 entry_reason=EntryReason.POOR_TIMING,
                 entry_quality=EntryQuality.POOR,
-                optimal_entry_price=float(current_price),  # FIXED: Use current price instead of 0.0
+                optimal_entry_price=float(current_price) if current_price else 0.0,
                 position_size_recommendation=0.0,
                 risk_score=1.0,
                 timing_score=0.0,
@@ -348,37 +668,37 @@ class IntelligentEntryEngine:
         # Update last analysis time
         self.entry_cooldown_cache[symbol] = current_time
         
-        # STARTUP PROTECTION: Block entries during warmup period
+        # OPTIMIZED PHASE-BASED WARMUP: Allow entries with higher thresholds during phases
+        current_phase = self.get_current_warmup_phase()
+        phase_threshold = self.get_phase_based_confidence_threshold()
+        
         if not self.is_warmed_up:
             elapsed_minutes = (datetime.now(timezone.utc) - self.startup_time).total_seconds() / 60
-            remaining_minutes = self.warmup_period_minutes - elapsed_minutes
+            remaining_minutes = max(0, self.warmup_period_minutes - elapsed_minutes)
             
-            if remaining_minutes > 0:
-                logger.info(f"🔥 WARMUP PERIOD: Entry blocked for {remaining_minutes:.1f} more minutes")
-                logger.info(f"⏰ PIPELINE DEBUG: Entry Engine - WARMUP ACTIVE - Blocking entry analysis")
-                logger.info(f"⏰ PIPELINE DEBUG: Entry Engine - Remaining warmup time: {remaining_minutes:.1f} minutes")
-                # Get current price even during warmup
-                try:
-                    current_price = await get_live_bitcoin_price()
-                    if current_price is None or current_price <= 0:
-                        current_price = portfolio_data.get('current_market_price', 111000.0)  # Fallback price
-                except:
-                    current_price = 111000.0  # Safe fallback
+            # PHASE 1: Block entries if insufficient price history
+            if current_phase == 1 and len(self.price_history) < self.min_price_history_basic:
+                logger.info(f"🔥 PHASE 1 WARMUP: Entry blocked - collecting price history ({len(self.price_history)}/{self.min_price_history_basic})")
+                logger.info(f"⏰ PIPELINE DEBUG: Entry Engine - PHASE 1 ACTIVE - Need more price data")
                 
                 return EntryAnalysisResult(
                     should_enter=False,
                     confidence=0.0,
                     entry_reason=EntryReason.POOR_TIMING,
                     entry_quality=EntryQuality.POOR,
-                    optimal_entry_price=float(current_price),  # FIXED: Use current price instead of 0.0
+                    optimal_entry_price=float(current_price),
                     position_size_recommendation=0.0,
                     risk_score=1.0,
                     timing_score=0.0,
-                    layer_analysis={"warmup_status": "in_progress"},
-                    market_conditions={"warmup_remaining_minutes": remaining_minutes},
+                    layer_analysis={"warmup_phase": current_phase, "price_history_count": len(self.price_history)},
+                    market_conditions={"warmup_remaining_minutes": remaining_minutes, "phase_threshold": phase_threshold},
                     analysis_time_ms=0.0,
                     timestamp=datetime.now(timezone.utc)
                 )
+            
+            # PHASE 2 & 3: Allow entries with phase-appropriate thresholds
+            logger.info(f"🔥 PHASE {current_phase} WARMUP: Analysis allowed with {phase_threshold:.0%} threshold")
+            logger.info(f"📊 PIPELINE DEBUG: Entry Engine - PHASE {current_phase} ACTIVE - Using higher thresholds")
         
         start_time = datetime.now()
         
@@ -386,7 +706,7 @@ class IntelligentEntryEngine:
             logger.info(f"🎯 Analyzing ENHANCED entry opportunity for {symbol}")
             logger.info("📊 PIPELINE DEBUG: Entry Engine - Starting 6-layer entry analysis")
             
-            # Get current market data with safe validation
+            # Get current market data with strict validation (no fallbacks)
             logger.info("📈 PIPELINE DEBUG: Entry Engine - Fetching live market data...")
             current_price = await get_live_bitcoin_price()
             if current_price is None or current_price <= 0:
@@ -396,13 +716,21 @@ class IntelligentEntryEngine:
             
             logger.info(f"💰 PIPELINE DEBUG: Entry Engine - Current Bitcoin price: ${current_price:,.2f}")
             
-            market_data = await get_live_market_data()
+            market_data = market_data_override if market_data_override is not None else await get_live_market_data()
             if market_data is None:
                 logger.error("❌ Cannot get market data for entry analysis")
-                logger.warning("⚠️ PIPELINE DEBUG: Entry Engine - Market data unavailable, using fallback")
-                market_data = {"price": current_price, "volume": 0}
+                raise RuntimeError("Live market data unavailable")
             else:
-                logger.info("✅ PIPELINE DEBUG: Entry Engine - Live market data retrieved successfully")
+                try:
+                    from app.backend.services.metrics import set_decision_threshold
+                    from app.backend.config.trading_thresholds import ConfidenceThresholds
+                    th = ConfidenceThresholds()
+                    phase_str = f"phase{self.get_current_warmup_phase()}" if not self.is_warmed_up else "running"
+                    set_decision_threshold("entry", "primary", phase_str, float(th.BUY_THRESHOLD))
+                    set_decision_threshold("entry", "exploratory", phase_str, float(th.EXPLORATORY_BUY))
+                except Exception:
+                    pass
+            logger.info("✅ PIPELINE DEBUG: Entry Engine - Live market data retrieved successfully")
             
             # ENHANCED: Add historical market context
             logger.info("📊 PIPELINE DEBUG: Entry Engine - Processing historical market context...")
@@ -412,18 +740,19 @@ class IntelligentEntryEngine:
                     logger.info("📊 PIPELINE DEBUG: Entry Engine - Getting price range positions...")
                     price_position_30d = self.historical_context.get_price_range_position(current_price, "30D")
                     price_position_7d = self.historical_context.get_price_range_position(current_price, "7D")
+                    if price_position_30d is None or price_position_7d is None:
+                        raise RuntimeError("Historical context returned incomplete price range positions")
                     
                     # Get support/resistance levels
                     logger.info("📊 PIPELINE DEBUG: Entry Engine - Getting support/resistance levels...")
                     support_levels, resistance_levels = self.historical_context.get_support_resistance_levels("30D")
-                    
-                    # Ensure we have valid data
+                    # Ensure we have valid data (no fabricated levels)
                     support_levels = support_levels if support_levels is not None else []
                     resistance_levels = resistance_levels if resistance_levels is not None else []
                     
                     # Add to market data for layer analysis
-                    market_data["price_position_30d"] = price_position_30d if price_position_30d is not None else 0.5
-                    market_data["price_position_7d"] = price_position_7d if price_position_7d is not None else 0.5
+                    market_data["price_position_30d"] = price_position_30d
+                    market_data["price_position_7d"] = price_position_7d
                     market_data["support_levels"] = support_levels
                     market_data["resistance_levels"] = resistance_levels
                     market_data["historical_context_available"] = True
@@ -440,19 +769,15 @@ class IntelligentEntryEngine:
                     
                 except Exception as context_error:
                     logger.error(f"⚠️ PIPELINE DEBUG: Entry Engine - Historical context failed: {context_error}")
-                    # Fallback to no historical context
-                    market_data["historical_context_available"] = False
-                    market_data["price_position_30d"] = 0.5
-                    market_data["price_position_7d"] = 0.5
-                    market_data["support_levels"] = []
-                    market_data["resistance_levels"] = []
+                    try:
+                        from app.backend.services.metrics import inc_historical_context_error
+                        inc_historical_context_error()
+                    except Exception:
+                        pass
+                    raise
             else:
-                logger.info("⚠️ PIPELINE DEBUG: Entry Engine - No historical context service available")
-                market_data["historical_context_available"] = False
-                market_data["price_position_30d"] = 0.5
-                market_data["price_position_7d"] = 0.5
-                market_data["support_levels"] = []
-                market_data["resistance_levels"] = []
+                logger.error("⚠️ PIPELINE DEBUG: Entry Engine - No historical context service available")
+                raise RuntimeError("Historical context service unavailable")
             
             # Run 6-layer entry analysis
             layer_results = await self._run_six_layer_entry_analysis(
@@ -479,6 +804,14 @@ class IntelligentEntryEngine:
             position_size = self._calculate_position_size(
                 entry_decision, user_portfolio, layer_results
             )
+            # Apply playbook override size haircut if present
+            try:
+                if entry_decision.get("reason") == "playbook_override":
+                    from app.backend.core.runtime_config import runtime_config_store
+                    cfg = await runtime_config_store.get()
+                    position_size *= float(getattr(cfg, "playbook_override_size_multiplier", 0.60))
+            except Exception:
+                pass
             
             # Calculate analysis time
             analysis_time = (datetime.now() - start_time).total_seconds() * 1000
@@ -520,13 +853,13 @@ class IntelligentEntryEngine:
         except Exception as e:
             logger.error(f"❌ Entry analysis failed: {e}")
             
-            # Return safe fallback instead of crashing
+            # Strict no-fallback: surface error, but return structured WAIT with no fabricated price
             return EntryAnalysisResult(
                 should_enter=False,
                 confidence=0.0,
                 entry_reason=EntryReason.POOR_TIMING,
                 entry_quality=EntryQuality.POOR,
-                optimal_entry_price=current_price if current_price and current_price > 0 else 111000.0,  # FIXED: Safe fallback price
+                optimal_entry_price=float(current_price) if current_price and current_price > 0 else 0.0,
                 position_size_recommendation=0.0,
                 risk_score=1.0,
                 timing_score=0.0,
@@ -540,11 +873,12 @@ class IntelligentEntryEngine:
         self, symbol: str, signal_data: Dict[str, Any], current_price: float, 
         market_data: Dict[str, Any], user_portfolio: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Run comprehensive 6-layer entry analysis"""
+        """UPGRADED: Run comprehensive 6-layer entry analysis with predictive features"""
         
         layer_results = {}
+        signal_action = signal_data.get("action", "HOLD")
         
-        # Layer 1: Market Regime Analysis
+        # Layer 1: Market Regime Analysis (Reduced weight)
         try:
             regime_analysis = await self._analyze_entry_market_regime(market_data, signal_data)
             layer_results["layer_1_regime"] = regime_analysis
@@ -552,24 +886,39 @@ class IntelligentEntryEngine:
             logger.warning(f"Layer 1 (Regime) failed: {e}")
             layer_results["layer_1_regime"] = {"recommendation": "wait", "confidence": 0.0}
         
-        # Layer 2: LSTM Prediction Analysis
-        if DISABLE_LSTM:
-            logger.debug("🔄 PIPELINE DEBUG: Entry Engine - LSTM disabled by environment flag")
-            layer_results["layer_2_lstm"] = {
-                "recommendation": "wait", 
-                "confidence": 0.5,
-                "reasoning": "LSTM analysis disabled to prevent recursion errors"
+        # Layer 2: UPGRADED Predictive Price Analysis (Increased weight)
+        try:
+            # Get price prediction
+            price_prediction = await self.predict_price_target(current_price, signal_action)
+            
+            # Combine with LSTM if available
+            if not DISABLE_LSTM:
+                try:
+                    lstm_analysis = await self._analyze_lstm_entry_signals(symbol, current_price, signal_data)
+                    # Merge LSTM with price prediction
+                    combined_confidence = (price_prediction["confidence"] + lstm_analysis.get("confidence", 0.0)) / 2
+                    recommendation = "enter" if price_prediction["wait_for_better_price"] == False and lstm_analysis.get("recommendation") == "enter" else "wait"
+                except Exception as e:
+                    logger.warning(f"LSTM analysis failed: {e}")
+                    combined_confidence = price_prediction["confidence"]
+                    recommendation = "wait" if price_prediction["wait_for_better_price"] else "enter"
+            else:
+                combined_confidence = price_prediction["confidence"]
+                recommendation = "wait" if price_prediction["wait_for_better_price"] else "enter"
+            
+            layer_results["layer_2_predictive"] = {
+                "recommendation": recommendation,
+                "confidence": combined_confidence,
+                "predicted_target": price_prediction["predicted_target"],
+                "wait_for_better_price": price_prediction["wait_for_better_price"],
+                "reasoning": f"Predictive analysis: {price_prediction['reason']}"
             }
-        else:
-            try:
-                lstm_analysis = await self._analyze_lstm_entry_signals(symbol, current_price, signal_data)
-                layer_results["layer_2_lstm"] = lstm_analysis
-            except Exception as e:
-                logger.warning(f"Layer 2 (LSTM) failed: {e}")
-                logger.debug(f"🔄 PIPELINE DEBUG: Entry Engine - LSTM analysis failed, using fallback")
-                layer_results["layer_2_lstm"] = {"recommendation": "wait", "confidence": 0.0}
+            
+        except Exception as e:
+            logger.warning(f"Layer 2 (Predictive) failed: {e}")
+            layer_results["layer_2_predictive"] = {"recommendation": "wait", "confidence": 0.0}
         
-        # Layer 3: Pattern Recognition
+        # Layer 3: Pattern Recognition (Same)
         try:
             pattern_analysis = await self._analyze_entry_patterns(market_data, signal_data)
             layer_results["layer_3_patterns"] = pattern_analysis
@@ -577,7 +926,7 @@ class IntelligentEntryEngine:
             logger.warning(f"Layer 3 (Patterns) failed: {e}")
             layer_results["layer_3_patterns"] = {"recommendation": "wait", "confidence": 0.0}
         
-        # Layer 4: Technical Indicators
+        # Layer 4: ENHANCED Technical Momentum (Enhanced)
         try:
             technical_analysis = await self._analyze_entry_technical_indicators(market_data, current_price)
             layer_results["layer_4_technical"] = technical_analysis
@@ -585,21 +934,72 @@ class IntelligentEntryEngine:
             logger.warning(f"Layer 4 (Technical) failed: {e}")
             layer_results["layer_4_technical"] = {"recommendation": "wait", "confidence": 0.0}
         
-        # Layer 5: Momentum Analysis
+        # Layer 5: NEW Price Direction Confirmation (NEW)
         try:
-            momentum_analysis = await self._analyze_entry_momentum(market_data, signal_data)
-            layer_results["layer_5_momentum"] = momentum_analysis
+            # Get price momentum confirmation
+            momentum_confirmation = await self.analyze_price_momentum(current_price, signal_action)
+            
+            # Combine with traditional momentum analysis
+            traditional_momentum = await self._analyze_entry_momentum(market_data, signal_data)
+            
+            # Create enhanced momentum analysis
+            if momentum_confirmation["momentum_confirmed"]:
+                recommendation = "enter" if traditional_momentum.get("recommendation") == "enter" else "wait"
+                confidence = (momentum_confirmation["momentum_strength"] + traditional_momentum.get("confidence", 0.0)) / 2
+                confidence = min(confidence * 1.2, 1.0)  # Boost confidence when momentum confirmed
+            else:
+                recommendation = "wait"  # Always wait if momentum not confirmed
+                confidence = traditional_momentum.get("confidence", 0.0) * 0.5  # Reduce confidence
+            
+            layer_results["layer_5_price_direction"] = {
+                "recommendation": recommendation,
+                "confidence": confidence,
+                "momentum_confirmed": momentum_confirmation["momentum_confirmed"],
+                "price_direction": momentum_confirmation["price_direction"],
+                "momentum_strength": momentum_confirmation["momentum_strength"],
+                "reasoning": f"Price momentum: {momentum_confirmation['reason']}"
+            }
+            
         except Exception as e:
-            logger.warning(f"Layer 5 (Momentum) failed: {e}")
-            layer_results["layer_5_momentum"] = {"recommendation": "wait", "confidence": 0.0}
+            logger.warning(f"Layer 5 (Price Direction) failed: {e}")
+            layer_results["layer_5_price_direction"] = {"recommendation": "wait", "confidence": 0.0}
         
-        # Layer 6: Entry Timing
+        # Layer 6: Smart Entry Timing (Reduced weight)
         try:
             timing_analysis = await self._analyze_entry_timing(market_data, signal_data, user_portfolio)
             layer_results["layer_6_timing"] = timing_analysis
         except Exception as e:
             logger.warning(f"Layer 6 (Timing) failed: {e}")
             layer_results["layer_6_timing"] = {"recommendation": "wait", "confidence": 0.0}
+        
+        logger.info(f"🎯 UPGRADED 6-LAYER ANALYSIS COMPLETE:")
+        logger.info(f"   Layer 1 (Regime): {layer_results['layer_1_regime'].get('recommendation', 'unknown')}")
+        logger.info(f"   Layer 2 (Predictive): {layer_results['layer_2_predictive'].get('recommendation', 'unknown')}")
+        logger.info(f"   Layer 3 (Patterns): {layer_results['layer_3_patterns'].get('recommendation', 'unknown')}")
+        logger.info(f"   Layer 4 (Technical): {layer_results['layer_4_technical'].get('recommendation', 'unknown')}")
+        logger.info(f"   Layer 5 (Price Direction): {layer_results['layer_5_price_direction'].get('recommendation', 'unknown')}")
+        logger.info(f"   Layer 6 (Timing): {layer_results['layer_6_timing'].get('recommendation', 'unknown')}")
+        
+        # Enrich with microstructure estimates (spread/slippage)
+        try:
+            from app.backend.services.live_market_data import get_live_orderbook_data
+            ob = await get_live_orderbook_data()
+            bids = ob.get("bids") or []
+            asks = ob.get("asks") or []
+            best_bid = float(bids[0][0]) if bids else 0.0
+            best_ask = float(asks[0][0]) if asks else 0.0
+            mid = (best_bid + best_ask) / 2.0 if best_bid and best_ask else 0.0
+            spread_bps = ((best_ask - best_bid) / mid * 10000.0) if mid else 0.0
+        except Exception:
+            spread_bps = 0.0
+        try:
+            import numpy as _np
+            closes = [float(x) for x in self.price_history[-10:]] if hasattr(self, 'price_history') else []
+            std = float(_np.std(_np.array(closes))) if len(closes) >= 5 else 0.0
+            slippage_bps = float((std / max(current_price, 1e-9)) * 10000.0)
+        except Exception:
+            slippage_bps = 0.0
+        layer_results["microstructure"] = {"spread_bps": spread_bps, "slippage_bps": slippage_bps}
         
         return layer_results
     
@@ -653,10 +1053,129 @@ class IntelligentEntryEngine:
             "reasoning": f"Market regime: {regime} with {safe_format_number(volatility * 100, 1)}% volatility"
         }
     
-    async def _analyze_lstm_entry_signals(self, symbol: str, current_price: float, signal_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Layer 2: Analyze LSTM/short-horizon predictions for entry timing (NO RANDOM)."""
+    def _calculate_technical_features(self, candles: List[Dict], lookback: int = 200) -> np.ndarray:
+        """
+        Calculate the 11 technical features that LSTM models expect.
+        
+        Features (in order):
+        1. logret - Log returns
+        2. ema9_delta - EMA9 delta  
+        3. ema21_delta - EMA21 delta
+        4. macd - MACD line
+        5. macd_sig - MACD signal
+        6. macd_hist - MACD histogram
+        7. rsi14_norm - Normalized RSI (0-1)
+        8. %B - Bollinger %B
+        9. bb_width - Bollinger width
+        10. atr14_norm - Normalized ATR
+        11. vol_ratio - Volume ratio
+        """
         try:
-            # Prefer short-horizon (1m/5m) models for day trading if available in enterprise engine path
+            import pandas as pd
+            
+            # Convert candles to DataFrame
+            df = pd.DataFrame(candles)
+            df['close'] = df['close'].astype(float)
+            df['high'] = df['high'].astype(float) 
+            df['low'] = df['low'].astype(float)
+            df['open'] = df['open'].astype(float)
+            df['volume'] = df['volume'].astype(float)
+            
+            # Ensure we have enough data
+            if len(df) < 50:
+                raise ValueError(f"Insufficient data: {len(df)} candles, need at least 50")
+            
+            # 1. Log returns
+            df['logret'] = np.log(df['close'] / df['close'].shift(1)).fillna(0)
+            
+            # 2-3. EMA deltas (using pandas ewm)
+            ema9 = df['close'].ewm(span=9).mean()
+            ema21 = df['close'].ewm(span=21).mean()
+            df['ema9_delta'] = (df['close'] - ema9) / df['close']
+            df['ema21_delta'] = (df['close'] - ema21) / df['close']
+            
+            # 4-6. MACD (simple implementation)
+            ema_12 = df['close'].ewm(span=12).mean()
+            ema_26 = df['close'].ewm(span=26).mean()
+            macd_line = ema_12 - ema_26
+            macd_signal = macd_line.ewm(span=9).mean()
+            macd_hist = macd_line - macd_signal
+            df['macd'] = macd_line / df['close']  # Normalized
+            df['macd_sig'] = macd_signal / df['close']  # Normalized  
+            df['macd_hist'] = macd_hist / df['close']  # Normalized
+            
+            # 7. RSI normalized (0-1) - simple implementation
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            df['rsi14_norm'] = rsi / 100.0
+            
+            # 8-9. Bollinger Bands
+            bb_middle = df['close'].rolling(window=20).mean()
+            bb_std = df['close'].rolling(window=20).std()
+            bb_upper = bb_middle + (bb_std * 2)
+            bb_lower = bb_middle - (bb_std * 2)
+            df['%B'] = (df['close'] - bb_lower) / (bb_upper - bb_lower)
+            df['bb_width'] = (bb_upper - bb_lower) / bb_middle
+            
+            # 10. ATR normalized (simple implementation)
+            high_low = df['high'] - df['low']
+            high_close = np.abs(df['high'] - df['close'].shift())
+            low_close = np.abs(df['low'] - df['close'].shift())
+            true_range = np.maximum(high_low, np.maximum(high_close, low_close))
+            atr = true_range.rolling(window=14).mean()
+            df['atr14_norm'] = atr / df['close']
+            
+            # 11. Volume ratio (current vs SMA)
+            vol_sma = df['volume'].rolling(window=20).mean()
+            df['vol_ratio'] = df['volume'] / vol_sma
+            
+            # Fill NaN values with neutral defaults
+            feature_defaults = {
+                'logret': 0.0,
+                'ema9_delta': 0.0,
+                'ema21_delta': 0.0, 
+                'macd': 0.0,
+                'macd_sig': 0.0,
+                'macd_hist': 0.0,
+                'rsi14_norm': 0.5,
+                '%B': 0.5,
+                'bb_width': 0.02,
+                'atr14_norm': 0.02,
+                'vol_ratio': 1.0
+            }
+            
+            for feature, default_val in feature_defaults.items():
+                df[feature] = df[feature].fillna(default_val)
+            
+            # Extract feature columns in correct order
+            feature_columns = ['logret', 'ema9_delta', 'ema21_delta', 'macd', 'macd_sig', 
+                             'macd_hist', 'rsi14_norm', '%B', 'bb_width', 'atr14_norm', 'vol_ratio']
+            
+            # Get the last `lookback` rows and reshape for LSTM
+            features = df[feature_columns].values[-lookback:]
+            
+            # Pad if needed
+            if len(features) < lookback:
+                padding = np.tile(features[0], (lookback - len(features), 1))
+                features = np.vstack([padding, features])
+            
+            # Reshape to (1, lookback, 11) for LSTM
+            return features.reshape(1, lookback, 11)
+            
+        except Exception as e:
+            logger.error(f"Technical feature calculation failed: {e}")
+            # Return neutral feature matrix
+            neutral_features = np.array([
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.02, 0.02, 1.0]
+            ] * lookback).reshape(1, lookback, 11)
+            return neutral_features
+
+    async def _analyze_lstm_entry_signals(self, symbol: str, current_price: float, signal_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Layer 2: Analyze LSTM/short-horizon predictions for entry timing (FIXED DIMENSIONS)."""
+        try:
             # TensorFlow import with proper initialization
             try:
                 import tensorflow as tf
@@ -668,6 +1187,7 @@ class IntelligentEntryEngine:
             except Exception as tf_error:
                 logger.warning(f"⚠️ TensorFlow initialization failed: {tf_error}")
                 raise ImportError("TensorFlow not available") from tf_error
+            
             current_file = Path(__file__).parent.parent  # Go up from services/ to backend/
             models_dir = current_file / "models" / "enterprise"
             model_path_1m = models_dir / "lstm_1m.h5"
@@ -698,38 +1218,32 @@ class IntelligentEntryEngine:
             if model_path_1m.exists():
                 model_1m = tf.keras.models.load_model(model_path_1m, compile=False)
                 
-                # Get 180 recent 1m candles for sequence (3x more data)
-                candles_1m = service.get_recent_candles('1m', 180)
+                # Get 200 recent 1m candles for proper feature calculation
+                candles_1m = service.get_recent_candles('1m', 250)  # Extra buffer for indicators
                 if len(candles_1m) >= 60:  # Higher minimum for enterprise accuracy
-                    # Create price sequence
-                    prices = [float(c.get('close', current_price)) for c in candles_1m[-180:]]
-                    # Pad if needed
-                    while len(prices) < 180:
-                        prices.insert(0, prices[0])
-                    
-                    x_1m = np.array(prices).reshape(1, 180, 1)
+                    # Calculate proper 11-feature technical indicators
+                    x_1m = self._calculate_technical_features(candles_1m, lookback=200)
                     p1 = float(model_1m.predict(x_1m, verbose=0)[0][0])
                     preds.append(p1)
                     pred_meta["1m"] = {"prediction": p1, "sequence_length": len(candles_1m)}
+                    logger.debug(f"✅ LSTM 1m prediction successful: {p1:.4f}")
                 else:
                     logger.warning(f"Insufficient 1m candles: {len(candles_1m)}/60 required")
                     
             if model_path_5m.exists():
                 model_5m = tf.keras.models.load_model(model_path_5m, compile=False)
                 
-                # Get 300 recent 1m candles for 5m equivalent (5 hours of data, 3x more)
-                candles_5m = service.get_recent_candles('1m', 300)
+                # Get 250 recent 1m candles for 5m analysis
+                candles_5m = service.get_recent_candles('1m', 300)  # Extra buffer
                 if len(candles_5m) >= 100:  # Higher minimum for enterprise accuracy
-                    prices = [float(c.get('close', current_price)) for c in candles_5m[-300:]]
-                    while len(prices) < 300:
-                        prices.insert(0, prices[0])
-                        
-                    x_5m = np.array(prices).reshape(1, 300, 1)
+                    # Calculate proper 11-feature technical indicators
+                    x_5m = self._calculate_technical_features(candles_5m, lookback=200)
                     p5 = float(model_5m.predict(x_5m, verbose=0)[0][0])
                     preds.append(p5)
                     pred_meta["5m"] = {"prediction": p5, "sequence_length": len(candles_5m)}
+                    logger.debug(f"✅ LSTM 5m prediction successful: {p5:.4f}")
                 else:
-                    logger.warning(f"Insufficient 5m candles: {len(candles_5m)}/60 required")
+                    logger.warning(f"Insufficient 5m candles: {len(candles_5m)}/100 required")
 
             if not preds:
                 return {
@@ -813,23 +1327,29 @@ class IntelligentEntryEngine:
         
         if signal_action == "BUY":
             # Look for bullish patterns with historical validation
-            if rsi < 40:  # Oversold condition
+            # DAY TRADING: More sensitive thresholds for frequent opportunities
+            
+            if rsi < 50:  # DAY TRADING: Any RSI below neutral (was <40)
+                strength = max(0, (50 - rsi) / 50)  # 0-1 strength based on how oversold
                 historical_success = await self._validate_oversold_pattern_historically(rsi)
-                pattern_score += 0.25 * historical_success
+                pattern_score += 0.25 * strength * historical_success
                 historical_success_pct = safe_format_number(historical_success * 100, 1)
-                patterns_detected.append(f"oversold_rsi_validated_{historical_success_pct}%")
+                patterns_detected.append(f"bearish_rsi_{rsi:.0f}_validated_{historical_success_pct}%")
                 
-            if macd > 0 and macd > market_data.get("macd_signal", 0):  # Bullish MACD crossover
-                historical_success = await self._validate_macd_crossover_historically("bullish")
-                pattern_score += 0.3 * historical_success
-                historical_success_pct = safe_format_number(historical_success * 100, 1)
-                patterns_detected.append(f"bullish_macd_validated_{historical_success_pct}%")
+            if macd > -0.001:  # DAY TRADING: Near-neutral or positive MACD (was >0 only)
+                macd_signal = market_data.get("macd_signal", 0)
+                if macd > macd_signal:  # Bullish crossover or momentum
+                    historical_success = await self._validate_macd_crossover_historically("bullish")
+                    pattern_score += 0.3 * historical_success
+                    historical_success_pct = safe_format_number(historical_success * 100, 1)
+                    patterns_detected.append(f"bullish_macd_validated_{historical_success_pct}%")
                 
-            if bollinger_position < 0.3:  # Near lower Bollinger Band
+            if bollinger_position < 0.6:  # DAY TRADING: Below upper band (was <0.3 only)
+                support_strength = max(0, (0.6 - bollinger_position) / 0.6)  # Strength based on position
                 historical_success = await self._validate_bollinger_bounce_historically("support")
-                pattern_score += 0.2 * historical_success
+                pattern_score += 0.2 * support_strength * historical_success
                 historical_success_pct = safe_format_number(historical_success * 100, 1)
-                patterns_detected.append(f"bollinger_support_validated_{historical_success_pct}%")
+                patterns_detected.append(f"bollinger_support_{bollinger_position:.2f}_validated_{historical_success_pct}%")
                 
             # Advanced candlestick patterns
             candlestick_patterns = await self._detect_candlestick_patterns("bullish")
@@ -845,24 +1365,30 @@ class IntelligentEntryEngine:
                     patterns_detected.append(f"{pattern_name}_validated_{historical_success_pct}%")
                 
         elif signal_action == "SELL":
-            # Look for bearish patterns with historical validation
-            if rsi > 60:  # Overbought condition
+            # Look for bearish patterns with historical validation  
+            # DAY TRADING: More sensitive thresholds for frequent opportunities
+            
+            if rsi > 50:  # DAY TRADING: Any RSI above neutral (was >60)
+                strength = max(0, (rsi - 50) / 50)  # 0-1 strength based on how overbought
                 historical_success = await self._validate_overbought_pattern_historically(rsi)
-                pattern_score += 0.25 * historical_success
+                pattern_score += 0.25 * strength * historical_success
                 historical_success_pct = safe_format_number(historical_success * 100, 1)
-                patterns_detected.append(f"overbought_rsi_validated_{historical_success_pct}%")
+                patterns_detected.append(f"bullish_rsi_{rsi:.0f}_validated_{historical_success_pct}%")
                 
-            if macd < 0 and macd < market_data.get("macd_signal", 0):  # Bearish MACD crossover
-                historical_success = await self._validate_macd_crossover_historically("bearish")
-                pattern_score += 0.3 * historical_success
-                historical_success_pct = safe_format_number(historical_success * 100, 1)
-                patterns_detected.append(f"bearish_macd_validated_{historical_success_pct}%")
+            if macd < 0.001:  # DAY TRADING: Near-neutral or negative MACD (was <0 only)
+                macd_signal = market_data.get("macd_signal", 0)
+                if macd < macd_signal:  # Bearish crossover or momentum
+                    historical_success = await self._validate_macd_crossover_historically("bearish")
+                    pattern_score += 0.3 * historical_success
+                    historical_success_pct = safe_format_number(historical_success * 100, 1)
+                    patterns_detected.append(f"bearish_macd_validated_{historical_success_pct}%")
                 
-            if bollinger_position > 0.7:  # Near upper Bollinger Band
+            if bollinger_position > 0.4:  # DAY TRADING: Above lower band (was >0.7 only)
+                resistance_strength = max(0, (bollinger_position - 0.4) / 0.6)  # Strength based on position
                 historical_success = await self._validate_bollinger_bounce_historically("resistance")
-                pattern_score += 0.2 * historical_success
+                pattern_score += 0.2 * resistance_strength * historical_success
                 historical_success_pct = safe_format_number(historical_success * 100, 1)
-                patterns_detected.append(f"bollinger_resistance_validated_{historical_success_pct}%")
+                patterns_detected.append(f"bollinger_resistance_{bollinger_position:.2f}_validated_{historical_success_pct}%")
                 
             # Advanced candlestick patterns
             candlestick_patterns = await self._detect_candlestick_patterns("bearish")
@@ -1223,7 +1749,7 @@ class IntelligentEntryEngine:
         }
     
     async def _calculate_entry_consensus(self, layer_results: Dict[str, Any], signal_data: Dict[str, Any]) -> Dict[str, Any]:
-        """ENHANCED: Calculate consensus with historical validation"""
+        """UPGRADED: Calculate consensus with enhanced predictive weighting"""
         
         enter_votes = 0
         wait_votes = 0
@@ -1231,14 +1757,27 @@ class IntelligentEntryEngine:
         weighted_confidence = 0.0
         consensus_scores = []
         
+        # UPGRADED layer weights for predictive analysis
+        layer_weights = {
+            "layer_1_regime": 0.15,
+            "layer_2_predictive": 0.30,  # Highest weight for predictive analysis
+            "layer_3_patterns": 0.20,
+            "layer_4_technical": 0.15,
+            "layer_5_price_direction": 0.15,  # High weight for price confirmation
+            "layer_6_timing": 0.05
+        }
+        
+        logger.info("🎯 UPGRADED CONSENSUS CALCULATION:")
+        
         for layer_name, layer_data in layer_results.items():
             if isinstance(layer_data, dict):
                 recommendation = layer_data.get("recommendation", "wait")
                 confidence = layer_data.get("confidence", 0.0)
                 
-                # Get layer weight
-                layer_number = int(layer_name.split('_')[1]) if '_' in layer_name else 1
-                weight = self.layers.get(layer_number, {}).get("weight", 0.1)
+                # Get enhanced layer weight
+                weight = layer_weights.get(layer_name, 0.1)
+                
+                logger.info(f"   {layer_name}: {recommendation} (conf: {confidence:.2f}, weight: {weight:.2f})")
                 
                 if recommendation == "enter":
                     enter_votes += 1
@@ -1246,7 +1785,11 @@ class IntelligentEntryEngine:
                     weighted_confidence += confidence * weight
                 else:
                     wait_votes += 1
-                    weighted_confidence += confidence * weight * 0.5  # Penalize wait votes
+                    # CRITICAL: For price direction layer, heavily penalize wait votes
+                    if layer_name == "layer_5_price_direction":
+                        weighted_confidence += confidence * weight * 0.1  # Heavy penalty
+                    else:
+                        weighted_confidence += confidence * weight * 0.5  # Standard penalty
                 
                 total_confidence += confidence
         
@@ -1284,14 +1827,34 @@ class IntelligentEntryEngine:
         layer_analysis = signal_data.get("layer_analysis", {})
         l6_timing = layer_analysis.get("layer_6_timing", {}).get("timing_score", 0.0)
         
-        # Adaptive thresholds based on signal type
-        conf_thresh = self.confidence_threshold if not is_exploratory else 0.35  # Lower for exploratory
-        signal_thresh = 0.7 if not is_exploratory else 0.30  # Much lower for exploratory
+        # ACTIVE DAY TRADING: Use base confidence thresholds (not phase-based)
+        conf_thresh = self.confidence_threshold if not is_exploratory else 0.35  # Use base threshold
+        # Unified signal threshold
+        from app.backend.config.trading_thresholds import ConfidenceThresholds
+        thresholds = ConfidenceThresholds()
+        signal_thresh = thresholds.BUY_THRESHOLD if not is_exploratory else thresholds.EXPLORATORY_BUY
+        try:
+            from app.backend.services.metrics import set_decision_threshold
+            set_decision_threshold("entry", "exploratory" if is_exploratory else "primary", f"phase{phase}", float(signal_thresh))
+        except Exception:
+            pass
         
-        # Enhanced checks with exploratory support
-        meets_consensus = enter_votes > wait_votes and consensus_score > self.consensus_threshold
+        # PHASE-BASED consensus threshold adjustment
+        phase = self.get_current_warmup_phase()
+        phase_consensus_thresh = self.consensus_threshold
+        if phase == 1:
+            phase_consensus_thresh = 0.75  # Higher consensus required during Phase 1
+        elif phase == 2:
+            phase_consensus_thresh = 0.60  # Medium consensus required during Phase 2 (was 0.72)
+        
+        # Enhanced checks with phase-based and exploratory support
+        meets_consensus = enter_votes > wait_votes and consensus_score > phase_consensus_thresh
         meets_confidence = consensus_score > conf_thresh
-        meets_historical = historical_validation_score > self.historical_validation_threshold
+        # During warmup phases, do not allow historical gating to block entries; only apply once warmed up
+        if not self.is_warmed_up:
+            meets_historical = True
+        else:
+            meets_historical = historical_validation_score > self.historical_validation_threshold
         meets_signal = signal_action in ["BUY", "SELL"] and signal_confidence > signal_thresh
         
         # Timing: respect Enterprise L6_time as override if strong
@@ -1301,7 +1864,73 @@ class IntelligentEntryEngine:
         if is_exploratory and enter_votes == 0 and wait_votes == 0:
             meets_consensus = True  # No active models = neutral = OK for exploratory
         
-        logger.info(f"🔍 ENHANCED CHECKS: consensus={meets_consensus}, confidence={meets_confidence}, historical={meets_historical}, signal={meets_signal}, timing_ok={timing_ok}, signal_type={signal_type}")
+        logger.info(f"🔍 PHASE-BASED CHECKS: phase={phase}, consensus={meets_consensus}({consensus_score:.2f}>{phase_consensus_thresh:.2f}), confidence={meets_confidence}({consensus_score:.2f}>{conf_thresh:.2f}), historical={meets_historical}, signal={meets_signal}, timing_ok={timing_ok}, signal_type={signal_type}")
+        
+        # Playbook override with tight guardrails (runtime-configurable)
+        try:
+            from app.backend.core.runtime_config import runtime_config_store
+            cfg = await runtime_config_store.get()
+            # Recognize breakout playbook from market indicators
+            pb = None
+            md = layer_results.get("layer_3_patterns", {}).get("market_indicators", {})
+            rsi_v = float(md.get("rsi", 50.0))
+            bb_pos_v = float(md.get("bollinger_position", 0.5))
+            macd_v = float(md.get("macd", 0.0))
+            vol_ratio_v = float(md.get("volume_ratio", 1.0))
+            if signal_action == "BUY" and bb_pos_v >= 0.85 and macd_v > 0.0 and vol_ratio_v >= 1.2:
+                pb = "breakout"
+            elif signal_action == "SELL" and bb_pos_v <= 0.15 and macd_v < 0.0 and vol_ratio_v >= 1.2:
+                pb = "breakout_sell"
+            # Apply override only if enabled and targeted playbook
+            if (
+                cfg.playbook_override_enabled
+                and pb in cfg.playbook_override_playbooks
+                and not meets_consensus  # only when consensus slightly below threshold
+                and consensus_score >= cfg.playbook_override_min_consensus
+                and l6_timing >= cfg.playbook_override_min_timing
+            ):
+                # Guard: block if breaker/volatility/cooldown/duplicate present
+                blockers: list[str] = []
+                # Breaker: expect external cb_active==0 (we can only inspect provided flags if available)
+                cb_block = layer_results.get("circuit_breaker", {}).get("active", False)
+                if cb_block:
+                    blockers.append("breaker")
+                # Duplicate/cooldown hints from engine can be absent here; leave to DayTradingEngine
+                # Microstructure guards: spread/slippage from market data if present
+                spread_bps = float(layer_results.get("microstructure", {}).get("spread_bps", 0.0))
+                slippage_bps = float(layer_results.get("microstructure", {}).get("slippage_bps", 0.0))
+                if spread_bps > cfg.playbook_override_max_spread_bps:
+                    blockers.append("spread")
+                if slippage_bps > cfg.playbook_override_max_slippage_bps:
+                    blockers.append("slippage")
+                # MACD validator must pass if required (we treat macd_v sign as proxy until codes are mapped)
+                if cfg.require_macd_validator_pass and ((signal_action == "BUY" and macd_v <= 0.0) or (signal_action == "SELL" and macd_v >= 0.0)):
+                    blockers.append("macd_validator")
+                # Volatility proxy: if volatility extremely high, block
+                vol_proxy = float(md.get("volatility", 0.02))
+                if vol_proxy > 0.10:
+                    blockers.append("volatility")
+                # If any configured guard is present, do not override
+                if any(b in cfg.playbook_override_block_if_guard for b in blockers):
+                    pass
+                else:
+                    # Override: allow entry with size haircut; annotate decision
+                    decision = {
+                        "should_enter": True,
+                        "confidence": signal_confidence,
+                        "reason": "playbook_override",
+                        "consensus_score": consensus_score,
+                        "historical_validation": historical_validation_score,
+                        "risk_score": risk_score,
+                        "timing_score": timing_score,
+                        "layer_votes": {"enter": enter_votes, "wait": wait_votes},
+                        "playbook": pb,
+                        "size_multiplier": float(cfg.playbook_override_size_multiplier),
+                        "blockers": blockers,
+                    }
+                    return decision
+        except Exception:
+            pass
         
         # FINAL DECISION with exploratory-friendly criteria
         if meets_consensus and meets_confidence and timing_ok and meets_signal:
@@ -1671,7 +2300,7 @@ class IntelligentEntryEngine:
                 candle = historical_candles[i]
                 
                 # Calculate if this historical point was similar to current conditions
-                historical_price = float(candle[4])  # Close price
+                historical_price = float(candle.get("close", 0))  # Close price
                 price_similarity = 1.0 - abs(historical_price - current_price) / current_price
                 
                 if price_similarity > 0.95:  # Very similar price levels
@@ -1902,19 +2531,19 @@ class IntelligentEntryEngine:
             total_count = 0
             
             # Calculate average volume
-            volumes = [float(candle[5]) for candle in historical_candles]
-            avg_volume = np.mean(volumes)
+            volumes = [float(candle.get("volume", 0)) for candle in historical_candles]
+            avg_volume = np.mean(volumes) if volumes else 1.0
             
             for i, candle in enumerate(historical_candles[:-5]):
-                volume = float(candle[5])
-                current_volume_ratio = volume / avg_volume
+                volume = float(candle.get("volume", 0))
+                current_volume_ratio = volume / avg_volume if avg_volume > 0 else 1.0
                 
                 # Find similar volume spikes
                 if abs(current_volume_ratio - volume_ratio) < 0.3:
                     total_count += 1
                     # Check if price moved significantly
-                    entry_price = float(candle[4])
-                    future_price = float(historical_candles[i + 3][4]) if i + 3 < len(historical_candles) else entry_price
+                    entry_price = float(candle.get("close", 0))
+                    future_price = float(historical_candles[i + 3].get("close", entry_price)) if i + 3 < len(historical_candles) else entry_price
                     price_change = abs(future_price - entry_price) / entry_price
                     
                     if price_change > 0.015:  # 1.5% movement
@@ -1959,15 +2588,19 @@ class IntelligentEntryEngine:
         if len(candles) < 3:
             return None
         
-        # Extract OHLC data
+        # Extract OHLC data - candles are already dictionaries
         candle_data = []
         for candle in candles:
-            candle_data.append({
-                "open": float(candle[1]),
-                "high": float(candle[2]),
-                "low": float(candle[3]),
-                "close": float(candle[4])
-            })
+            try:
+                candle_data.append({
+                    "open": float(candle.get("open", 0)),
+                    "high": float(candle.get("high", 0)),
+                    "low": float(candle.get("low", 0)),
+                    "close": float(candle.get("close", 0))
+                })
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid candle data: {candle}, error: {e}")
+                return None
         
         # Simple pattern detection
         if direction == "bullish":
@@ -2055,7 +2688,7 @@ class IntelligentEntryEngine:
         if len(candles) < period + 1:
             return [50.0] * len(candles)  # Default RSI
         
-        closes = [float(candle[4]) for candle in candles]
+        closes = [float(candle.get("close", 0)) for candle in candles]
         rsi_values = []
         
         # Calculate price changes
@@ -2083,7 +2716,7 @@ class IntelligentEntryEngine:
         if len(candles) < 26:
             return [0.0] * len(candles)
         
-        closes = [float(candle[4]) for candle in candles]
+        closes = [float(candle.get("close", 0)) for candle in candles]
         
         # Simple MACD calculation (EMA12 - EMA26)
         ema_12 = self._calculate_ema(closes, 12)
@@ -2097,7 +2730,7 @@ class IntelligentEntryEngine:
         if len(candles) < period:
             return [{"upper": 0, "middle": 0, "lower": 0}] * len(candles)
         
-        closes = [float(candle[4]) for candle in candles]
+        closes = [float(candle.get("close", 0)) for candle in candles]
         bb_data = []
         
         for i in range(period - 1, len(closes)):

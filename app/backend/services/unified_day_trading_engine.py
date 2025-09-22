@@ -15,6 +15,7 @@ Version: 2.0.0 - Unified Professional Engine
 """
 
 import asyncio
+import os
 import logging
 import numpy as np
 import pandas as pd
@@ -114,22 +115,22 @@ class UnifiedDayTradingEngine:
         current_file = Path(__file__).parent.parent
         self.model_path = current_file / "models" / "enterprise"
         
-        # 🎯 PROFESSIONAL THRESHOLDS - CONSERVATIVE FOR REAL MONEY
-        self.confidence_threshold = 0.65      # 65% minimum confidence
-        self.consensus_threshold = 0.70       # 70% layer consensus required
-        self.risk_threshold = 0.75            # DAY TRADING: 75% max reversal risk (reversals = opportunities!)
-        self.volatility_threshold = 0.08      # 8% max volatility for trading
+        # 🎯 BITCOIN SCALPING THRESHOLDS - AGGRESSIVE FOR VOLATILE MARKET
+        self.confidence_threshold = 0.45      # 45% minimum confidence (was 65% - too high!)
+        self.consensus_threshold = 0.50       # 50% layer consensus required (was 70% - too high!)
+        self.risk_threshold = 0.80            # DAY TRADING: 80% max reversal risk (reversals = opportunities!)
+        self.volatility_threshold = 0.12      # 12% max volatility for Bitcoin trading (was 8%)
         
         # 💰 DAY TRADING OPTIMIZED FOR $500 PROFIT TARGETS
         self.max_position_size_pct = 0.030    # DAY TRADING: 3.0% per position (~$6,000)
         self.max_positions = 5                # DAY TRADING: 5 positions for better opportunity capture
         self.min_position_size = 500.0        # $500 minimum position
         
-        # 📊 DAY TRADING PARAMETERS - CONSISTENT $500 PROFIT TARGETS
-        self.analysis_interval = 15           # 15 seconds between analysis
-        self.position_duration_target = 1800  # 30 minutes average hold
-        self.stop_loss_pct = 0.010            # DAY TRADING: 1.0% stop loss (tight)
-        self.take_profit_pct = 0.008          # DAY TRADING: 0.8% = consistent $480-500 profit
+        # 📊 DAY TRADING PARAMETERS - AGGRESSIVE SCALPING FOR MORE TRADES
+        self.analysis_interval = 12           # 12 seconds between analysis (faster)
+        self.position_duration_target = 900   # 15 minutes average hold (shorter)
+        self.stop_loss_pct = 0.006            # DAY TRADING: 0.6% stop loss (tighter)
+        self.take_profit_pct = 0.004          # DAY TRADING: 0.4% = $240-300 profit (smaller, more frequent)
         
         # 🔥 WARM-UP AND SAFETY
         self.warm_up_required = True
@@ -183,6 +184,9 @@ class UnifiedDayTradingEngine:
     async def _load_unified_models(self):
         """Load all 6-layer AI models with professional error handling"""
         try:
+            # AUTO-DETECT TensorFlow and LSTM availability
+            lstm_available = not os.getenv('DISABLE_LSTM', 'false').lower() == 'true'
+            
             model_files = {
                 "regime": "layer_1_regime.pkl",           # Market regime analysis
                 "patterns": "layer_3_reversal.pkl",       # Pattern recognition  
@@ -191,15 +195,33 @@ class UnifiedDayTradingEngine:
                 "timing": "layer_6_timing.pkl",          # Entry/exit timing
             }
             
+            # Add LSTM models - TensorFlow 2.16.1 stable version
+            if lstm_available:
+                model_files["lstm_1h"] = "lstm_1h.h5"
+                model_files["lstm_4h"] = "lstm_4h.h5" 
+                model_files["lstm_24h"] = "lstm_24h.h5"
+                logger.info("✅ TensorFlow 2.16.1 stable - LSTM Layer 2 enabled")
+            
             for model_name, filename in model_files.items():
                 model_file = self.model_path / filename
                 if model_file.exists():
-                    with open(model_file, "rb") as f:
-                        self.models[model_name] = pickle.load(f)
-                    
-                    logger.info(f"✅ Loaded {model_name} model")
+                    if filename.endswith('.pkl'):
+                        with open(model_file, "rb") as f:
+                            self.models[model_name] = pickle.load(f)
+                        logger.info(f"✅ Loaded {model_name} model")
+                    elif filename.endswith('.h5'):
+                        # Store model path for TF models; load lazily in usage to avoid pickle errors
+                        self.models[model_name] = f"model_path:{model_file}"
+                        logger.info(f"✅ Registered {model_name} TensorFlow model path")
+                    else:
+                        logger.warning(f"⚠️ Unknown model extension for {filename}, registering path")
+                        self.models[model_name] = str(model_file)
                     self.layer_health[model_name] = "healthy"
                 else:
+                    if filename.endswith('.h5'):
+                        logger.warning(f"⚠️ Optional LSTM model not found: {filename} (continuing without)")
+                        self.layer_health[model_name] = "degraded"
+                        continue
                     logger.error(f"❌ CRITICAL: Model file not found: {filename}")
                     raise FileNotFoundError(f"Required model missing: {filename}")
             
@@ -471,39 +493,86 @@ class UnifiedDayTradingEngine:
         try:
             # Get historical data
             candles = self.market_service.get_recent_candles("1m", 100)
+            # Update history as-of epoch gauge for readiness evaluation
+            try:
+                from app.backend.services.metrics import set_history_asof_epoch
+                last_ts = float(candles[-1][0]) / 1000.0 if candles and isinstance(candles[-1], list) else float(candles[-1].get("open_time", candles[-1].get("timestamp", 0))) / 1000.0 if candles else 0.0
+                if last_ts > 0:
+                    set_history_asof_epoch(last_ts)
+            except Exception:
+                pass
             
             # Calculate technical indicators
             closes = [float(candle[4]) for candle in candles[-20:]] if candles else [current_price]
             
-            # Basic features
-            features = {
-                "close": current_price,
-                "volume": market_data.get("volume", 1000000),
-                "rsi": market_data.get("rsi", 50),
-                "macd": market_data.get("macd", 0),
-                "bb_position": market_data.get("bollinger_position", 0.5),
-                "volatility": market_data.get("volatility", 0.02),
-                "trend_strength": market_data.get("trend_strength", 0.5),
-                "volume_ratio": market_data.get("volume_ratio", 1.0),
-                "price_change_24h": market_data.get("price_change_24h", 0.0)
-            }
+            # SSOT features only: disallow local recomputes
+            try:
+                from app.backend.services.metrics import inc_ssot_guard_violation
+                DISALLOW_LOCAL_TECHS = True
+                if DISALLOW_LOCAL_TECHS:
+                    required = [
+                        "price","volume","rsi","macd","bollinger_position",
+                        "volatility","trend_strength","volume_ratio","price_change_24h"
+                    ]
+                    missing = [k for k in required if k not in market_data or market_data.get(k) is None]
+                    if missing:
+                        # Emit violation only when truly missing
+                        inc_ssot_guard_violation("unified_features","missing_fields")
+                        raise RuntimeError(f"SSOT missing fields: {missing}")
+                # Map SSOT to unified names
+                features = {
+                    "close": market_data.get("price"),
+                    "volume": market_data.get("volume"),
+                    "rsi": market_data.get("rsi"),
+                    "macd": market_data.get("macd"),
+                    "bb_position": market_data.get("bollinger_position"),
+                    "volatility": market_data.get("volatility"),
+                    "trend_strength": market_data.get("trend_strength"),
+                    "volume_ratio": market_data.get("volume_ratio"),
+                    "price_change_24h": market_data.get("price_change_24h", market_data.get("price_change_percent_24h", 0.0))
+                }
+            except Exception as e:
+                # Strict: bubble up to caller; we don't recompute locally when SSOT is enforced
+                raise
             
             return features
             
         except Exception as e:
-            logger.debug(f"Feature preparation warning: {e} - using safe defaults")
-            # PROFESSIONAL: Return safe feature set without errors
-            return {
-                "close": current_price,
-                "volume": 1000000.0,
-                "rsi": 50.0,
-                "macd": 0.0,
-                "bb_position": 0.5,
-                "volatility": 0.02,
-                "trend_strength": 0.0,
-                "volume_ratio": 1.0,
-                "price_change_24h": 0.0
-            }
+            # Enhanced feature preparation logging with correct semantics
+            required_features = [
+                "price", "volume", "rsi", "macd", "bollinger_position",
+                "volatility", "trend_strength", "volume_ratio", "price_change_24h"
+            ]
+            missing_features = [f for f in required_features if f not in market_data or market_data.get(f) is None]
+
+            if missing_features:
+                logger.error(f"SSOT violation: missing={missing_features} | error: {e}")
+                try:
+                    from app.backend.services.metrics import inc_ssot_guard_violation
+                    inc_ssot_guard_violation("unified_features","missing_fields")
+                except Exception:
+                    pass
+            else:
+                # No missing fields → salvage SSOT features from provided market_data and continue
+                try:
+                    features = {
+                        "close": market_data.get("price"),
+                        "volume": market_data.get("volume"),
+                        "rsi": market_data.get("rsi"),
+                        "macd": market_data.get("macd"),
+                        "bb_position": market_data.get("bollinger_position"),
+                        "volatility": market_data.get("volatility"),
+                        "trend_strength": market_data.get("trend_strength"),
+                        "volume_ratio": market_data.get("volume_ratio"),
+                        "price_change_24h": market_data.get("price_change_24h", market_data.get("price_change_percent_24h", 0.0))
+                    }
+                    logger.debug("SSOT check passed; recovered features without local recompute")
+                    return features
+                except Exception:
+                    # If salvage fails, propagate original error
+                    pass
+            # Propagate original error if we couldn't salvage
+            raise
     
     def _calculate_unified_consensus(self, layer_results: Dict, current_price: float, market_data: Dict) -> Dict[str, Any]:
         """Calculate unified consensus decision with professional criteria"""

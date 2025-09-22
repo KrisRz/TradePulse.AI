@@ -171,21 +171,37 @@ class EnterpriseTradingEngine:
                         # SAFE LOGGING: Only log name/id, not full objects
                         logger.info(f"🔄 Loading {display_name} (priority {priority})...")
                         
-                        with open(model_path, "rb") as f:
-                            # PROFESSIONAL RECURSION PREVENTION
-                            old_limit = sys.getrecursionlimit()
-                            sys.setrecursionlimit(3000)  # Sufficient for loading
-                            try:
-                                model = pickle.load(f)
-                            finally:
-                                sys.setrecursionlimit(old_limit)
+                        # Try loading with metadata first (new format), fallback to legacy pickle
+                        try:
+                            from app.backend.ml.infer import load_model_with_metadata
+                            bundle = load_model_with_metadata(model_path)
+                            model = bundle.get("model")
+                            features = bundle.get("features")
+                            model_type = bundle.get("model_type", "unknown")
+                            
+                            if model and features:
+                                logger.info(f"✅ {display_name} loaded with metadata: {model_type}, "
+                                          f"{len(features)} features: {features}")
+                            elif model:
+                                logger.info(f"✅ {display_name} loaded (legacy format): {type(model).__name__}")
+                            else:
+                                raise ValueError("No model in bundle")
+                                
+                        except Exception:
+                            # Fallback to legacy pickle loading
+                            with open(model_path, "rb") as f:
+                                old_limit = sys.getrecursionlimit()
+                                sys.setrecursionlimit(3000)  # Sufficient for loading
+                                try:
+                                    model = pickle.load(f)
+                                    logger.info(f"✅ {display_name} loaded (legacy pickle): {type(model).__name__}")
+                                finally:
+                                    sys.setrecursionlimit(old_limit)
                         
                         # SAFE MODEL HANDLING: Skip hardening to prevent recursion
                         # Model objects are handled safely through proper feature preparation
                         
                         self.models[model_key] = model
-                        # SAFE LOGGING: Only log success with model type, not content
-                        logger.info(f"✅ {display_name} loaded: {type(model).__name__} (id: {id(model)})")
                         
                     except RecursionError as re:
                         # TARGETED RECURSION DEBUGGING
@@ -299,31 +315,42 @@ class EnterpriseTradingEngine:
         elif layer_name == "layer_5":
             logger.info(f"🔧 L5 scaler DISABLED - model works with raw features")
         
-        # Always return DataFrame with proper column names for LightGBM
+        # Handle feature names properly to avoid sklearn/LightGBM warnings
         try:
             import pandas as pd
             
-            # Try to get feature names from model
-            col_names = None
-            if hasattr(model, 'feature_names_in_'):
-                col_names = list(getattr(model, 'feature_names_in_'))[:arr.shape[1]]
-            elif hasattr(model, 'booster_') and hasattr(model.booster_, 'feature_names'):
-                col_names = list(model.booster_.feature_names)[:arr.shape[1]]
-            elif hasattr(model, 'feature_name_'):
-                col_names = list(getattr(model, 'feature_name_'))[:arr.shape[1]]
+            # Check if model was trained with feature names
+            model_has_feature_names = (
+                hasattr(model, 'feature_names_in_') or 
+                (hasattr(model, 'booster_') and hasattr(model.booster_, 'feature_names')) or
+                hasattr(model, 'feature_name_')
+            )
             
-            # If no feature names found, use the required_names we built
-            if col_names is None:
-                col_names = required_names[:arr.shape[1]]
-            
-            # Always return DataFrame to fix the warning
-            return pd.DataFrame(arr, columns=col_names)
+            # Handle different model types based on their training
+            if model_has_feature_names:
+                # Model was trained with feature names - return DataFrame
+                col_names = None
+                if hasattr(model, 'feature_names_in_'):
+                    col_names = list(getattr(model, 'feature_names_in_'))[:arr.shape[1]]
+                elif hasattr(model, 'booster_') and hasattr(model.booster_, 'feature_names'):
+                    col_names = list(model.booster_.feature_names)[:arr.shape[1]]
+                elif hasattr(model, 'feature_name_'):
+                    col_names = list(getattr(model, 'feature_name_'))[:arr.shape[1]]
+                
+                if col_names:
+                    return pd.DataFrame(arr, columns=col_names)
+                else:
+                    # Fallback: use required_names if no feature names found
+                    return pd.DataFrame(arr, columns=required_names[:arr.shape[1]])
+            else:
+                # Model was trained without feature names - return numpy array
+                return arr
             
         except Exception as e:
-            logger.debug(f"DataFrame creation failed for {layer_name}: {e}")
+            logger.debug(f"Feature array preparation failed for {layer_name}: {e}")
             return arr
     
-    async def generate_signal(self, symbol: str = "BTCUSDT") -> TradingSignal:
+    async def generate_signal(self, symbol: str = "BTCUSDT", market_snapshot: Optional[Any] = None) -> TradingSignal:
         """Generate comprehensive trading signal using 6-layer analysis"""
         if not self.is_initialized:
             logger.info("🔄 PIPELINE DEBUG: Enterprise Trading Engine - Not initialized, initializing now...")
@@ -344,16 +371,64 @@ class EnterpriseTradingEngine:
             logger.info(f"💰 PIPELINE DEBUG: Enterprise Trading Engine - Current Bitcoin price: ${current_price:,.2f}")
             
             logger.info("🔍 PIPELINE DEBUG: Enterprise Trading Engine - Extracting market features...")
-            market_data = await self._get_market_features(symbol)
+            snapshot_obj = None
+            if market_snapshot is not None:
+                # Map LiveMarketData snapshot to enterprise feature schema (SSOT)
+                if hasattr(market_snapshot, "indicators") or hasattr(market_snapshot, "to_dict"):
+                    # Real MarketSnapshot object
+                    snapshot_obj = market_snapshot
+                elif isinstance(market_snapshot, dict) and "snapshot" in market_snapshot:
+                    snapshot_obj = market_snapshot.get("snapshot")
+                if hasattr(market_snapshot, "to_dict"):
+                    md = market_snapshot.to_dict()
+                else:
+                    md = market_snapshot
+                market_data = {
+                    "close": float(md.get("price", 0.0)),
+                    "volume": float(md.get("volume", 0.0)),
+                    "rsi": float(md.get("rsi", 50.0)),
+                    "macd": float(md.get("macd", 0.0)),
+                    "bb_position": float(md.get("bollinger_position", md.get("bb_pos", md.get("bb_position", 0.5)))),
+                    "volatility": float(md.get("volatility", 0.02)),
+                    "trend_strength": float(md.get("trend_strength", 0.0)),
+                    "volume_ratio": float(md.get("volume_ratio", 1.0)),
+                    "price_change_24h": float(md.get("price_change_percent_24h", md.get("price_change_24h", 0.0))),
+                }
+                logger.info("🧩 Using SSOT market snapshot for features (no local recompute)")
+            else:
+                market_data = await self._get_market_features(symbol)
             logger.info(f"📊 PIPELINE DEBUG: Enterprise Trading Engine - Market features extracted: {len(market_data)} features")
             
             # Run 6-layer analysis
             logger.info("🤖 PIPELINE DEBUG: Enterprise Trading Engine - Running 6-layer AI analysis...")
-            layer_results = await self._run_six_layer_analysis(market_data)
+            layer_results = await self._run_six_layer_analysis(market_data, snapshot_obj)
             logger.info("✅ PIPELINE DEBUG: Enterprise Trading Engine - 6-layer analysis completed")
+
+            # SSOT sanity logging for L5 vs snapshot
+            try:
+                l5 = layer_results.get("layer_5_confidence", {})
+                snap_rsi = market_data.get("rsi")
+                snap_macd = market_data.get("macd")
+                if isinstance(l5, dict) and "features" in layer_results:
+                    l5_rsi = layer_results["features"].get("rsi")
+                    l5_macd = layer_results["features"].get("macd")
+                    if l5_rsi is not None and snap_rsi is not None and abs(float(l5_rsi) - float(snap_rsi)) > 1e-6:
+                        from app.backend.services.metrics import inc_indicator_mismatch
+                        inc_indicator_mismatch("L5", "rsi")
+                    if l5_macd is not None and snap_macd is not None and abs(float(l5_macd) - float(snap_macd)) > 1e-6:
+                        from app.backend.services.metrics import inc_indicator_mismatch
+                        inc_indicator_mismatch("L5", "macd")
+            except Exception:
+                pass
             
             # PHASE 1A: Calculate final decision with signal type
             final_action, final_confidence, signal_type = self._calculate_final_decision(layer_results)
+            # Server-side readiness marker (we can't read gauges here; set 1 to indicate analysis path active)
+            try:
+                from app.backend.services.metrics import set_readiness_gate
+                set_readiness_gate("entry", True)
+            except Exception:
+                pass
             
             # Calculate position size and risk
             position_size = self._calculate_position_size(final_confidence, layer_results)
@@ -442,7 +517,7 @@ class EnterpriseTradingEngine:
             logger.error(f"Failed to get market features: {e}")
             raise RuntimeError(f"Real market features unavailable: {e}")
     
-    async def _run_six_layer_analysis(self, features: Dict[str, float]) -> Dict[str, Any]:
+    async def _run_six_layer_analysis(self, features: Dict[str, float], snapshot_obj: Optional[Any] = None) -> Dict[str, Any]:
         """Run complete 6-layer AI analysis"""
         results = {}
         
@@ -463,13 +538,29 @@ class EnterpriseTradingEngine:
         results["layer_4_filters"] = filter_score
         
         # Layer 5: Confidence Scoring
-        confidence_score = self._layer_5_confidence_scoring(features)
+        confidence_score = self._layer_5_confidence_scoring(features, snapshot_obj)
         results["layer_5_confidence"] = confidence_score
         
         # Layer 6: Adaptive Timing
         timing_score = self._layer_6_adaptive_timing(features)
         results["layer_6_timing"] = timing_score
         
+        # Attach raw features for downstream decision context (RSI/BB checks for labels)
+        results["features"] = features.copy()
+        
+        # Emit rolling stddev of entry confidence (5m window in-process simple)
+        try:
+            if not hasattr(self, "_conf_history"):
+                self._conf_history = []
+            self._conf_history.append(float(confidence_score.get("confidence", 0.0)))
+            if len(self._conf_history) > 200:
+                self._conf_history = self._conf_history[-200:]
+            import numpy as _np
+            std5 = float(_np.std(self._conf_history[-50:])) if len(self._conf_history) >= 2 else 0.0
+            from app.backend.services.metrics import set_confidence_stddev
+            set_confidence_stddev("5m", std5)
+        except Exception:
+            pass
         return results
     
     def _layer_1_regime_detection(self, features: Dict[str, float]) -> Dict[str, Any]:
@@ -485,8 +576,10 @@ class EnterpriseTradingEngine:
                                     layer_name="regime_classifier"
                             )
                 
-                            prediction = self.models["regime"].predict(feature_array)[0]
-                            confidence = max(self.models["regime"].predict_proba(feature_array)[0])
+                            # Convert DataFrame to numpy array to avoid sklearn feature name warning
+                            prediction_array = feature_array.values if hasattr(feature_array, 'values') else feature_array
+                            prediction = self.models["regime"].predict(prediction_array)[0]
+                            confidence = max(self.models["regime"].predict_proba(prediction_array)[0])
                 
                             regimes = ["bull", "bear", "sideways", "volatile"]
                             regime = regimes[prediction] if prediction < len(regimes) else "sideways"
@@ -607,8 +700,10 @@ class EnterpriseTradingEngine:
             # Base adjustment: cap extreme predictions
             adjusted_prob = min(raw_prob, 0.85)  # Cap at 85% instead of allowing 99.99%
             
-            # RSI-based adjustment (extreme RSI reduces reversal risk)
-            if rsi < 25 or rsi > 75:  # Extreme RSI levels
+            # RSI-based adjustment (overbought INCREASES reversal risk)
+            if rsi > 75:  # OVERBOUGHT = HIGH REVERSAL RISK (Bitcoin at top!)
+                adjusted_prob *= 1.3  # INCREASE reversal risk by 30%
+            elif rsi < 25:  # OVERSOLD = LOW REVERSAL RISK (good buy opportunity)
                 adjusted_prob *= 0.7  # Reduce reversal risk by 30%
             
             # Volatility adjustment (high volatility = higher reversal risk)
@@ -724,7 +819,9 @@ class EnterpriseTradingEngine:
                 
                 # Get prediction with error handling
                 try:
-                    filter_score = self.models["filters"].predict(feature_array)[0]
+                    # Convert DataFrame to numpy array to avoid sklearn feature name warning
+                    prediction_array = feature_array.values if hasattr(feature_array, 'values') else feature_array
+                    filter_score = self.models["filters"].predict(prediction_array)[0]
                     logger.debug(f"✅ L4 SUCCESS - Filter score: {filter_score:.4f}")
                     
                     # Validate and normalize score
@@ -803,28 +900,39 @@ class EnterpriseTradingEngine:
             logger.error(f"Layer 4 error: {e}")
             return {"filter_score": 0.5, "model_used": False}
     
-    def _layer_5_confidence_scoring(self, features: Dict[str, float]) -> Dict[str, Any]:
+    def _layer_5_confidence_scoring(self, features: Dict[str, float], snapshot_obj: Optional[Any] = None) -> Dict[str, Any]:
         """Layer 5: Confidence Scoring"""
         try:
             if "confidence" in self.models:
                 model = self.models["confidence"]
-                # Layer 5 uses 6 features for confidence scoring
-                feature_array = self._build_feature_array(
-                    model,
-                    features,
-                    default_order=[
-                        "close","volume","rsi","macd","volatility","trend_strength"
-                    ],
-                    layer_name="confidence_model"
-                )
-                
-                # DEBUG: Log feature values for diagnosis
-                logger.info(f"🔍 L5 DEBUG - Features: {features}")
-                logger.info(f"🔍 L5 DEBUG - Feature array shape: {feature_array.shape}")
-                logger.info(f"🔍 L5 DEBUG - Feature array values: {feature_array}")
-                
-                # Use unified prediction function for RandomForest (trained without names)
-                confidence = predict_rf_safe(model, features)
+                # SSOT: try to build vector from latest features snapshot if available
+                confidence = None
+                try:
+                    from app.backend.services.metrics import inc_l5_vector_source, inc_l5_builder_error, preinit_l5_vector_source_series
+                    preinit_l5_vector_source_series()
+                    # Prefer real snapshot object if provided
+                    from app.backend.ml.infer import build_l5_vector_from_snapshot
+                    if snapshot_obj is None:
+                        raise NameError("snapshot_object_missing")
+                    X = build_l5_vector_from_snapshot(snapshot_obj)
+                    if hasattr(model, 'predict_proba'):
+                        proba = model.predict_proba(X)[0]
+                        confidence = float(proba[1]) if len(proba) > 1 else float(proba[0])
+                    else:
+                        pred = model.predict(X)[0]
+                        confidence = float(pred)
+                    inc_l5_vector_source("snapshot")
+                except Exception as e:
+                    # Fallback to legacy feature dict path
+                    from app.backend.ml.infer import predict_l5_rf_safe
+                    confidence = predict_l5_rf_safe(model, features)
+                    try:
+                        from app.backend.services.metrics import inc_l5_vector_source
+                        inc_l5_vector_source("fallback")
+                        from app.backend.services.metrics import inc_l5_builder_error
+                        inc_l5_builder_error(type(e).__name__)
+                    except Exception:
+                        pass
                 logger.info(f"🔍 L5 DEBUG - Raw prediction: {confidence}")
                 
                 logger.info(f"🔍 L5 DEBUG - Final confidence: {confidence}")
@@ -841,10 +949,14 @@ class EnterpriseTradingEngine:
                         layer_name="layer_5"
                     )
                     if hasattr(model, "predict_proba"):
-                        proba = model.predict_proba(rescaled_array)[0]
+                        # Convert DataFrame to numpy array to avoid sklearn feature name warning
+                        prediction_array = rescaled_array.values if hasattr(rescaled_array, 'values') else rescaled_array
+                        proba = model.predict_proba(prediction_array)[0]
                         confidence = float(proba[1]) if len(proba) > 1 else float(proba)
                     else:
-                        pred = model.predict(rescaled_array)[0]
+                        # Convert DataFrame to numpy array to avoid sklearn feature name warning
+                        prediction_array = rescaled_array.values if hasattr(rescaled_array, 'values') else rescaled_array
+                        pred = model.predict(prediction_array)[0]
                         confidence = float(pred)
                         if confidence < 0.0 or confidence > 1.0:
                             confidence = float(1.0 / (1.0 + np.exp(-confidence)))
@@ -903,6 +1015,7 @@ class EnterpriseTradingEngine:
                     ]
                 )
                 
+                # Use the feature_array directly - _build_feature_array handles DataFrame vs numpy array based on model training
                 raw_timing_score = float(self.models["timing"].predict(feature_array)[0])
                 # CRITICAL FIX: Proper timing score normalization
                 # Raw model output needs professional scaling for trading decisions
@@ -955,10 +1068,16 @@ class EnterpriseTradingEngine:
             volatility = layer_results.get("volatility", 0.05)  # Default 5%
             
             logger.info(f"🔍 DECISION DEBUG - confidence={confidence:.3f}, timing={timing_score:.3f}, reversal={reversal_prob:.3f}, filter={filter_score:.3f}")
-            logger.info(f"🔍 THRESHOLDS - confidence_thresh={self.confidence_threshold}, risk_thresh={self.risk_threshold}")
+            logger.info(f"🔍 THRESHOLDS - primary={self.thresholds.confidence.BUY_THRESHOLD:.2f}, exploratory={self.thresholds.confidence.EXPLORATORY_BUY:.2f}, consensus={self.thresholds.confidence.CONSENSUS_THRESHOLD:.2f}, risk_thresh={self.risk_threshold:.2f}")
             
             # PRIMARY SIGNAL (strict criteria)
-            primary_signal = self._calculate_primary_signal(confidence, timing_score, reversal_prob, filter_score)
+            primary_signal = self._calculate_primary_signal(
+                confidence,
+                timing_score,
+                reversal_prob,
+                filter_score,
+                layer_results.get("features", {})
+            )
             if primary_signal[0] != "HOLD":
                 return primary_signal[0], primary_signal[1], "primary"
             
@@ -976,7 +1095,7 @@ class EnterpriseTradingEngine:
             logger.error(f"Final decision calculation error: {e}")
             return "HOLD", 0.5, "error"
             
-    def _calculate_primary_signal(self, confidence: float, timing_score: float, reversal_prob: float, filter_score: float) -> Tuple[str, float]:
+    def _calculate_primary_signal(self, confidence: float, timing_score: float, reversal_prob: float, filter_score: float, features: Dict[str, float]) -> Tuple[str, float]:
         """Calculate primary signal with professional criteria using unified thresholds"""
         try:
             # Use unified threshold for consistency
@@ -994,17 +1113,19 @@ class EnterpriseTradingEngine:
             logger.info(f"DAY TRADING CHECKS - conf:{conf_check}, reversal_opp:{reversal_opportunity}, reversal_safe:{reversal_safe}, filter:{filter_check}, timing_buy:{timing_buy_check}, timing_sell:{timing_sell_check}")
             
             # DAY TRADING: Special logic for extreme oversold/overbought conditions
-            # When RSI < 30 and high reversal probability = strong BUY opportunity
-            extreme_oversold_buy = (reversal_prob > 0.65 and timing_score > 0.0)  # RSI < 30 typically
-            extreme_overbought_sell = (reversal_prob > 0.65 and timing_score < 0.0)  # RSI > 70 typically
+            # Bind to actual RSI/BB to avoid mislabeling
+            rsi = float(features.get("rsi", 50.0))
+            bb_pos = float(features.get("bb_position", features.get("bollinger_position", 0.5)))
+            extreme_oversold_buy = (reversal_prob > 0.65 and timing_score > 0.0 and rsi < 30 and bb_pos < 0.2)
+            extreme_overbought_sell = (reversal_prob > 0.65 and timing_score < 0.0 and rsi > 70 and bb_pos > 0.8)
             
             # DAY TRADING: Aggressive entry for extreme conditions (bypass filter check)
             if conf_check and reversal_check:
                 if extreme_oversold_buy:
-                    logger.info("🚀 DAY TRADING SIGNAL: BUY (extreme_oversold_reversal - filter bypassed)")
+                    logger.info(f"🚀 DAY TRADING SIGNAL: BUY (extreme_oversold_reversal - rsi={rsi:.1f}, bb_pos={bb_pos:.2f})")
                     return "BUY", confidence
                 elif extreme_overbought_sell:
-                    logger.info("🚀 DAY TRADING SIGNAL: SELL (extreme_overbought_reversal - filter bypassed)")
+                    logger.info(f"🚀 DAY TRADING SIGNAL: SELL (extreme_overbought_reversal - rsi={rsi:.1f}, bb_pos={bb_pos:.2f})")
                     return "SELL", confidence
             
             # Standard day trading: Confidence + reversal + filter + timing

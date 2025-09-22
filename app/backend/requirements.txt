@@ -18,6 +18,7 @@ bcrypt==4.3.0
 # Logging/monitoring
 structlog==25.4.0
 psutil==7.0.0
+prometheus-client==0.21.0
 
 # Async networking / HTTP
 aiohttp==3.12.15
@@ -34,11 +35,14 @@ scikit-learn>=1.7.1
 # Classical models may depend on gradient boosters
 xgboost==3.0.4
 lightgbm==4.6.0
-# TensorFlow is required for LSTM layers; use latest compatible version
-tensorflow==2.20.0
+# TensorFlow STABLE VERSION - OFFICIALLY SUPPORTED
+tensorflow==2.16.1
+# NOTE: Using official stable TensorFlow 2.16.1 from https://www.tensorflow.org/api_docs
+# TensorFlow 2.20.0 had mutex deadlock - FIXED by using stable version
 pandas>=2.2.3
 pyarrow>=17.0.0
 optuna>=3.6.1
+# Technical Analysis implemented using pandas and numpy (no external dependencies)
 
 # Env
 python-dotenv==1.1.1

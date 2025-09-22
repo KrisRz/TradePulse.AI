@@ -68,12 +68,12 @@ fi
 
 # Install any missing lightweight runtime deps
 echo "📦 Installing missing dependencies..."
-pip install tenacity fastapi uvicorn pydantic[email] python-jose[cryptography] bcrypt psutil aiohttp websockets requests boto3 python-dotenv --quiet
+python3 -m pip install tenacity fastapi uvicorn pydantic[email] python-jose[cryptography] bcrypt psutil aiohttp websockets requests boto3 python-dotenv prometheus-client --quiet
 
 # Install TensorFlow if not present (with proper configuration)
 if ! python3 -c "import tensorflow" 2>/dev/null; then
     echo "🧠 Installing TensorFlow for continuous learning..."
-    pip install tensorflow --quiet
+    python3 -m pip install tensorflow --quiet
 fi
 
 echo "✅ Dependencies installed"

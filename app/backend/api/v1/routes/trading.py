@@ -1018,7 +1018,7 @@ async def trading_brain_loop():
                 logger.info(f"🎯 UNIFIED Signal Generated: {unified_signal.action.value} with {unified_signal.confidence:.1%} confidence")
                 
                 # Check if unified signal is strong enough to act on - PROFESSIONAL THRESHOLD
-                if unified_signal.confidence > 0.65 and unified_signal.action in [TradingAction.BUY, TradingAction.SELL]:
+                if unified_signal.confidence > 0.45 and unified_signal.action in [TradingAction.BUY, TradingAction.SELL]:  # BITCOIN SCALPING: 45% threshold (was 65%)
                     
                     # Get portfolio for the admin user
                     portfolio = await get_professional_portfolio("admin")

@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from app.backend.services.enterprise_trading_engine import EnterpriseTradingEngine
 from app.backend.services.intelligent_entry_engine import IntelligentEntryEngine
 from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
-from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_market_data, get_live_candlestick_data
+from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_market_data, get_live_candlestick_data, get_live_market_data_service
 from app.backend.services.professional_portfolio import get_professional_portfolio, PositionType
 from app.backend.core.runtime_config import runtime_config_store
 # Professional integrations - CRITICAL for Phase 1A
@@ -125,15 +125,25 @@ class DayTradingEngine:
         self.analyses_completed = 0
         self.positions_opened = 0
         self.avg_analysis_time_ms = 0
+        # Circuit breaker (volume z-score) hysteresis
+        self.cb_active = False
+        self.cb_threshold_on = 3.5
+        self.cb_threshold_off = 2.0
+        self.cb_safe_ticks = 0
+        self.cb_safe_required = 3  # require N consecutive safe ticks before resuming
+        # Duplicate suppression burst tracker (timestamps of suppressions)
+        self._dupe_suppress_ts: List[float] = []
         
         # CONSERVATIVE SCALPING MODE - Tryb 1: Małe, częste zyski
+        from app.backend.core.config import get_settings
+        s = get_settings()
         self.mode_configs = {
             TradingMode.DAY_TRADING: TradingModeConfig(
                 mode=TradingMode.DAY_TRADING,
                 analysis_interval=12,       # 12 seconds - SCALPING: szybsze reakcje
                 position_duration=900,     # 15 minutes average (krótsze pozycje)
                 confidence_threshold=0.35,  # SCALPING: 35% confidence (więcej sygnałów dla testów)
-                max_positions=8,           # SCALPING: 8 pozycji (więcej możliwości)
+                max_positions=int(getattr(s, "MAX_CONCURRENT_POSITIONS", 8)),
                 position_size_pct=0.020,   # SCALPING: 2.0% per position (~$1,000 for $40 profit targets)
                 stop_loss_pct=0.005,       # SCALPING: 0.5% = $50 max strata
                 take_profit_pct=0.004      # SCALPING: 0.4% = $40 target zysk
@@ -365,13 +375,18 @@ class DayTradingEngine:
                     # Run high-frequency market analysis
                     await self._run_market_analysis()
                     
-                    # Monitor open positions with exit engine (every 3rd cycle)
-                    if self.analyses_completed % 3 == 0:
-                        await self._monitor_open_positions()
+                    # Monitor open positions with exit engine (EVERY CYCLE for day trading)
+                    # DAY TRADING FIX: Check positions every 12 seconds, not every 36 seconds!
+                    await self._monitor_open_positions()
                     
                     # Track performance
                     analysis_time_ms = (time.time() - start_time) * 1000
                     self._update_performance_metrics(analysis_time_ms)
+                    try:
+                        from app.backend.services.metrics import inc_analysis_cycle
+                        inc_analysis_cycle()
+                    except Exception:
+                        pass
                     
                     if self.analyses_completed % 20 == 0:  # Log every 20 analyses
                         logger.info(f"📊 {self.current_mode.value} analysis #{self.analyses_completed} "
@@ -393,6 +408,11 @@ class DayTradingEngine:
         try:
             # Get portfolio (will use TTL-based caching)
             portfolio = await get_professional_portfolio("admin")
+            try:
+                from app.backend.services.metrics import set_concurrent_positions
+                set_concurrent_positions(len(portfolio.get_active_positions()))
+            except Exception:
+                pass
             await portfolio.update_positions_with_live_data()  # Update with live prices
             active_positions = portfolio.get_active_positions()
             
@@ -452,37 +472,82 @@ class DayTradingEngine:
             current_time = datetime.now(timezone.utc)
             current_price = await get_live_bitcoin_price()
             
-            # Check recent positions (last 5 minutes)
+            # Load runtime-config and settings for duplicate thresholds
+            from app.backend.core.runtime_config import runtime_config_store
+            from app.backend.core.config import get_settings
+            cfg = await runtime_config_store.get()
+            s = get_settings()
+            active_window = int(getattr(cfg, "dup_active_window_sec", s.DUP_ACTIVE_WINDOW_SEC))
+            active_delta = float(getattr(cfg, "dup_active_price_delta_pct", s.DUP_ACTIVE_PRICE_DELTA_PCT))
+            closed_window = int(getattr(cfg, "dup_closed_window_sec", s.DUP_CLOSED_WINDOW_SEC))
+            closed_delta = float(getattr(cfg, "dup_closed_price_delta_pct", s.DUP_CLOSED_PRICE_DELTA_PCT))
+
+            # Volatility-adaptive thresholds (realized 5m)
+            realized_vol_5m = 0.0
+            try:
+                service = await get_live_market_data_service()
+                candles = service.get_recent_candles("1m", 5)
+                if candles and len(candles) >= 5:
+                    closes = []
+                    for c in candles[-5:]:
+                        if isinstance(c, dict):
+                            closes.append(float(c.get("close", 0.0)))
+                        elif isinstance(c, list) and len(c) >= 5:
+                            closes.append(float(c[4]))
+                    if len(closes) >= 5 and min(closes) > 0:
+                        import numpy as _np
+                        rets = _np.diff(_np.log(_np.array(closes)))
+                        realized_vol_5m = float(_np.sqrt(_np.mean(rets**2)))
+            except Exception:
+                pass
+
+            # Adapt price deltas and windows based on realized vol
+            adapt_active_delta = max(active_delta, 0.4 * realized_vol_5m)
+            adapt_closed_delta = max(closed_delta, 0.5 * realized_vol_5m)
+            adapt_active_window = max(20, int(active_window * (0.7 if realized_vol_5m > 0.0015 else 1.0)))
+            adapt_closed_window = max(300, int(closed_window * (0.6 if realized_vol_5m > 0.0015 else 1.0)))
+
+            # Check recent positions (active) within adaptive window
             for position in portfolio.get_active_positions():
                 time_diff = (current_time - position.entry_time).total_seconds()
                 price_diff = abs(current_price - float(position.entry_price)) / float(position.entry_price)
                 
                 # Consider duplicate if:
                 # 1. Same direction (LONG/SHORT)
-                # 2. Within 5 minutes
-                # 3. Price difference < 1%
+                # 2. Within window
+                # 3. Price difference < delta
                 same_direction = (
                     (signal.action == "BUY" and position.type == PositionType.LONG) or
                     (signal.action == "SELL" and position.type == PositionType.SHORT)
                 )
                 
-                if same_direction and time_diff < 120 and price_diff < 0.005:  # 2 min, 0.5% (more aggressive)
+                if same_direction and time_diff < adapt_active_window and price_diff < adapt_active_delta:
                     logger.warning(f"🚫 Duplicate detected: {signal.action} position within 5min and 1% price")
+                    try:
+                        from app.backend.services.metrics import inc_decision_dupe
+                        inc_decision_dupe("similar_signal")
+                    except Exception:
+                        pass
                     return True
             
             # Check closed positions (last 30 minutes) to prevent immediate re-entry
             for position in portfolio.closed_positions[-10:]:  # Check last 10 closed
                 if position.exit_time:
                     time_diff = (current_time - position.exit_time).total_seconds()
-                    if time_diff < 1800:  # 30 minutes
+                    if time_diff < adapt_closed_window:
                         price_diff = abs(current_price - float(position.exit_price or position.entry_price)) / float(position.entry_price)
                         same_direction = (
                             (signal.action == "BUY" and position.type == PositionType.LONG) or
                             (signal.action == "SELL" and position.type == PositionType.SHORT)
                         )
                         
-                        if same_direction and price_diff < 0.01:  # 1% for closed positions (more aggressive)
+                        if same_direction and price_diff < adapt_closed_delta:
                             logger.warning(f"🚫 Re-entry too soon: {signal.action} position closed {time_diff/60:.1f}min ago")
+                            try:
+                                from app.backend.services.metrics import inc_decision_dupe
+                                inc_decision_dupe("reentry_cooldown")
+                            except Exception:
+                                pass
                             return True
             
             return False
@@ -499,10 +564,117 @@ class DayTradingEngine:
             # (A) Get fresh data (WebSocket + REST fallback) - NO MOCKS
             logger.debug("📊 Getting fresh market data...")
             tick = await get_live_bitcoin_price()  # Latest tick price
-            market_data = await get_live_market_data()  # Current market state
-            candles = await get_live_candlestick_data("1m", 200)  # Recent history for LSTM
+            market_data = await get_live_market_data()  # Current market state (SSOT snapshot)
+            try:
+                # Export snapshot age if embedded
+                snap = market_data.get("snapshot")
+                if snap and hasattr(snap, "asof"):
+                    from time import time as _now
+                    from app.backend.services.metrics import set_snapshot_age_seconds
+                    set_snapshot_age_seconds(max(0.0, _now() - float(getattr(snap, "asof", 0.0))))
+            except Exception:
+                pass
+            service = await get_live_market_data_service()
+            candles = service.get_recent_candles("1m", 800)  # Stream-first, backed by DynamoDB Local
             
             logger.debug(f"🎯 Tick: BTCUSDT @${tick:.2f}, Candles: {len(candles)} loaded")
+
+            # Readiness gate (server-side): based on snapshot and history ages
+            try:
+                from time import time as _now
+                from app.backend.services.metrics import set_readiness_gate
+                snapshot_asof = float(getattr(market_data.get("snapshot", None), "asof", 0.0)) if isinstance(market_data, dict) else 0.0
+                snap_age_ok = (_now() - snapshot_asof) < 5.0 if snapshot_asof > 0 else False
+                history_close_ts = 0.0
+                if candles:
+                    last = candles[-1]
+                    if isinstance(last, dict):
+                        history_close_ts = float(last.get("close_time", last.get("timestamp", 0)))
+                        if history_close_ts > 1e12:
+                            history_close_ts /= 1000.0
+                    elif isinstance(last, list) and len(last) >= 7:
+                        # Binance format index 6 is close time (ms)
+                        history_close_ts = float(last[6]) / 1000.0
+                hist_age_ok = (_now() - history_close_ts) < 60.0 if history_close_ts > 0 else False
+                set_readiness_gate("entry", bool(snap_age_ok and hist_age_ok))
+                if not (snap_age_ok and hist_age_ok):
+                    try:
+                        from time import time as _t
+                        from app.backend.services.metrics import inc_analysis_only_failure, set_last_decision_epoch
+                        inc_analysis_only_failure("not_ready")
+                        set_last_decision_epoch(_t())
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Circuit breaker (volume z-score with hysteresis)
+            try:
+                import numpy as _np
+                vols = []
+                # extract volumes from last 60 closed candles (dict or list)
+                for c in candles[-60:]:
+                    if isinstance(c, dict):
+                        vols.append(float(c.get("volume", 0.0)))
+                    elif isinstance(c, list) and len(c) >= 6:
+                        vols.append(float(c[5]))
+                if len(vols) >= 10:
+                    v_last = float(vols[-1])
+                    mu = float(_np.mean(vols))
+                    sigma = float(_np.std(vols))
+                    z = 0.0 if sigma == 0.0 else (v_last - mu) / sigma
+                    try:
+                        from app.backend.services.metrics import set_volume_zscore
+                        set_volume_zscore("BTCUSDT", float(z))
+                    except Exception:
+                        pass
+                    prev = self.cb_active
+                    # Detailed logging of z and thresholds
+                    try:
+                        logger.debug(f"📉 Volume z={z:.2f} | on>={self.cb_threshold_on:.2f} off<={self.cb_threshold_off:.2f} (safe_ticks={self.cb_safe_ticks}/{self.cb_safe_required})")
+                    except Exception:
+                        pass
+                    if not prev and z >= self.cb_threshold_on:
+                        self.cb_active = True
+                        self.cb_safe_ticks = 0
+                    elif prev:
+                        if z <= self.cb_threshold_off:
+                            self.cb_safe_ticks += 1
+                            if self.cb_safe_ticks >= self.cb_safe_required:
+                                self.cb_active = False
+                                self.cb_safe_ticks = 0
+                                try:
+                                    logger.info("✅ Circuit breaker auto-recovered: volume (consecutive safe ticks)")
+                                except Exception:
+                                    pass
+                        else:
+                            # still risky, reset safe counter
+                            self.cb_safe_ticks = 0
+                    # export status
+                    try:
+                        from app.backend.services.metrics import set_cb_active, inc_cb_halt
+                        set_cb_active("BTCUSDT", self.cb_active)
+                        if self.cb_active and not prev:
+                            inc_cb_halt("volume_zscore")
+                    except Exception:
+                        pass
+                # Short-circuit if CB active
+                if self.cb_active:
+                    try:
+                        logger.warning("🚨 Trading halted: Circuit breaker volume active (z-score)")
+                    except Exception:
+                        pass
+                    await self._audit_decision(None, None, None, None, "circuit_breaker_halt")
+                    try:
+                        from time import time as _t
+                        from app.backend.services.metrics import inc_analysis_only_failure, set_last_decision_epoch
+                        inc_analysis_only_failure("cb_active")
+                        set_last_decision_epoch(_t())
+                    except Exception:
+                        pass
+                    return
+            except Exception:
+                pass
             
             # (B) Safety first - hard stop check (EMERGENCY CONTROLS)
             if self.emergency_system and await self.emergency_system.is_trading_halted():
@@ -515,7 +687,7 @@ class DayTradingEngine:
                 return
             
             # (C) Enterprise signal (6-layer analysis) with REAL DATA
-            signal = await self.enterprise_engine.generate_signal("BTCUSDT")
+            signal = await self.enterprise_engine.generate_signal("BTCUSDT", market_snapshot=market_data.get("snapshot", market_data))
             
             # Enhanced layer analysis logging
             try:
@@ -554,7 +726,15 @@ class DayTradingEngine:
                     )
                     
                     if risk_assessment and hasattr(risk_assessment, 'block_reason') and risk_assessment.block_reason:
-                        logger.info(f"🛡️ Risk blocked: {risk_assessment.block_reason}")
+                        # Enhanced risk blocking log with position details
+                        active_positions = portfolio.get_active_positions() if hasattr(portfolio, 'get_active_positions') else []
+                        signal_type = getattr(signal, 'action', 'UNKNOWN')
+                        confidence = getattr(signal, 'confidence', 0.0)
+                        mode = getattr(signal, 'mode', 'unknown')
+                        
+                        logger.info(f"🛡️ Risk blocked: {risk_assessment.block_reason} | "
+                                  f"open={len(active_positions)}/{config.max_positions} | "
+                                  f"signal={signal_type} | conf={confidence:.1%} | mode={mode}")
                         await self._audit_decision(signal, None, None, risk_assessment, "risk_blocked")
                         return
                         
@@ -573,15 +753,69 @@ class DayTradingEngine:
             adjusted_confidence = signal.confidence * session_multiplier
             
             logger.info(f"🎯 Signal: {signal.action} conf={signal.confidence:.2f} → {adjusted_confidence:.2f} (session={self.current_session.value})")
+            try:
+                from app.backend.services.metrics import observe_entry_confidence
+                observe_entry_confidence(float(adjusted_confidence))
+            except Exception:
+                pass
             
-            # FIXED: Show actual confidence, don't clamp to threshold
-            effective_threshold = config.confidence_threshold
-            display_confidence = signal.confidence  # Show real confidence, not threshold
-            if hasattr(signal, 'signal_type') and signal.signal_type == "exploratory":
-                effective_threshold = 0.35  # Use unified exploratory threshold
-                # But display the ACTUAL confidence, not the threshold
-                
-            logger.info(f"🔍 THRESHOLD CHECK: {adjusted_confidence:.2f} > {effective_threshold:.2f} ? signal_type={getattr(signal, 'signal_type', 'primary')}")
+            # Unified thresholds
+            from app.backend.config.trading_thresholds import ConfidenceThresholds
+            thresholds = ConfidenceThresholds()
+            effective_threshold = thresholds.BUY_THRESHOLD if getattr(signal, 'signal_type', 'primary') == 'primary' else thresholds.EXPLORATORY_BUY
+            # Entry playbooks: mean‑reversion and breakout
+            playbook = None
+            try:
+                md = market_data if isinstance(market_data, dict) else {}
+                rsi = float(md.get("rsi", 50.0))
+                bb_pos = float(md.get("bollinger_position", 0.5))
+                macd = float(md.get("macd", 0.0))
+                vol_ratio = float(md.get("volume_ratio", 1.0))
+                # Mean‑reversion buy: deep oversold and bottom band proximity
+                if signal.action == "BUY" and rsi <= 30.0 and bb_pos <= 0.15:
+                    playbook = "mean_reversion"
+                # Breakout continuation: strong momentum and band top proximity with volume
+                elif signal.action == "BUY" and bb_pos >= 0.85 and macd > 0.0 and vol_ratio >= 1.2:
+                    playbook = "breakout"
+                # Mirror for SELL (optional): oversold/overbought logic inverted
+                elif signal.action == "SELL" and rsi >= 70.0 and bb_pos >= 0.85:
+                    playbook = "mean_reversion_sell"
+                elif signal.action == "SELL" and bb_pos <= 0.15 and macd < 0.0 and vol_ratio >= 1.2:
+                    playbook = "breakout_sell"
+                # Apply small threshold boost when playbook recognized
+                if playbook is not None:
+                    effective_threshold = max(0.30, float(effective_threshold) - 0.02)
+            except Exception:
+                pass
+            
+            logger.info(f"🔍 THRESHOLD CHECK: {adjusted_confidence:.2f} > {effective_threshold:.2f} ? signal_type={getattr(signal, 'signal_type', 'primary')} playbook={playbook or 'none'}")
+            try:
+                from app.backend.services.metrics import set_decision_threshold
+                set_decision_threshold("day_trading", getattr(signal, 'signal_type', 'primary'), self.current_session.value, float(effective_threshold))
+            except Exception:
+                pass
+            try:
+                from app.backend.services.metrics import set_effective_threshold
+                set_effective_threshold(float(effective_threshold), getattr(signal, 'signal_type', 'primary'))
+            except Exception:
+                pass
+            
+            # Early cooldown gate: if entry engine cooldown active, avoid deep analysis
+            try:
+                last_t = self.entry_engine.entry_cooldown_cache.get(signal.symbol, 0)
+                import time as _t
+                if _t.time() - last_t < self.entry_engine.entry_cooldown_seconds:
+                    remaining = self.entry_engine.entry_cooldown_seconds - (_t.time() - last_t)
+                    logger.info(f"⌛ WAIT (cooldown {remaining:.1f}s) - skipping entry analysis")
+                    try:
+                        from app.backend.services.metrics import inc_cooldown_skip
+                        inc_cooldown_skip()
+                    except Exception:
+                        pass
+                    await self._audit_decision(signal, {"should_enter": False, "reasoning": "cooldown_active"}, None, risk_assessment, "cooldown_skip")
+                    return
+            except Exception:
+                pass
             
             # Check threshold and action type
             if adjusted_confidence > effective_threshold and signal.action in ["BUY", "SELL"]:
@@ -596,13 +830,34 @@ class DayTradingEngine:
                 # CRITICAL: Check for duplicate positions (prevent same-minute entries)
                 if await self._is_duplicate_entry(signal, portfolio):
                     logger.warning(f"🚫 Duplicate entry prevented: {signal.action} signal too similar to recent position")
+                    try:
+                        from app.backend.services.metrics import inc_decision_dupe
+                        inc_decision_dupe("similar_signal")
+                    except Exception:
+                        pass
+                    # Track suppression for burst escape logic
+                    try:
+                        import time as _t
+                        self._dupe_suppress_ts.append(_t.time())
+                        # Keep last 20 timestamps
+                        if len(self._dupe_suppress_ts) > 20:
+                            self._dupe_suppress_ts = self._dupe_suppress_ts[-20:]
+                    except Exception:
+                        pass
                     await self._audit_decision(signal, None, None, risk_assessment, "duplicate_entry_prevented")
                     return
                 
-                # ENTRY ANALYSIS using intelligent_entry_engine
+                # ENTRY ANALYSIS using intelligent_entry_engine (SSOT snapshot)
                 entry_decision = await self._run_professional_entry_analysis(
-                    signal, portfolio, candles, tick, risk_assessment
+                    signal, portfolio, candles, tick, risk_assessment, market_data
                 )
+                # Attach playbook context for audit/metrics
+                try:
+                    if isinstance(entry_decision, dict):
+                        entry_decision = dict(entry_decision)
+                        entry_decision["playbook"] = playbook or "none"
+                except Exception:
+                    pass
                 
                 logger.info(
                     f"🚦 ENTRY: {('ENTER' if entry_decision.get('should_enter') else 'WAIT')} "
@@ -611,6 +866,75 @@ class DayTradingEngine:
                 
                 # (F) Position orchestration
                 if entry_decision.get("should_enter", False):
+                    # Execution guards (volatility/slippage proxy)
+                    try:
+                        import numpy as _np
+                        closes_guard = []
+                        for c in candles[-10:]:
+                            if isinstance(c, dict):
+                                closes_guard.append(float(c.get("close", 0.0)))
+                            elif isinstance(c, list) and len(c) >= 5:
+                                closes_guard.append(float(c[4]))
+                        vol_proxy = float(_np.std(_np.array(closes_guard))) if len(closes_guard) >= 5 else 0.0
+                        vol_ratio = vol_proxy / max(1e-9, float(tick if isinstance(tick, (int, float)) else tick.get("price", 0.0)))
+                        if vol_ratio > 0.004 and adjusted_confidence < (effective_threshold + 0.05):
+                            logger.info(f"🛑 Execution guard: high short-term volatility ({vol_ratio:.4f}) - skipping entry")
+                            await self._audit_decision(signal, {"should_enter": False, "reasoning": "execution_guard_volatility"}, None, risk_assessment, "execution_guard")
+                            try:
+                                from app.backend.services.metrics import inc_entry_guard_block
+                                inc_entry_guard_block("volatility")
+                            except Exception:
+                                pass
+                            return
+                        # Spread/slippage guards using live orderbook/ticker when available
+                        try:
+                            from app.backend.services.live_market_data import get_live_orderbook_data
+                            ob = await get_live_orderbook_data()
+                            bids = ob.get("bids") or []
+                            asks = ob.get("asks") or []
+                            best_bid = float(bids[0][0]) if bids else 0.0
+                            best_ask = float(asks[0][0]) if asks else 0.0
+                            mid = (best_bid + best_ask) / 2.0 if best_bid and best_ask else 0.0
+                            spread_bps = ((best_ask - best_bid) / mid * 10000.0) if mid else 0.0
+                        except Exception:
+                            spread_bps = 0.0
+                        # Slippage proxy: use vol_ratio in bps terms as a conservative proxy
+                        slippage_bps = float(vol_ratio * 10000.0)
+                        try:
+                            from app.backend.core.runtime_config import runtime_config_store
+                            cfg = await runtime_config_store.get()
+                            if spread_bps > float(cfg.playbook_override_max_spread_bps):
+                                logger.info(f"🛑 Execution guard: spread {spread_bps:.2f}bps > {cfg.playbook_override_max_spread_bps}bps")
+                                await self._audit_decision(signal, {"should_enter": False, "reasoning": "execution_guard_spread"}, None, risk_assessment, "execution_guard")
+                                try:
+                                    from app.backend.services.metrics import inc_entry_guard_block
+                                    inc_entry_guard_block("spread")
+                                except Exception:
+                                    pass
+                                return
+                            if slippage_bps > float(cfg.playbook_override_max_slippage_bps):
+                                logger.info(f"🛑 Execution guard: slippage {slippage_bps:.2f}bps > {cfg.playbook_override_max_slippage_bps}bps (proxy)")
+                                await self._audit_decision(signal, {"should_enter": False, "reasoning": "execution_guard_slippage"}, None, risk_assessment, "execution_guard")
+                                try:
+                                    from app.backend.services.metrics import inc_entry_guard_block
+                                    inc_entry_guard_block("slippage")
+                                except Exception:
+                                    pass
+                                return
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+                    # Burst escape hatch: if >=3 suppressions within 120s, allow micro-size bypass
+                    micro_bypass = False
+                    try:
+                        import time as _t
+                        now = _t.time()
+                        recent = [t for t in self._dupe_suppress_ts if now - t <= 120]
+                        if len(recent) >= 3:
+                            micro_bypass = True
+                    except Exception:
+                        pass
                     # Calculate position size with risk manager
                     if self.risk_manager and risk_assessment:
                         try:
@@ -623,6 +947,39 @@ class DayTradingEngine:
                     else:
                         # Use mode config for position sizing
                         position_size = float(portfolio.cash_balance) * config.position_size_pct
+                    if micro_bypass:
+                        # Use 25% of normal size for micro-bypass
+                        position_size *= 0.25
+                        try:
+                            from app.backend.services.metrics import inc_dupe_micro_bypass
+                            inc_dupe_micro_bypass()
+                        except Exception:
+                            pass
+                    # Apply playbook override size hair-cut if provided by entry engine
+                    try:
+                        size_mult = float(entry_decision.get("size_multiplier", 1.0))
+                        if size_mult > 0 and size_mult < 1.0:
+                            position_size *= size_mult
+                    except Exception:
+                        pass
+
+                    # ATR-proxy stops and TP ladder
+                    sl_pct = 0.003  # 0.30% floor
+                    try:
+                        import numpy as _np
+                        closes_atr = []
+                        for c in candles[-14:]:
+                            if isinstance(c, dict):
+                                closes_atr.append(float(c.get("close", 0.0)))
+                            elif isinstance(c, list) and len(c) >= 5:
+                                closes_atr.append(float(c[4]))
+                        if len(closes_atr) >= 10:
+                            atr_proxy = float(_np.std(_np.array(closes_atr)))
+                            price_now = float(tick if isinstance(tick, (int, float)) else tick.get("price", 0.0))
+                            sl_pct = max(sl_pct, 0.35 * (atr_proxy / max(price_now, 1e-9)))
+                    except Exception:
+                        pass
+                    tp_ladder = [round(sl_pct * 1.4, 6), round(sl_pct * 2.0, 6), round(sl_pct * 2.8, 6)]
                     
                     # Open position with semantic consistency
                     from decimal import Decimal
@@ -646,14 +1003,49 @@ class DayTradingEngine:
                     # CRITICAL: Normalize AI confidence to [0,1] range
                     normalized_confidence = min(max(adjusted_confidence, 0.0), 1.0)
                     
+                    # Real trading path (optional, runtime-config)
+                    try:
+                        from app.backend.core.runtime_config import runtime_config_store
+                        cfg = await runtime_config_store.get()
+                        if getattr(cfg, "real_trading_enabled", False):
+                            from app.backend.services.binance_hybrid_client import get_hybrid_client
+                            hc = await get_hybrid_client()
+                            # Build idempotent client order id
+                            import uuid
+                            coid = f"tp-{uuid.uuid4().hex[:16]}"
+                            side = "BUY" if position_type == PositionType.LONG else "SELL"
+                            # Use quoteOrderQty to spend position_size dollars
+                            quote_qty_str = f"{position_size:.2f}"
+                            order = await hc.place_order(
+                                symbol=signal.symbol,
+                                side=side,
+                                order_type="MARKET",
+                                quote_order_qty=quote_qty_str,
+                                new_client_order_id=coid,
+                            )
+                            try:
+                                await write_orders({
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                    "symbol": signal.symbol,
+                                    "action": side,
+                                    "size": position_size,
+                                    "price": float(order.get("fills", [{}])[0].get("price", tick if isinstance(tick, (int,float)) else tick.get("price", 0))),
+                                    "order_id": order.get("orderId", coid),
+                                    "slippage": 0.0,
+                                })
+                            except Exception:
+                                pass
+                    except Exception as e:
+                        logger.warning(f"Real trading path failed or disabled: {e}")
+                    
                     position_id = await portfolio.open_position(
                         symbol=signal.symbol,
                         position_type=position_type,
                         size=Decimal(str(position_size)),
                         ai_confidence=normalized_confidence,
                         ai_reasoning=consistent_reasoning,
-                        stop_loss_pct=Decimal(str(config.stop_loss_pct)),
-                        take_profit_pct=Decimal(str(config.take_profit_pct))
+                        stop_loss_pct=Decimal(str(sl_pct)),
+                        take_profit_pct=Decimal(str(tp_ladder[1]))
                     )
                     
                     self.positions_opened += 1
@@ -661,6 +1053,16 @@ class DayTradingEngine:
                     # CRITICAL FIX: Save portfolio state after opening position
                     await portfolio._save_portfolio_state()
                     logger.info(f"✅ POSITION OPENED: {position_id} ({signal.action}) conf={adjusted_confidence:.1%}")
+                    try:
+                        from time import time as _t
+                        from app.backend.services.metrics import inc_decision, set_last_decision_epoch, inc_positions_opened, set_concurrent_positions, inc_decision_by_playbook
+                        inc_decision("opened", signal.action, getattr(signal, 'signal_type', 'primary'))
+                        inc_decision_by_playbook("opened", signal.action, getattr(signal, 'signal_type', 'primary'), playbook or "none")
+                        set_last_decision_epoch(_t())
+                        inc_positions_opened()
+                        set_concurrent_positions(len(portfolio.get_active_positions()))
+                    except Exception:
+                        pass
                     
                     # PHASE 4.3: Track trade execution for performance learning
                     if self.performance_tracker:
@@ -682,13 +1084,36 @@ class DayTradingEngine:
                         except Exception as e:
                             logger.warning(f"In-position risk assessment failed: {e}")
                     
-                    await self._audit_decision(signal, entry_decision, None, risk_assessment, "position_opened")
+                    # Attach ladder info to audit
+                    ed_with_ladder = dict(entry_decision)
+                    try:
+                        ed_with_ladder["tp_ladder"] = tp_ladder
+                        ed_with_ladder["stop_loss_pct"] = sl_pct
+                    except Exception:
+                        ed_with_ladder = entry_decision
+                    await self._audit_decision(signal, ed_with_ladder, None, risk_assessment, "position_opened")
                 else:
                     await self._audit_decision(signal, entry_decision, None, risk_assessment, "entry_rejected")
+                    try:
+                        from time import time as _t
+                        from app.backend.services.metrics import inc_decision, set_last_decision_epoch, inc_decision_by_playbook
+                        inc_decision("rejected", signal.action, getattr(signal, 'signal_type', 'primary'))
+                        inc_decision_by_playbook("rejected", signal.action, getattr(signal, 'signal_type', 'primary'), playbook or "none")
+                        set_last_decision_epoch(_t())
+                    except Exception:
+                        pass
             else:
                 reason = "low_confidence" if adjusted_confidence <= config.confidence_threshold else "hold_signal"
                 logger.debug(f"📊 Signal rejected: {reason}")
                 await self._audit_decision(signal, None, None, risk_assessment, reason)
+                try:
+                    from time import time as _t
+                    from app.backend.services.metrics import inc_decision, set_last_decision_epoch, inc_decision_by_playbook
+                    inc_decision("rejected", signal.action, getattr(signal, 'signal_type', 'primary'))
+                    inc_decision_by_playbook("rejected", signal.action, getattr(signal, 'signal_type', 'primary'), playbook or "none")
+                    set_last_decision_epoch(_t())
+                except Exception:
+                    pass
                 
         except Exception as e:
             logger.error(f"❌ Professional trading analysis failed: {e}")
@@ -699,11 +1124,11 @@ class DayTradingEngine:
                 except Exception as e2:
                     logger.error(f"Emergency system also failed: {e2}")
     
-    async def _run_professional_entry_analysis(self, signal: Any, portfolio: Any, candles: List, tick: float, risk_assessment: Any) -> Dict[str, Any]:
+    async def _run_professional_entry_analysis(self, signal: Any, portfolio: Any, candles: List, tick: float, risk_assessment: Any, market_snapshot: Dict[str, Any]) -> Dict[str, Any]:
         """PHASE 1A: Professional entry analysis with risk integration"""
         try:
-            # Get current market data
-            market_data = await get_live_market_data()
+            # Use provided SSOT market snapshot
+            market_data = market_snapshot
             
             # Run intelligent entry analysis
             entry_result = await self.entry_engine.analyze_entry_opportunity(
@@ -721,7 +1146,8 @@ class DayTradingEngine:
                     "max_positions": self.mode_configs[self.current_mode].max_positions,
                     "daily_trades": portfolio.daily_trades,
                     "max_daily_trades": portfolio.max_daily_trades
-                }
+                },
+                market_data_override=market_data
             )
             
             # Safe formatting for optimal price

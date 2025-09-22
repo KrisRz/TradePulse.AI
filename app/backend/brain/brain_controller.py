@@ -425,6 +425,12 @@ class BrainController:
             while self.state.current_state == BrainState.RUNNING:
                 cycle_count += 1
                 cycle_start = time.time()
+                try:
+                    from app.backend.services.metrics import inc_brain_cycle, set_brain_state
+                    set_brain_state(3)
+                    inc_brain_cycle()
+                except Exception:
+                    pass
                 
                 logger.info(f"🔄 PIPELINE DEBUG: BRAIN Controller - Trading Cycle #{cycle_count} STARTED")
                 
@@ -1183,6 +1189,19 @@ class BrainController:
         old_state = self.state.current_state
         self.state.current_state = new_state
         self.state.state_entered_at = datetime.now(timezone.utc)
+        try:
+            from app.backend.services.metrics import set_brain_state
+            mapping = {
+                'INIT': 1,
+                'WARMUP': 2,
+                'RUNNING': 3,
+                'HALT': 4,
+                'COOLDOWN': 5,
+                'ERROR': 6,
+            }
+            set_brain_state(mapping.get(new_state.value.upper(), 0))
+        except Exception:
+            pass
         
         logger.info(f"🔄 BRAIN State: {old_state.value} → {new_state.value}")
         

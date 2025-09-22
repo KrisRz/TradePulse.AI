@@ -15,7 +15,8 @@ export default defineConfig({
     tailwind({
       applyBaseStyles: false,
       configFile: './tailwind.config.mjs',
-      nesting: true,
+      // Disable Astro/Tailwind nesting injection; handled by PostCSS config
+      nesting: false,
     }),
   ],
   output: 'server',

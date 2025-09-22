@@ -62,6 +62,14 @@ if __name__ == "__main__":
         print(f"🔧 Working directory: {os.getcwd()}")
         print(f"🤖 AUTO-START: Day Trading + Brain Controller will start automatically")
         
+        # Optional: start Prometheus metrics endpoint
+        try:
+            from prometheus_client import start_http_server
+            start_http_server(9108)
+            logger.info("📈 Prometheus metrics server started at :9108")
+        except Exception:
+            pass
+
         uvicorn.run(
             "main:app",
             host=settings.HOST,

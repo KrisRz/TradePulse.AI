@@ -252,8 +252,9 @@ def prepare_features_for_prediction(model: Any, features: Dict[str, float]) -> A
         return df.values.astype(np.float32)
         
     except Exception as e:
-        # PROFESSIONAL FIX: Handle feature preparation errors gracefully
-        logger.warning(f"Feature preparation warning: {e} - using robust fallback")
+        # Enhanced feature preparation logging with missing feature details
+        missing_features = [col for col in TRAIN_COLS if col not in features or features.get(col) is None]
+        logger.warning(f"Feature preparation: missing={missing_features} -> using robust fallback | error: {e}")
         
         # Create robust fallback with proper validation
         try:
