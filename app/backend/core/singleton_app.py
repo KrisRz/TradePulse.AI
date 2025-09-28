@@ -61,7 +61,23 @@ class SingletonTradingApp:
             # Diagnostics: log AWS identity and environment to verify credentials source
             try:
                 import boto3  # local import to avoid global dependency at import-time
+                import os
                 sts = boto3.client("sts", region_name=self.settings.AWS_REGION)
+                # Diagnostics: which provider is used and what AWS_* vars exist (names only)
+                try:
+                    session = boto3.Session()
+                    creds = session.get_credentials()
+                    provider = getattr(creds, "method", "unknown") if creds else "none"
+                    aws_env_keys = [k for k in os.environ.keys() if k.startswith("AWS_")]
+                    logger.info(
+                        "🔎 AWS credentials chain",
+                        extra={
+                            "provider": provider,
+                            "aws_env_keys": aws_env_keys,
+                        },
+                    )
+                except Exception:
+                    pass
                 identity = sts.get_caller_identity()
                 logger.info(
                     "🔐 AWS identity resolved",
