@@ -88,7 +88,15 @@ resource "aws_iam_policy" "github_actions_policy" {
           "s3:PutObject",
           "s3:DeleteObject"
         ]
-        Resource = ["arn:aws:s3:::${var.project_name}-terraform-state/*"]
+        Resource = ["arn:aws:s3:::${var.project_name}-terraform-state-590183672693/*"]
+      },
+      {
+        Sid    = "TerraformStateBucketPermissions"
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = ["arn:aws:s3:::${var.project_name}-terraform-state-590183672693"]
       },
       {
         Sid    = "TerraformLockPermissions"
