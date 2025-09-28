@@ -19,7 +19,7 @@ os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
 # Import TensorFlow first to configure it before other imports
 try:
-    import tensorflow as tf
+    import tensorflow as tf  # pyright: ignore[reportMissingImports]
     # Configure TensorFlow to prevent mutex deadlocks
     tf.config.threading.set_inter_op_parallelism_threads(1)
     tf.config.threading.set_intra_op_parallelism_threads(1)

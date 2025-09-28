@@ -26,8 +26,9 @@ COPY app/backend/requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY app/backend/ /app/
+# Copy application code with proper structure
+COPY . /tmp/project
+RUN mkdir -p /app && cp -r /tmp/project/app /app/ && rm -rf /tmp/project
 
 # --- Runtime Stage ---
 FROM python:3.11-slim AS runtime
@@ -40,9 +41,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HOST=0.0.0.0 \
     PORT=9002
 
-# Install runtime system dependencies only
+# Install runtime system dependencies (including ML libraries deps)
 RUN apt-get update && apt-get install -y \
     curl \
+    libgomp1 \
+    libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
@@ -53,7 +56,7 @@ WORKDIR /app
 # Copy Python packages from build stage
 COPY --from=build /usr/local /usr/local
 
-# Copy application code from build stage
+# Copy application code from build stage (with proper structure)
 COPY --from=build /app /app
 
 # Create necessary directories and set permissions
@@ -70,5 +73,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Expose the application port
 EXPOSE 9002
 
-# Start command - uvicorn with production settings
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9002", "--workers", "1", "--loop", "uvloop", "--http", "httptools", "--access-log", "--log-level", "info"]
+# Start command - will be overridden by App Runner
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9002"]

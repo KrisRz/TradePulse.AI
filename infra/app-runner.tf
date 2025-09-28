@@ -125,35 +125,5 @@ resource "aws_cloudwatch_log_group" "app_runner" {
   }
 }
 
-# Custom domain (optional)
-resource "aws_apprunner_custom_domain_association" "backend" {
-  count = var.custom_domain != "" ? 1 : 0
-  
-  domain_name = var.custom_domain
-  service_arn = aws_apprunner_service.backend.arn
-
-  depends_on = [aws_route53_record.backend_validation]
-}
-
-# Route53 records for custom domain (if provided)
-resource "aws_route53_record" "backend" {
-  count = var.custom_domain != "" && var.hosted_zone_id != "" ? 1 : 0
-  
-  zone_id = var.hosted_zone_id
-  name    = var.custom_domain
-  type    = "CNAME"
-  ttl     = 300
-  
-  records = [aws_apprunner_service.backend.service_url]
-}
-
-resource "aws_route53_record" "backend_validation" {
-  count = var.custom_domain != "" && var.hosted_zone_id != "" ? 1 : 0
-  
-  zone_id = var.hosted_zone_id
-  name    = aws_apprunner_custom_domain_association.backend[0].certificate_validation_records[0].name
-  type    = aws_apprunner_custom_domain_association.backend[0].certificate_validation_records[0].type
-  ttl     = 300
-  
-  records = [aws_apprunner_custom_domain_association.backend[0].certificate_validation_records[0].value]
-}
+# Custom domain setup removed for initial deployment  
+# Can be added later when needed

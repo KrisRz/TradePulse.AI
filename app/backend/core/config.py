@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     DYNAMODB_ENDPOINT: Optional[str] = Field(default="http://localhost:8000", env="DYNAMODB_ENDPOINT")
     DYNAMODB_REGION: str = Field(default="us-east-1", env="DYNAMODB_REGION")
     
+    # DynamoDB table configuration
+    DYNAMODB_TABLE_PREFIX: str = Field(default="", env="DYNAMODB_TABLE_PREFIX")
+    
     # DynamoDB table names
     SIGNALS_TABLE: str = Field(default="trading_signals", env="SIGNALS_TABLE")
     TRADES_TABLE: str = Field(default="trading_trades", env="TRADES_TABLE")
