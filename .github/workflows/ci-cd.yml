@@ -124,6 +124,7 @@ jobs:
       - name: Terraform Plan
         run: |
           terraform plan -detailed-exitcode -out=tfplan \
+            -var="region=${{ env.AWS_REGION }}" \
             -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
             -var="binance_api_secret=${{ secrets.BINANCE_API_SECRET }}"
         env:
