@@ -37,6 +37,23 @@ class SingletonTradingApp:
         """Startup sequence with lease acquisition"""
         try:
             logger.info("🚀 TradePulse.AI Singleton App - Starting up...")
+            # Diagnostics: log AWS identity and environment to verify credentials source
+            try:
+                import boto3  # local import to avoid global dependency at import-time
+                sts = boto3.client("sts", region_name=self.settings.AWS_REGION)
+                identity = sts.get_caller_identity()
+                logger.info(
+                    "🔐 AWS identity resolved",
+                    extra={
+                        "arn": identity.get("Arn"),
+                        "account": identity.get("Account"),
+                        "region": self.settings.AWS_REGION,
+                        "environment": self.settings.ENVIRONMENT,
+                        "is_development": self.settings.is_development,
+                    },
+                )
+            except Exception as diag_err:
+                logger.warning(f"AWS identity diagnostic failed: {diag_err}")
             
             # Step 1: Load ML models
             await self._load_models()
