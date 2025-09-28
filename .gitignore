@@ -287,3 +287,9 @@ terraform-apply-*/
 test-extract/
 package/
 dist-temp/
+
+
+# Large historical data files (too big for GitHub)
+data/ml/historical/processed/BTCUSDT_1m_complete.csv
+data/ml/historical/processed/BTCUSDT_1m_complete.parquet
+data/ml/historical/processed/BTCUSDT_1m_sample.parquet
