@@ -60,7 +60,7 @@ export default function WalletManagement() {
         return;
       }
 
-      const response = await fetch('http://localhost:9002/api/trading/withdrawal-limits', {
+      const response = await fetch('/api/trading/withdrawal-limits', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -156,7 +156,7 @@ export default function WalletManagement() {
       setLoading(true);
 
       // Load real wallet balances from backend
-      const balanceResponse = await fetch('http://localhost:9002/api/real-trading/wallet/balances', {
+      const balanceResponse = await fetch('/api/real-trading/wallet/balances', {
         headers: {
           'Authorization': 'Bearer enterprise_admin_token',
           'Content-Type': 'application/json'
@@ -177,7 +177,7 @@ export default function WalletManagement() {
       await fetchWithdrawalLimits();
       
       // Load real transaction history from backend
-      const transactionResponse = await fetch('http://localhost:9002/api/real-trading/wallet/transactions', {
+      const transactionResponse = await fetch('/api/real-trading/wallet/transactions', {
         headers: {
           'Authorization': 'Bearer enterprise_admin_token',
           'Content-Type': 'application/json'

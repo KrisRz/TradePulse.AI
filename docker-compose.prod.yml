@@ -1,0 +1,73 @@
+# Production-like Docker Compose for local testing
+# This simulates the AWS production environment locally
+
+version: '3.8'
+
+services:
+  # Backend service (simulates App Runner)
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9002:9002"
+    environment:
+      - ENV=production
+      - AWS_REGION=eu-central-1
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - DYNAMODB_TABLE_PREFIX=tradepulse_
+      - PROFESSIONAL_MODE=true
+      - STRICT_LIVE_STREAM=true
+      - TRADING_SYMBOL=BTCUSDT
+      - TRADING_MODE=DAY_TRADING
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - HOST=0.0.0.0
+      - PORT=9002
+      # Secrets (in production these come from SSM)
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+    depends_on:
+      - dynamodb-local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tradepulse-network
+
+  # DynamoDB Local (simulates AWS DynamoDB)
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/home/dynamodblocal/data"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    networks:
+      - tradepulse-network
+
+  # Optional: DynamoDB Admin UI for debugging
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin:latest
+    environment:
+      - DYNAMO_ENDPOINT=http://dynamodb-local:8000
+      - AWS_REGION=eu-central-1
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+    ports:
+      - "8001:8001"
+    depends_on:
+      - dynamodb-local
+    networks:
+      - tradepulse-network
+
+volumes:
+  dynamodb-data:
+
+networks:
+  tradepulse-network:
+    driver: bridge

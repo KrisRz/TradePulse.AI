@@ -244,7 +244,7 @@ export default function WinRateAnalysis({
 
       // Fetch real strategy win rates from backend
       try {
-        const response = await fetch('http://localhost:9002/api/analytics/strategies/win-rates', {
+        const response = await fetch('/api/analytics/strategies/win-rates', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token') || 'enterprise_admin_token'}`,
             'Content-Type': 'application/json'

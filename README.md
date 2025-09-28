@@ -37,13 +37,14 @@ TradePulse.AI is a **fully autonomous day trading platform** with **Enhanced Int
 - **Event-driven Architecture**: Complete audit trail and decision logging
 - **Industry Standard**: Fully autonomous operation (no manual triggers)
 
-**DAY TRADING ENGINE (Optimized for Bitcoin)**
-- **Analysis Frequency**: 15 seconds (optimal for day trading)
-- **Position Management**: 5 concurrent positions maximum
-- **Position Sizing**: 3.0% per position (~$6,000 for $500 profit targets)
-- **Stop Loss**: 1.0% (tight capital protection)
-- **Take Profit**: 0.8% (~$500 profit per position)
-- **Session Awareness**: EU-US overlap optimization (highest liquidity)
+**DAY TRADING ENGINE (Optimized for Small Frequent Trades)**
+- **Analysis Frequency**: 8 seconds (micro-scalping optimization)
+- **Position Management**: 12 concurrent positions maximum
+- **Position Sizing**: 1.5% per position (~$750 for frequent small trades)
+- **Stop Loss**: 0.4% (tight protection, ~$40 max loss)
+- **Take Profit**: 0.3% (~$30 profit per position for higher frequency)
+- **Session Awareness**: EU-US overlap +30% confidence boost
+- **Daily Capacity**: 30 trades per day (aggressive scalping mode)
 
 **ENTERPRISE TRADING ENGINE (6-Layer AI Signal Generation)**
 - **Layer 1**: Market Regime Analysis (20% weight) - Sideways/trending detection
@@ -54,22 +55,22 @@ TradePulse.AI is a **fully autonomous day trading platform** with **Enhanced Int
 - **Layer 6**: Adaptive Timing (10% weight) - Market timing optimization
 - **Day Trading Logic**: Extreme oversold (RSI<30) → Automatic BUY signals
 
-**ENHANCED INTELLIGENT ENTRY ENGINE (Professional Entry Analysis)**
-- **Historical Context**: Pre-cached analysis from $100k+ Bitcoin era (Dec 2024+)
-- **Startup Protection**: 30-minute warmup period prevents immediate position opening
-- **Professional Thresholds**: 75% confidence + 80% consensus + 70% historical validation
-- **Smart Data Filtering**: Uses only 84k relevant records vs 3.67M (97% reduction)
-- **Price-Appropriate Patterns**: Support/resistance from $100k+ era only
-- **Instant Decisions**: Pre-calculated pattern success rates for millisecond lookups
+**ENHANCED INTELLIGENT ENTRY ENGINE (Aggressive Scalping Mode)**
+- **Historical Context**: Pre-cached analysis with real pattern success rates (FIXED)
+- **High Confidence Bypass**: 75%+ signals skip duplicate prevention
+- **Scalping Thresholds**: 30% confidence + 25% exploratory (aggressive)
+- **Ultra-Fast Re-entry**: 5-second cooldown (was 5 minutes)
+- **Price Tolerance**: 3x more relaxed for rapid trading opportunities
+- **Daily Trade Limit**: 30 trades per day (was 8 - increased for scalping)
 - **6-Layer Validation**: Market regime, LSTM, patterns, technical, momentum, timing
 
-**INTELLIGENT EXIT ENGINE (Smart Profit-Taking)**
-- **Profit-Focused**: 0.8%+ gain → Exit immediately ($500 target)
-- **Quick Exits**: 0.6%+ gain → Exit after 30 minutes
-- **Small Profits**: 0.3%+ gain → Exit after 1 hour
-- **Risk Protection**: 1.0% stop loss (tight protection)
-- **No Time Exits**: Profit-driven, not time-based exits
-- **6-Layer Analysis**: Comprehensive exit decision making
+**INTELLIGENT EXIT ENGINE (Micro-Scalping Exits)**
+- **Frequent Exits**: 0.3%+ gain → Exit immediately ($30 target)
+- **Reversal Detection**: Exit on any profit + reversal signal
+- **Quick Profits**: 8-second monitoring for rapid exit opportunities
+- **Risk Protection**: 0.4% stop loss (tight $40 max loss)
+- **Time Limits**: 9 minutes max hold (scalping mode)
+- **6-Layer Analysis**: Comprehensive exit decision with reversal priority
 
 **CONTINUOUS LEARNING ENGINE (Auto-Optimization)**
 - **Real-time Learning**: Analyzes every trade result

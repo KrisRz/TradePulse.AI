@@ -226,29 +226,43 @@ class ServiceManager:
             # Wait a moment for all services to be fully registered
             await asyncio.sleep(5)
             
-            # Step 1: Start Day Trading Engine
+            # FIXED: Start Brain Controller FIRST as orchestrator
             try:
-                logger.info("🚀 AUTO-START: Starting Day Trading Engine...")
-                day_engine = self.container.get("day_trading_engine")
-                if day_engine and hasattr(day_engine, 'start_analysis_loop'):
-                    result = await day_engine.start_analysis_loop()
-                    logger.info(f"✅ Day Trading Engine auto-started: {result}")
+                logger.info("🧠 AUTO-START: Starting Brain Controller as main orchestrator...")
+                brain_controller = self.container.get("brain_controller")
+                if brain_controller:
+                    # Initialize if not already done
+                    if not hasattr(brain_controller, 'is_initialized') or not brain_controller.is_initialized:
+                        await brain_controller.initialize()
+                        logger.info("✅ Brain Controller initialized")
+                    
+                    # Start Brain Controller trading operations (will orchestrate other engines)
+                    result = await brain_controller.start_trading()
+                    logger.info(f"✅ Brain Controller orchestration started: {result}")
+                    
+                    # Brain Controller will now manage Day Trading Engine
+                    logger.info("🎯 Brain Controller now orchestrating all trading engines")
                 else:
-                    logger.warning("⚠️ Day Trading Engine not available for auto-start")
-            except Exception as e:
-                logger.error(f"❌ Day Trading Engine auto-start failed: {e}")
-            
-            # Step 2: Wait for engine to stabilize
-            await asyncio.sleep(3)
-            
-            # Step 3: Try to start Brain Controller via trading brain toggle
-            try:
-                logger.info("🧠 AUTO-START: Attempting to start Brain Controller...")
-                from app.backend.api.v1.routes.trading import start_trading_brain_background
-                await start_trading_brain_background()
-                logger.info("✅ Brain Controller background task started")
+                    logger.warning("⚠️ Brain Controller not available - falling back to direct engine start")
+                    # Fallback: Start Day Trading Engine directly
+                    day_engine = self.container.get("day_trading_engine")
+                    if day_engine and hasattr(day_engine, 'start_analysis_loop'):
+                        result = await day_engine.start_analysis_loop()
+                        logger.info(f"✅ Day Trading Engine started directly: {result}")
+                        
             except Exception as brain_error:
-                logger.warning(f"⚠️ Brain Controller auto-start failed: {brain_error}")
+                logger.error(f"❌ Brain Controller orchestration failed: {brain_error}")
+                logger.info("🔄 FALLBACK: Starting Day Trading Engine directly...")
+                try:
+                    day_engine = self.container.get("day_trading_engine")
+                    if day_engine and hasattr(day_engine, 'start_analysis_loop'):
+                        result = await day_engine.start_analysis_loop()
+                        logger.info(f"✅ Fallback: Day Trading Engine started: {result}")
+                except Exception as fallback_error:
+                    logger.error(f"❌ Fallback engine start failed: {fallback_error}")
+            
+            # Step 2: Wait for orchestration to stabilize
+            await asyncio.sleep(3)
             
             # Step 4: Verify all engines are operational
             await asyncio.sleep(3)

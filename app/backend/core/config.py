@@ -117,11 +117,11 @@ class Settings(BaseSettings):
     # Duplicate suppression defaults (can be overridden by runtime config)
     DUP_ACTIVE_WINDOW_SEC: int = Field(default=30, env="DUP_ACTIVE_WINDOW_SEC")
     DUP_ACTIVE_PRICE_DELTA_PCT: float = Field(default=0.003, env="DUP_ACTIVE_PRICE_DELTA_PCT")
-    DUP_CLOSED_WINDOW_SEC: int = Field(default=600, env="DUP_CLOSED_WINDOW_SEC")
+    DUP_CLOSED_WINDOW_SEC: int = Field(default=600, env="DUP_CLOSED_WINDOW_SEC")  # Original production default
     DUP_CLOSED_PRICE_DELTA_PCT: float = Field(default=0.008, env="DUP_CLOSED_PRICE_DELTA_PCT")
 
-    # Entry cooldown
-    ENTRY_COOLDOWN_SECONDS: int = Field(default=10, env="ENTRY_COOLDOWN_SECONDS")
+    # Entry cooldown - AGGRESSIVE SCALPING
+    ENTRY_COOLDOWN_SECONDS: int = Field(default=3, env="ENTRY_COOLDOWN_SECONDS")  # 3s for micro-scalping
 
     # Position limits
     MAX_CONCURRENT_POSITIONS: int = Field(default=9, env="MAX_CONCURRENT_POSITIONS")

@@ -81,10 +81,19 @@ def predict_lgbm_safe(model, features_dict: Dict[str, Any]) -> float:
         
         if hasattr(model, 'predict_proba'):
             proba = model.predict_proba(prediction_data)[0]
-            return float(proba[1]) if len(proba) > 1 else float(proba[0])
+            raw_pred = float(proba[1]) if len(proba) > 1 else float(proba[0])
         else:
-            pred = model.predict(prediction_data)[0]
-            return float(pred)
+            raw_pred = float(model.predict(prediction_data)[0])
+            # If regression output, convert to probability using sigmoid
+            if raw_pred < 0.0 or raw_pred > 1.0:
+                import math
+                raw_pred = 1.0 / (1.0 + math.exp(-raw_pred))
+        
+        # FIXED: Apply probability calibration for better 75% confidence thresholds
+        from app.backend.utils.model_io import adaptive_confidence_calibration
+        calibrated_pred = adaptive_confidence_calibration(raw_pred, "lightgbm")
+        
+        return calibrated_pred
             
     except Exception as e:
         logger.warning(f"LightGBM prediction failed: {e}")

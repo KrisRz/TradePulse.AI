@@ -368,7 +368,7 @@ export function LiveBitcoinChart({
     try {
       // Use direct backend API endpoint with authentication
       const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-      let response = await fetch('http://localhost:9002/api/trading/market-price/BTCUSDT', {
+      let response = await fetch('/api/trading/market-price/BTCUSDT', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

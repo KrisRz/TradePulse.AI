@@ -618,7 +618,11 @@ class EmergencyControlSystem:
                 "resolution_timestamp": int(event.resolution_timestamp.timestamp()) if event.resolution_timestamp else 0
             }
             
-            await self.db_service.put_item("emergency_events", event_data)
+            # Fix async/await inconsistency - check if result is awaitable
+            import inspect
+            result = self.db_service.put_item("emergency_events", event_data)
+            if inspect.isawaitable(result):
+                await result
             
         except Exception as e:
             logger.error(f"Failed to save emergency event: {e}")
@@ -649,7 +653,11 @@ class EmergencyControlSystem:
                 state_data["last_updated"] = int(datetime.now(timezone.utc).timestamp())
                 state_data["id"] = "emergency_state_global"
                 
-                await self.db_service.put_item("emergency_state", state_data)
+                # Fix async/await inconsistency - check if result is awaitable
+                import inspect
+                result = self.db_service.put_item("emergency_state", state_data)
+                if inspect.isawaitable(result):
+                    await result
                 self._last_saved_state = current_state
                 logger.debug("💾 Emergency state updated (changed)")
             else:

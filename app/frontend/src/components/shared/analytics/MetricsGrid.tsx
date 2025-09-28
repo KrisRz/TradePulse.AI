@@ -53,7 +53,7 @@ export default function MetricsGrid({
       setError(null);
       
       // PRODUCTION: Fetch real metrics from professional backend
-      const response = await fetch(`http://localhost:9002/api/analytics/metrics?timeRange=${timeRange}`, {
+      const response = await fetch(`/api/analytics/metrics?timeRange=${timeRange}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'

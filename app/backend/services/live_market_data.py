@@ -390,9 +390,17 @@ class LiveMarketDataService:
 								except Exception as e:
 									logger.error(f"Ticker callback error: {e}")
 						
-						# Use deduplication
-						if process_ticker_message(data, process_ticker_data):
-							logger.debug(f"📊 Processed ticker update: ${data.get('c', 'N/A')}")
+							# Use deduplication
+							if process_ticker_message(data, process_ticker_data):
+								logger.debug(f"📊 Processed ticker update: ${data.get('c', 'N/A')}")
+								
+								# SMART EMERGENCY: Update data-plane health
+								try:
+									from app.backend.services.smart_emergency_controller import get_smart_emergency_controller
+									smart_emergency = get_smart_emergency_controller()
+									smart_emergency.data.on_ws_tick(quality=1.0)  # High quality WebSocket data
+								except Exception:
+									pass  # Don't fail on emergency tracking
 						
 					except json.JSONDecodeError as e:
 						logger.error(f"Failed to parse ticker message: {e}")
@@ -949,7 +957,7 @@ def _calculate_ema(prices: np.ndarray, period: int) -> float:
 	return ema
 
 def _calculate_bollinger_position(prices: np.ndarray, current_price: float, period: int = 20) -> float:
-	"""Calculate position within Bollinger Bands (0 = lower band, 1 = upper band)"""
+	"""Calculate position within Bollinger Bands (0 = lower band, 1 = upper band) - FIXED with epsilon"""
 	if len(prices) < period:
 		return 0.5
 	
@@ -960,10 +968,11 @@ def _calculate_bollinger_position(prices: np.ndarray, current_price: float, peri
 	upper_band = sma + (2 * std)
 	lower_band = sma - (2 * std)
 	
-	if upper_band == lower_band:
-		return 0.5
+	# FIXED: Add epsilon to prevent division by zero in volatile markets
+	eps = 1e-8
+	band_width = max(upper_band - lower_band, eps)
 	
-	position = (current_price - lower_band) / (upper_band - lower_band)
+	position = (current_price - lower_band) / band_width
 	return float(np.clip(position, 0.0, 1.0))
 
 def _calculate_trend_strength(prices: np.ndarray) -> float:

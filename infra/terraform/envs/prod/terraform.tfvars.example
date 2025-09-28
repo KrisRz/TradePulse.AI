@@ -1,5 +1,0 @@
-app_name          = "tradepulse"
-lambda_zip_path   = "../../backend/dist/backend.zip"
-create_cloudfront = true
-root_domain       = "tradepulse.ai"
-app_subdomain     = "app"

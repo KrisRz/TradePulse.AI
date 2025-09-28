@@ -167,15 +167,27 @@ class TensorFlowAsyncService:
         except Exception as e:
             logger.error(f"❌ Async model loading failed: {e}")
     
+    def keras_predict(self, model, x):
+        """FIXED: Remove verbose entirely to avoid TF 2.16+ conflicts"""
+        # Don't pass verbose at all - let TensorFlow handle it
+        return model.predict(x)
+    
     def _load_single_model(self, model_path: Path):
-        """Load a single TensorFlow model (thread-safe)"""
+        """Load a single TensorFlow model (thread-safe) - FIXED for proper warm-up"""
         try:
             # Load with compile=False to prevent issues
             model = tf.keras.models.load_model(str(model_path), compile=False)
             
-            # Warm up model with dummy prediction
-            dummy_input = np.zeros((1, 1, 1), dtype=np.float32)
-            _ = model.predict(dummy_input, verbose=0)
+            # FIXED: Introspect required shape and warm up with correct dimensions
+            if len(model.input_shape) != 3:
+                raise ValueError(f"Unexpected input_shape {model.input_shape} for {model_path}")
+            
+            _, timesteps, features = model.input_shape
+            logger.info(f"📊 LSTM loaded: {model_path.name} | timesteps={timesteps} features={features}")
+            
+            # Warm-up with the right shape (zeros are fine)
+            dummy_input = np.zeros((1, timesteps, features), dtype=np.float32)
+            _ = self.keras_predict(model, dummy_input)
             
             return model
             
@@ -289,8 +301,8 @@ class TensorFlowAsyncService:
                 model = self.models[model_name]
                 
                 try:
-                    # Perform prediction
-                    prediction = model.predict(input_data, verbose=0)
+                    # FIXED: Use centralized predict method to avoid verbose conflicts
+                    prediction = self.keras_predict(model, input_data)
                     
                     # Update performance metrics
                     self._prediction_count += 1

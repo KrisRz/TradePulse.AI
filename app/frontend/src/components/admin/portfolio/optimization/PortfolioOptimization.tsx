@@ -50,7 +50,7 @@ export default function PortfolioOptimization({ }: PortfolioOptimizationProps) {
     const fetchOptimizationData = async () => {
       try {
         const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-        const response = await fetch(`http://localhost:9002/api/portfolio/virtual/optimization-analysis?mode=${optimizationMode}`, {
+        const response = await fetch(`/api/portfolio/virtual/optimization-analysis?mode=${optimizationMode}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -155,7 +155,7 @@ export default function PortfolioOptimization({ }: PortfolioOptimizationProps) {
     setIsOptimizing(true);
     try {
       const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-      const response = await fetch(`http://localhost:9002/api/portfolio/virtual/optimization-analysis?mode=${optimizationMode}`, {
+      const response = await fetch(`/api/portfolio/virtual/optimization-analysis?mode=${optimizationMode}`, {
         method: 'POST', // Force re-optimization
         headers: {
           'Authorization': `Bearer ${token}`,

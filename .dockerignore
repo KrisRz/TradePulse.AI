@@ -1,0 +1,106 @@
+# Docker ignore file for TradePulse.AI
+
+# Development files
+.git
+.gitignore
+README.md
+.env
+.env.*
+*.md
+
+# Local data and logs
+data/
+logs/
+*.log
+*.log.*
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node.js (frontend)
+app/frontend/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Test files
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# Local database files
+*.db
+*.sqlite
+*.sqlite3
+
+# DynamoDB Local
+data/database/dynamodb/
+
+# Infrastructure files (not needed in container)
+infra/
+terraform.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# GitHub Actions
+.github/
+
+# Monitoring (not needed in container)
+monitoring/
+
+# Scripts (deployment scripts not needed in container)
+scripts/setup_dynamodb_local.sh
+scripts/optimize_dynamodb.py
+start_*.sh
+
+# API keys (should be in SSM Parameter Store in production)
+*.csv
+*_accessKeys.csv
+
+# Development configuration
+config/development.env
+config/production.env.example
+
+# App monitoring (local development only)
+APP_MONITOR.py
+
+# Documentation
+docs/

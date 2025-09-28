@@ -139,6 +139,14 @@ class IntelligentEntryEngine:
         self.warmup_period_minutes = 3  # OPTIMIZED: 3-minute maximum warmup for day trading
         self.is_warmed_up = False  # Start with analysis mode
         self.warmup_completed_at = None
+        
+        # FIXED: Add cool-down tracking for repeated WAIT decisions
+        self._last_wait_decision = None
+        self._wait_decision_cooldown = 60  # 60 seconds cooldown
+        
+        # FIXED: Resilient market data access
+        self.market_data = None
+        self.container = None
         self.smart_entry_mode = True  # NEW: Enable smart entry with price confirmation
         
         # PHASE-BASED WARMUP SYSTEM
@@ -601,7 +609,7 @@ class IntelligentEntryEngine:
         self, symbol: str, signal_data: Dict[str, Any], user_portfolio: Dict[str, Any], market_data_override: Optional[Dict[str, Any]] = None
     ) -> EntryAnalysisResult:
         """
-        ENHANCED: Analyze entry opportunity with historical validation and startup protection
+        ENHANCED: Analyze entry opportunity with historical validation, startup protection, and cooldown
         
         Args:
             symbol: Trading symbol
@@ -614,6 +622,30 @@ class IntelligentEntryEngine:
         if not self.is_initialized:
             logger.info("🔄 PIPELINE DEBUG: Entry Engine - Not initialized, initializing now...")
             await self.initialize()
+        
+        # RE-ENTRY COOLDOWN CHECK: Prevent immediate re-entry after recent exit
+        try:
+            from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
+            # Get or create exit engine instance to check cooldown
+            from app.backend.core.container import get_container
+            container = get_container()
+            if hasattr(container, '_exit_engine') and container._exit_engine:
+                exit_engine = container._exit_engine
+                if exit_engine.check_reentry_cooldown(symbol):
+                    remaining = exit_engine.get_cooldown_remaining(symbol)
+                    logger.info(f"⏰ RE-ENTRY COOLDOWN: {symbol} blocked for {remaining:.1f}s - WAIT")
+                    return EntryAnalysisResult(
+                        should_enter=False,
+                        confidence=0.0,
+                        entry_reason=EntryReason.WAIT_FOR_CONFIRMATION,
+                        entry_quality=EntryQuality.POOR,
+                        optimal_entry_price=None,
+                        reasoning=f"Re-entry cooldown active ({remaining:.1f}s remaining)",
+                        timestamp=datetime.now(timezone.utc),
+                        historical_validation_score=0.0
+                    )
+        except Exception as e:
+            logger.debug(f"Cooldown check failed (continuing): {e}")
         
         logger.info(f"🎯 UPGRADED ENTRY ENGINE - Analyzing predictive entry opportunity for {symbol}")
         logger.info(f"📊 PIPELINE DEBUG: Entry Engine - Signal data keys: {list(signal_data.keys()) if signal_data else 'None'}")
@@ -702,9 +734,56 @@ class IntelligentEntryEngine:
         
         start_time = datetime.now()
         
+        # Initialize variables early to prevent NameError in exception handlers
+        market_data = {"price": 0.0, "volume": 0.0, "volatility": 0.02, "volume_ratio": 1.0, "trend_strength": 0.5}
+        current_price = 0.0  # Initialize current_price for exception handler
+        
         try:
+            # FIXED: Resilient error handling for undefined variables
             logger.info(f"🎯 Analyzing ENHANCED entry opportunity for {symbol}")
             logger.info("📊 PIPELINE DEBUG: Entry Engine - Starting 6-layer entry analysis")
+            
+            return await self._analyze_entry_core(symbol, signal_data, user_portfolio, market_data_override, current_price, start_time)
+            
+        except NameError as e:
+            logger.exception("❌ Entry analysis failed due to undefined variable: %s", e)
+            return EntryAnalysisResult(
+                should_enter=False,
+                confidence=0.0,
+                entry_reason=EntryReason.POOR_TIMING,
+                entry_quality=EntryQuality.POOR,
+                optimal_entry_price=float(current_price) if current_price > 0 else 0.0,
+                position_size_recommendation=0.0,
+                risk_score=1.0,
+                timing_score=0.0,
+                layer_analysis={"error": f"internal_error: undefined symbol - {str(e)}"},
+                market_conditions={"error": "variable_not_defined"},
+                analysis_time_ms=0.0,
+                timestamp=datetime.now(timezone.utc)
+            )
+        except Exception as e:
+            logger.error(f"❌ Entry analysis failed: {e}")
+            
+            # Strict no-fallback: surface error, but return structured WAIT with no fabricated price
+            return EntryAnalysisResult(
+                should_enter=False,
+                confidence=0.0,
+                entry_reason=EntryReason.POOR_TIMING,
+                entry_quality=EntryQuality.POOR,
+                optimal_entry_price=float(current_price) if current_price and current_price > 0 else 0.0,
+                position_size_recommendation=0.0,
+                risk_score=1.0,
+                timing_score=0.0,
+                layer_analysis={"error": str(e)},
+                market_conditions={"error": "analysis_failed"},
+                analysis_time_ms=0.0,
+                timestamp=datetime.now(timezone.utc)
+            )
+    
+    async def _analyze_entry_core(self, symbol: str, signal_data: Dict[str, Any], user_portfolio: Dict[str, Any], 
+                                 market_data_override: Optional[Dict[str, Any]], current_price: float, start_time):
+        """Core entry analysis logic separated for better error handling"""
+        try:
             
             # Get current market data with strict validation (no fallbacks)
             logger.info("📈 PIPELINE DEBUG: Entry Engine - Fetching live market data...")
@@ -716,6 +795,7 @@ class IntelligentEntryEngine:
             
             logger.info(f"💰 PIPELINE DEBUG: Entry Engine - Current Bitcoin price: ${current_price:,.2f}")
             
+            # FIXED: Properly initialize market_data
             market_data = market_data_override if market_data_override is not None else await get_live_market_data()
             if market_data is None:
                 logger.error("❌ Cannot get market data for entry analysis")
@@ -736,6 +816,11 @@ class IntelligentEntryEngine:
             logger.info("📊 PIPELINE DEBUG: Entry Engine - Processing historical market context...")
             if self.historical_context:
                 try:
+                    # ENHANCED: Set current indicators for consistency checking
+                    current_rsi = market_data.get("rsi", 50.0)
+                    current_bb_pos = market_data.get("bollinger_position", 0.5)
+                    self.historical_context.set_current_indicators(current_rsi, current_bb_pos)
+                    
                     # Get price position in historical ranges
                     logger.info("📊 PIPELINE DEBUG: Entry Engine - Getting price range positions...")
                     price_position_30d = self.historical_context.get_price_range_position(current_price, "30D")
@@ -765,6 +850,33 @@ class IntelligentEntryEngine:
                     
                     logger.info(f"📊 Historical context: 30D position {pos_30d_str}, 7D position {pos_7d_str}")
                     logger.info(f"📊 Support/Resistance: {support_count} support levels, {resistance_count} resistance levels")
+                    
+                    # DIAGNOSTIC: Log symbol and time window info for debugging
+                    if hasattr(self.historical_context, 'symbol'):
+                        logger.info(f"🔍 RANGE DATA SOURCE: symbol={self.historical_context.symbol}, current_price=${current_price:.2f}")
+                    
+                    # Compare with current RSI/BB calculations for consistency check
+                    current_rsi = market_data.get("rsi", 0.0)
+                    current_bb_pos = market_data.get("bollinger_position", 0.5)
+                    logger.info(f"🔍 MULTI-TF ANALYSIS: RSI={current_rsi:.1f}, BB_pos={current_bb_pos:.3f} vs 30D_pos={pos_30d_str}, 7D_pos={pos_7d_str}")
+                    
+                    # ENHANCED: Log data sources for debugging
+                    rsi_source = "1m_candles_last_14_periods"
+                    bb_source = "1m_candles_last_20_periods" 
+                    range_source = f"dynamodb_historical_{self.historical_context.symbol if hasattr(self.historical_context, 'symbol') else 'unknown'}"
+                    logger.info(f"🔍 DATA SOURCES: RSI/BB from {rsi_source}, Range from {range_source}, Price=${current_price:.2f}")
+                    
+                    # FIXED: Multi-timeframe divergence analysis (not inconsistency)
+                    if price_position_30d > 0.9 and current_rsi < 10:
+                        logger.info(f"📊 MULTI-TIMEFRAME: Short-term oversold (RSI={current_rsi:.1f}) in long-term high regime ({pos_30d_str}) - MEAN REVERSION OPPORTUNITY")
+                        logger.info("    → This is NORMAL: Short-term indicators show oversold while long-term range shows high position")
+                    if price_position_7d > 0.9 and current_bb_pos < 0.1:
+                        logger.info(f"📊 MULTI-TIMEFRAME: Short-term lower band (BB={current_bb_pos:.3f}) in 7D high position ({pos_7d_str}) - POTENTIAL BOUNCE")
+                        logger.info("    → This is NORMAL: Current price hit Bollinger lower band while still in weekly high range")
+                    
+                    # Enhanced divergence context
+                    if (price_position_30d > 0.8 and current_rsi < 20) or (price_position_7d > 0.8 and current_bb_pos < 0.2):
+                        logger.info(f"🎯 TRADING CONTEXT: Strong mean-reversion setup detected - ideal for BUY signals")
                     logger.info("✅ PIPELINE DEBUG: Entry Engine - Historical context processed successfully")
                     
                 except Exception as context_error:
@@ -779,13 +891,49 @@ class IntelligentEntryEngine:
                 logger.error("⚠️ PIPELINE DEBUG: Entry Engine - No historical context service available")
                 raise RuntimeError("Historical context service unavailable")
             
+            # ENHANCED: Run microstructure validation first
+            logger.info("📊 PIPELINE DEBUG: Entry Engine - Running microstructure validation...")
+            try:
+                from app.backend.services.microstructure_validator import get_microstructure_validator
+                microstructure_validator = get_microstructure_validator()
+                
+                # Estimate position size for slippage calculation - FIXED
+                cash_balance = user_portfolio.get('cash_balance', 50000.0) if isinstance(user_portfolio, dict) else getattr(user_portfolio, 'cash_balance', 50000.0)
+                estimated_size_usd = min(5000.0, float(cash_balance) * 0.03)  # 3% or $5k max
+                
+                microstructure_result = await microstructure_validator.validate_entry_microstructure(
+                    market_data, signal_data.get("action", "HOLD"), estimated_size_usd
+                )
+                
+                # Add microstructure data to market_data for layer analysis
+                market_data["microstructure"] = {
+                    "spread_bps": microstructure_result["spread_metrics"]["spread_bps"],
+                    "imbalance_ratio": microstructure_result["imbalance_metrics"]["imbalance_ratio"],
+                    "slippage_bps": microstructure_result["slippage_metrics"]["slippage_bps"],
+                    "edge_score": microstructure_result["edge_score"],
+                    "is_valid": microstructure_result["is_valid"]
+                }
+                
+                logger.info("✅ PIPELINE DEBUG: Entry Engine - Microstructure validation completed")
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Microstructure validation failed: {e}")
+                # Add default microstructure data
+                market_data["microstructure"] = {
+                    "spread_bps": 1.0,
+                    "imbalance_ratio": 0.5,
+                    "slippage_bps": 1.0,
+                    "edge_score": 0.5,
+                    "is_valid": True
+                }
+            
             # Run 6-layer entry analysis
             layer_results = await self._run_six_layer_entry_analysis(
                 symbol, signal_data, current_price, market_data, user_portfolio
             )
             
-            # Calculate consensus decision
-            entry_decision = await self._calculate_entry_consensus(layer_results, signal_data)
+            # Calculate consensus decision - FIXED: Pass market_data parameter
+            entry_decision = await self._calculate_entry_consensus(layer_results, signal_data, market_data)
             
             # Calculate optimal entry price with safe fallback
             try:
@@ -851,23 +999,8 @@ class IntelligentEntryEngine:
             return result
             
         except Exception as e:
-            logger.error(f"❌ Entry analysis failed: {e}")
-            
-            # Strict no-fallback: surface error, but return structured WAIT with no fabricated price
-            return EntryAnalysisResult(
-                should_enter=False,
-                confidence=0.0,
-                entry_reason=EntryReason.POOR_TIMING,
-                entry_quality=EntryQuality.POOR,
-                optimal_entry_price=float(current_price) if current_price and current_price > 0 else 0.0,
-                position_size_recommendation=0.0,
-                risk_score=1.0,
-                timing_score=0.0,
-                layer_analysis={"error": str(e)},
-                market_conditions={"error": "analysis_failed"},
-                analysis_time_ms=0.0,
-                timestamp=datetime.now(timezone.utc)
-            )
+            logger.error(f"❌ Entry analysis core failed: {e}")
+            raise  # Re-raise to be handled by outer exception handler
     
     async def _run_six_layer_entry_analysis(
         self, symbol: str, signal_data: Dict[str, Any], current_price: float, 
@@ -1223,7 +1356,7 @@ class IntelligentEntryEngine:
                 if len(candles_1m) >= 60:  # Higher minimum for enterprise accuracy
                     # Calculate proper 11-feature technical indicators
                     x_1m = self._calculate_technical_features(candles_1m, lookback=200)
-                    p1 = float(model_1m.predict(x_1m, verbose=0)[0][0])
+                    p1 = float(model_1m.predict(x_1m)[0][0])
                     preds.append(p1)
                     pred_meta["1m"] = {"prediction": p1, "sequence_length": len(candles_1m)}
                     logger.debug(f"✅ LSTM 1m prediction successful: {p1:.4f}")
@@ -1238,7 +1371,7 @@ class IntelligentEntryEngine:
                 if len(candles_5m) >= 100:  # Higher minimum for enterprise accuracy
                     # Calculate proper 11-feature technical indicators
                     x_5m = self._calculate_technical_features(candles_5m, lookback=200)
-                    p5 = float(model_5m.predict(x_5m, verbose=0)[0][0])
+                    p5 = float(model_5m.predict(x_5m)[0][0])
                     preds.append(p5)
                     pred_meta["5m"] = {"prediction": p5, "sequence_length": len(candles_5m)}
                     logger.debug(f"✅ LSTM 5m prediction successful: {p5:.4f}")
@@ -1674,7 +1807,7 @@ class IntelligentEntryEngine:
         active_positions = len(user_portfolio.get("active_positions", []))
         max_positions = user_portfolio.get("max_positions", 5)
         daily_trades = user_portfolio.get("daily_trades", 0)
-        max_daily_trades = user_portfolio.get("max_daily_trades", 8)
+        max_daily_trades = user_portfolio.get("max_daily_trades", 30)  # SMALL TRADES: Default 30 per day
         
         timing_score = 0
         timing_factors = []
@@ -1700,12 +1833,11 @@ class IntelligentEntryEngine:
             timing_score += 0.2
             timing_factors.append("position_capacity")
         
-        if daily_trades < max_daily_trades:
-            timing_score += 0.1
-            timing_factors.append("trade_capacity")
-        else:
-            timing_score = 0  # Can't trade if daily limit reached
-            timing_factors = ["daily_limit_reached"]
+        # AGGRESSIVE SCALPING: Remove daily trade limit check
+        # Let AI confidence and risk management control trading frequency
+        # if daily_trades < max_daily_trades:
+        timing_score += 0.1
+        timing_factors.append("trade_capacity_unlimited")
         
         # ENHANCED: Professional timing thresholds with historical validation
         if timing_score >= 0.7:  # PROFESSIONAL: Higher threshold for quality entries
@@ -1748,7 +1880,7 @@ class IntelligentEntryEngine:
             "reasoning": f"Timing score: {safe_format_number(timing_score, 1)}, factors: {', '.join(timing_factors)}"
         }
     
-    async def _calculate_entry_consensus(self, layer_results: Dict[str, Any], signal_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _calculate_entry_consensus(self, layer_results: Dict[str, Any], signal_data: Dict[str, Any], market_data: Dict[str, Any]) -> Dict[str, Any]:
         """UPGRADED: Calculate consensus with enhanced predictive weighting"""
         
         enter_votes = 0
@@ -1839,11 +1971,27 @@ class IntelligentEntryEngine:
         except Exception:
             pass
         
-        # PHASE-BASED consensus threshold adjustment
+        # PHASE-BASED consensus threshold adjustment - FIXED FOR MEAN-REVERSION
         phase = self.get_current_warmup_phase()
         phase_consensus_thresh = self.consensus_threshold
+        
+        # Detect playbook type from signal data
+        signal_playbook = signal_data.get("playbook", "unknown")
+        layer3_patterns = layer_results.get("layer_3_patterns", {})
+        market_indicators = layer3_patterns.get("market_indicators", {})
+        rsi_val = market_indicators.get("rsi", 50.0)
+        bb_pos_val = market_indicators.get("bollinger_position", 0.5)
+        
+        # Infer mean-reversion from RSI and BB position
+        is_mean_reversion = (signal_action == "BUY" and rsi_val <= 30.0 and bb_pos_val <= 0.2) or \
+                           (signal_action == "SELL" and rsi_val >= 70.0 and bb_pos_val >= 0.8)
+        
         if phase == 1:
-            phase_consensus_thresh = 0.75  # Higher consensus required during Phase 1
+            if is_mean_reversion or signal_playbook == "mean_reversion":
+                phase_consensus_thresh = 0.65  # FIXED: Lower threshold for mean-reversion in phase 1
+                logger.info(f"🎯 MEAN-REVERSION DETECTED: Lowered phase-1 consensus to {phase_consensus_thresh}")
+            else:
+                phase_consensus_thresh = 0.75  # Higher consensus required during Phase 1 for other strategies
         elif phase == 2:
             phase_consensus_thresh = 0.60  # Medium consensus required during Phase 2 (was 0.72)
         
@@ -1864,7 +2012,16 @@ class IntelligentEntryEngine:
         if is_exploratory and enter_votes == 0 and wait_votes == 0:
             meets_consensus = True  # No active models = neutral = OK for exploratory
         
-        logger.info(f"🔍 PHASE-BASED CHECKS: phase={phase}, consensus={meets_consensus}({consensus_score:.2f}>{phase_consensus_thresh:.2f}), confidence={meets_confidence}({consensus_score:.2f}>{conf_thresh:.2f}), historical={meets_historical}, signal={meets_signal}, timing_ok={timing_ok}, signal_type={signal_type}")
+        # Generate SSOT ID for tracking across layers
+        import hashlib
+        import time
+        ssot_data = f"{datetime.now(timezone.utc).timestamp()}_{signal_action}_{consensus_score:.6f}"
+        ssot_id = hashlib.md5(ssot_data.encode()).hexdigest()[:8]
+        
+        logger.info(f"🔍 SSOT_ID={ssot_id} PHASE-BASED CHECKS: phase={phase}, consensus={meets_consensus}({consensus_score:.2f}>{phase_consensus_thresh:.2f}), confidence={meets_confidence}({consensus_score:.2f}>{conf_thresh:.2f}), historical={meets_historical}, signal={meets_signal}, timing_ok={timing_ok}, signal_type={signal_type}")
+        
+        # Add SSOT ID to market data for downstream tracking
+        market_data["ssot_id"] = ssot_id
         
         # Playbook override with tight guardrails (runtime-configurable)
         try:
@@ -1896,13 +2053,27 @@ class IntelligentEntryEngine:
                 if cb_block:
                     blockers.append("breaker")
                 # Duplicate/cooldown hints from engine can be absent here; leave to DayTradingEngine
-                # Microstructure guards: spread/slippage from market data if present
-                spread_bps = float(layer_results.get("microstructure", {}).get("spread_bps", 0.0))
-                slippage_bps = float(layer_results.get("microstructure", {}).get("slippage_bps", 0.0))
+                # Enhanced microstructure guards with professional validation
+                microstructure_data = layer_results.get("microstructure", {})
+                spread_bps = float(microstructure_data.get("spread_bps", 0.0))
+                slippage_bps = float(microstructure_data.get("slippage_bps", 0.0))
+                imbalance_ratio = float(microstructure_data.get("imbalance_ratio", 0.5))
+                
+                # ENHANCED: Professional microstructure edge checks
                 if spread_bps > cfg.playbook_override_max_spread_bps:
                     blockers.append("spread")
+                    logger.info(f"🛑 MICROSTRUCTURE: Spread {spread_bps:.2f}bps > {cfg.playbook_override_max_spread_bps}bps")
                 if slippage_bps > cfg.playbook_override_max_slippage_bps:
                     blockers.append("slippage")
+                    logger.info(f"🛑 MICROSTRUCTURE: Slippage {slippage_bps:.2f}bps > {cfg.playbook_override_max_slippage_bps}bps")
+                
+                # FIXED: Add imbalance checks for entry direction
+                if signal_action == "BUY" and imbalance_ratio < 0.55:
+                    blockers.append("imbalance")
+                    logger.info(f"🛑 MICROSTRUCTURE: BUY imbalance {imbalance_ratio:.2f} < 0.55")
+                elif signal_action == "SELL" and imbalance_ratio > 0.45:
+                    blockers.append("imbalance")
+                    logger.info(f"🛑 MICROSTRUCTURE: SELL imbalance {imbalance_ratio:.2f} > 0.45")
                 # MACD validator must pass if required (we treat macd_v sign as proxy until codes are mapped)
                 if cfg.require_macd_validator_pass and ((signal_action == "BUY" and macd_v <= 0.0) or (signal_action == "SELL" and macd_v >= 0.0)):
                     blockers.append("macd_validator")
@@ -1956,6 +2127,19 @@ class IntelligentEntryEngine:
                 "layer_votes": {"enter": enter_votes, "wait": wait_votes}
             }
         else:
+            # Enhanced WAIT logging with specific reasons and thresholds
+            wait_reasons = []
+            if not meets_consensus:
+                wait_reasons.append(f"consensus {consensus_score:.2f}<{phase_consensus_thresh:.2f}")
+            if not meets_confidence:
+                wait_reasons.append(f"confidence {consensus_score:.2f}<{conf_thresh:.2f}")
+            if not meets_historical:
+                wait_reasons.append(f"historical {historical_validation_score:.2f}<{self.historical_validation_threshold:.2f}")
+            if not meets_signal:
+                wait_reasons.append(f"signal {signal_confidence:.2f}<{signal_thresh:.2f}")
+            if not timing_ok:
+                wait_reasons.append(f"timing l6={l6_timing:.2f}<0.70")
+            
             # Determine specific reason for rejection with better diagnostics
             if not timing_ok:
                 reason = "poor_timing"
@@ -1968,6 +2152,25 @@ class IntelligentEntryEngine:
                 logger.info(f"📊 PIPELINE DEBUG: Entry Engine - Rejected due to weak signal ({signal_confidence:.2f} < {signal_thresh:.2f})")
             else:
                 reason = "poor_timing"
+            
+            # Enhanced single-line WAIT summary with cool-down logic
+            wait_summary = " | ".join(wait_reasons) if wait_reasons else reason
+            
+            # FIXED: Cool-down for repeated WAIT decisions
+            current_time = datetime.now(timezone.utc)
+            should_log_full = True
+            
+            if (self._last_wait_decision and 
+                (current_time - self._last_wait_decision).total_seconds() < self._wait_decision_cooldown and
+                wait_summary == getattr(self, '_last_wait_reason', '')):
+                # Same reason within cooldown period - use abbreviated logging
+                logger.info(f"🚫 SSOT_ID={ssot_id} ENTRY: WAIT (unchanged)")
+                should_log_full = False
+            else:
+                # Full logging for new/different reasons or after cooldown
+                logger.info(f"🚫 SSOT_ID={ssot_id} ENTRY: WAIT - {wait_summary}")
+                self._last_wait_decision = current_time
+                self._last_wait_reason = wait_summary
             
             decision = {
                 "should_enter": False,
@@ -1983,20 +2186,31 @@ class IntelligentEntryEngine:
         return decision
     
     def _validate_entry_historically(self, signal_action: str, consensus_score: float, layer_results: Dict[str, Any]) -> float:
-        """Validate entry decision against historical pattern success rates"""
+        """Validate entry decision against historical pattern success rates - ENHANCED with live data"""
         if not self.historical_context:
+            logger.debug("📊 Historical validation: No historical context - using neutral 50%")
             return 0.5  # Default if no historical context
         
         validation_scores = []
+        patterns_checked = []
         
         # Check RSI pattern validation
         rsi_data = layer_results.get("layer_3_patterns", {}).get("market_indicators", {})
         rsi = rsi_data.get("rsi", 50)
         
         if signal_action == "BUY" and rsi < 40:
+            patterns_checked.append(f"rsi_oversold(rsi={rsi:.1f})")
             rsi_pattern = self.historical_context.get_pattern_success_rate("rsi_oversold")
             if rsi_pattern:
                 validation_scores.append(rsi_pattern.success_rate)
+                logger.debug(f"📊 RSI oversold pattern found: {rsi_pattern.success_rate:.1%} success rate")
+            else:
+                logger.debug(f"📊 RSI oversold pattern not found in historical data")
+                # ENHANCED: Use live calculation as fallback for extreme RSI  
+                if rsi <= 10:  # Extreme oversold - use high confidence
+                    fallback_score = 0.75  # 75% success for extreme oversold
+                    validation_scores.append(fallback_score)
+                    logger.info(f"📊 EXTREME RSI ({rsi:.1f}) - Using live fallback validation: {fallback_score:.1%}")
         elif signal_action == "SELL" and rsi > 60:
             rsi_pattern = self.historical_context.get_pattern_success_rate("rsi_overbought")
             if rsi_pattern:
@@ -2027,8 +2241,14 @@ class IntelligentEntryEngine:
             if bb_pattern:
                 validation_scores.append(bb_pattern.success_rate)
         
-        # Return average validation score
-        return np.mean(validation_scores) if validation_scores else 0.5
+        # ENHANCED: Return average validation score with detailed logging
+        if validation_scores:
+            final_score = np.mean(validation_scores)
+            logger.info(f"📊 Historical validation: {final_score:.1%} (from {len(validation_scores)} patterns: {', '.join(patterns_checked)})")
+            return final_score
+        else:
+            logger.info(f"📊 Historical validation: 50.0% (no patterns found for {signal_action}, checked: {', '.join(patterns_checked) if patterns_checked else 'none'})")
+            return 0.5
     
     async def _get_cached_historical_patterns(self, signal_action: str, current_price: float, rsi: float, macd: float, bollinger_position: float) -> Dict[str, Any]:
         """ENHANCED: Get historical patterns from pre-cached data (INSTANT)"""

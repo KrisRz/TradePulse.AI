@@ -158,16 +158,29 @@ class BrainController:
         """Initialize all core trading services + enhanced AWS-ready services with robust error handling"""
         logger.info("📚 Initializing core trading services...")
         
-        # ROBUST: Initialize services with individual error handling
-        # NEW: Unified Day Trading Engine (replaces enterprise + entry engines)
+        # ORCHESTRATION: Connect to existing engines instead of creating new ones
+        # Brain Controller orchestrates, doesn't replace existing engines
         try:
-            logger.info("🚀 Initializing Unified Day Trading Engine...")
-            self.unified_engine = UnifiedDayTradingEngine()
-            await self.unified_engine.initialize()
-            logger.info("✅ Unified Day Trading Engine initialized")
+            logger.info("🔗 Connecting to existing trading engines for orchestration...")
+            from app.backend.core.container import get_container
+            container = get_container()
+            
+            # Connect to existing Day Trading Engine
+            self.day_trading_engine = container.get("day_trading_engine")
+            if self.day_trading_engine:
+                logger.info("✅ Connected to running Day Trading Engine")
+            else:
+                logger.warning("⚠️ Day Trading Engine not found")
+                
+            # Connect to existing Enterprise Engine
+            self.enterprise_engine = container.get("enterprise_trading_engine")
+            if self.enterprise_engine:
+                logger.info("✅ Connected to Enterprise Trading Engine")
+                
         except Exception as e:
-            logger.error(f"❌ Unified Day Trading Engine failed: {e}")
-            self.unified_engine = None  # Continue without it
+            logger.error(f"❌ Engine connection failed: {e}")
+            self.day_trading_engine = None
+            self.enterprise_engine = None
         
         # Exit engine (keep for position management)
         try:

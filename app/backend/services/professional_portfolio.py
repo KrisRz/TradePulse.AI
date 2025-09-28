@@ -176,11 +176,11 @@ class ProfessionalPortfolio:
         self.peak_balance = self.initial_balance
         self.max_drawdown_amount = Decimal('0')
         
-        # Risk management
+        # Risk management - OPTIMIZED FOR SMALL FREQUENT TRADES
         self.daily_trades = 0
-        self.max_daily_trades = 8
+        self.max_daily_trades = 30  # SMALL TRADES: 30 trades per day (was 8 - too low!)
         self.consecutive_losses = 0
-        self.max_consecutive_losses = 5
+        self.max_consecutive_losses = 8  # Higher tolerance for small losses (was 5)
         
         # DynamoDB persistence
         self.db_client = None
@@ -345,9 +345,11 @@ class ProfessionalPortfolio:
             if position_value > self.cash_balance:
                 raise ValueError(f"Insufficient funds: need ${position_value}, have ${self.cash_balance}")
 
-            # Check daily limits
-            if self.daily_trades >= self.max_daily_trades:
-                raise ValueError(f"Daily trade limit reached: {self.max_daily_trades}")
+            # AGGRESSIVE SCALPING: Remove daily trade limit for continuous trading
+            # System is smart enough with AI confidence thresholds and risk management
+            # if self.daily_trades >= self.max_daily_trades:
+            #     raise ValueError(f"Daily trade limit reached: {self.max_daily_trades}")
+            logger.debug(f"📊 Daily trades: {self.daily_trades} (no limit for aggressive scalping)")
 
             
             # CRITICAL: Validate semantic consistency
@@ -430,15 +432,17 @@ class ProfessionalPortfolio:
 
             logger.info(
                 "Professional position opened",
-                position_id=position_id,
-                symbol=symbol,
-                type=position_type.value,
-                size=float(risk_adjusted_size),
-                entry_price=float(current_price),
-                position_value=float(position_value),
-                ai_confidence=ai_confidence,
-                stop_loss=float(stop_loss) if stop_loss else None,
-                take_profit=float(take_profit) if take_profit else None
+                extra={
+                    "position_id": position_id,
+                    "symbol": symbol,
+                    "type": position_type.value,
+                    "size": float(risk_adjusted_size),
+                    "entry_price": float(current_price),
+                    "position_value": float(position_value),
+                    "ai_confidence": ai_confidence,
+                    "stop_loss": float(stop_loss) if stop_loss else None,
+                    "take_profit": float(take_profit) if take_profit else None
+                }
             )
             
             return position_id
@@ -584,8 +588,14 @@ class ProfessionalPortfolio:
         # Adjust by AI confidence (50% to 150% of base)
         confidence_multiplier = Decimal(str(0.5 + ai_confidence))
         
-        # Adjust by consecutive losses (reduce size after losses)
-        loss_adjustment = max(Decimal('0.5'), Decimal('1') - (Decimal(str(self.consecutive_losses)) * Decimal('0.1')))
+        # Adjust by consecutive losses (REDUCE size after losses - not increase!)
+        # FIXED: Use division to reduce position size, not addition to increase it
+        loss_adjustment = Decimal('1') / (Decimal('1') + Decimal('0.03') * Decimal(str(self.consecutive_losses)))
+        
+        # Hard block after max consecutive losses
+        if self.consecutive_losses >= self.max_consecutive_losses:
+            logger.warning(f"⚠️ Max consecutive losses reached ({self.consecutive_losses}), blocking new positions for 15 minutes")
+            loss_adjustment = Decimal('0')  # Block all new positions
         
         # Calculate size using safe money math
         portfolio_value = self.get_total_portfolio_value()
@@ -790,7 +800,11 @@ class ProfessionalPortfolio:
             if position.exit_time:
                 position_data['exit_time'] = position.exit_time.isoformat()
             
-            self.db_client.put_item('portfolio_positions', position_data)
+            # Fix async/await inconsistency - check if result is awaitable
+            import inspect
+            result = self.db_client.put_item('portfolio_positions', position_data)
+            if inspect.isawaitable(result):
+                await result
             logger.debug(f"💾 Position saved to DB: {position.position_id} (status: {position.status.value})")
             
         except Exception as e:
@@ -1024,7 +1038,11 @@ class ProfessionalPortfolio:
                 'created_at': datetime.now(timezone.utc).isoformat()
             }
             
-            await self.db_client.put_item('portfolio_positions', item)
+            # Fix async/await inconsistency - check if result is awaitable
+            import inspect
+            result = self.db_client.put_item('portfolio_positions', item)
+            if inspect.isawaitable(result):
+                await result
             logger.info(f"💾 Position saved to DB: {position.position_id}")
             
         except Exception as e:

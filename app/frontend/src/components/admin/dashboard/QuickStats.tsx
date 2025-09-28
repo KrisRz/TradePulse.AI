@@ -27,7 +27,7 @@ export default function QuickStats() {
       
       // PRODUCTION: Fetch real quick stats from backend/DynamoDB
       const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-      const response = await fetch('http://localhost:9002/api/portfolio/quick-stats', {
+      const response = await fetch('/api/portfolio/quick-stats', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

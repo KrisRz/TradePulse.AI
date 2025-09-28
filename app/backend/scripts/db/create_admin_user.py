@@ -42,7 +42,7 @@ def test_dynamodb_connection():
     except Exception as e:
         print(f"❌ Failed to connect to DynamoDB Local: {e}")
         print("💡 Make sure DynamoDB Local is running:")
-        print("   docker-compose -f docker-compose.dev.yml up dynamodb-local")
+        print("   ./start_dynamodb.sh")
         return False
 
 def hash_password(password: str) -> str:

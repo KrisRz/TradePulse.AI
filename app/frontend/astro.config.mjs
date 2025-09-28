@@ -19,10 +19,10 @@ export default defineConfig({
       nesting: false,
     }),
   ],
-  output: 'server',
-  adapter: node({
-    mode: 'standalone'
-  }),
+  output: 'static',
+  // adapter: node({
+  //   mode: 'standalone'
+  // }),
   vite: {
     server: {
       proxy: {

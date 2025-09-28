@@ -79,7 +79,7 @@ export default function MarketInfo({
       setError(null);
       
       // PRODUCTION: Fetch real market data from professional backend
-      const response = await fetch(`http://localhost:9002/api/signals/live/bitcoin-price`, {
+      const response = await fetch(`/api/signals/live/bitcoin-price`, {
         headers: {
           'Content-Type': 'application/json'
         }
@@ -108,7 +108,7 @@ export default function MarketInfo({
       // Fetch real order book data
       let orderBookData: OrderBookData | null = null;
       try {
-        const orderBookResponse = await fetch(`http://localhost:9002/api/signals/orderbook/${symbol}`);
+        const orderBookResponse = await fetch(`/api/signals/orderbook/${symbol}`);
         if (orderBookResponse.ok) {
           orderBookData = await orderBookResponse.json();
         }
@@ -119,7 +119,7 @@ export default function MarketInfo({
       // Fetch real market sentiment data
       let sentimentData: MarketSentiment | null = null;
       try {
-        const sentimentResponse = await fetch(`http://localhost:9002/api/signals/market-sentiment`);
+        const sentimentResponse = await fetch(`/api/signals/market-sentiment`);
         if (sentimentResponse.ok) {
           sentimentData = await sentimentResponse.json();
         }

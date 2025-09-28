@@ -40,7 +40,7 @@ export default function UserDashboardOverview() {
       }
 
       // Fetch real user dashboard overview
-      const response = await fetch('http://localhost:9002/api/user/dashboard/overview', {
+      const response = await fetch('/api/user/dashboard/overview', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

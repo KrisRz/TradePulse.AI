@@ -18,9 +18,9 @@ class ConfidenceThresholds:
     BUY_THRESHOLD: float = 0.45      # 45% confidence required for BUY signals (was 65% - too high!)
     SELL_THRESHOLD: float = 0.45     # 45% confidence required for SELL signals (was 65% - too high!)
     
-    # EXPLORATORY SIGNAL THRESHOLDS (Lower confidence for smaller positions)
-    EXPLORATORY_BUY: float = 0.35    # 35% confidence for exploratory BUY (was 45%)
-    EXPLORATORY_SELL: float = 0.35   # 35% confidence for exploratory SELL (was 45%)
+    # EXPLORATORY SIGNAL THRESHOLDS (Lower confidence for smaller positions) - JUMP CATCHING
+    EXPLORATORY_BUY: float = 0.25    # 25% confidence for catching Bitcoin dips (was 35%)
+    EXPLORATORY_SELL: float = 0.25   # 25% confidence for catching Bitcoin peaks (was 35%)
     
     # HOLD DECISION THRESHOLDS
     HOLD_LOWER_BOUND: float = 0.35   # Below 35% = potential SELL signal

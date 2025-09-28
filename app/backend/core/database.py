@@ -27,8 +27,8 @@ def get_dynamodb_singleton():
     cfg = Config(
         region_name=os.getenv("DYNAMODB_REGION", "us-east-1"),
         retries={"max_attempts": 5, "mode": "standard"},
-        connect_timeout=3, 
-        read_timeout=6, 
+        connect_timeout=10, 
+        read_timeout=30, 
         max_pool_connections=50,
         user_agent_extra="TradePulseAI"
     )
@@ -1317,6 +1317,33 @@ class TableSchemas:
                 {'AttributeName': 'check_id', 'AttributeType': 'S'}
             ]
         }
+    
+    @staticmethod
+    def get_trade_analyses_schema() -> Dict[str, Any]:
+        """Trade analyses table schema for storing detailed trade analysis results."""
+        return {
+            'TableName': 'trade_analyses',
+            'BillingMode': 'PAY_PER_REQUEST',
+            'KeySchema': [
+                {'AttributeName': 'trade_id', 'KeyType': 'HASH'}
+            ],
+            'AttributeDefinitions': [
+                {'AttributeName': 'trade_id', 'AttributeType': 'S'},
+                {'AttributeName': 'symbol', 'AttributeType': 'S'},
+                {'AttributeName': 'entry_time', 'AttributeType': 'S'}
+            ],
+            'GlobalSecondaryIndexes': [
+                {
+                    'IndexName': 'symbol-entry_time-index',
+                    'KeySchema': [
+                        {'AttributeName': 'symbol', 'KeyType': 'HASH'},
+                        {'AttributeName': 'entry_time', 'KeyType': 'RANGE'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'},
+                    'BillingMode': 'PAY_PER_REQUEST'
+                }
+            ]
+        }
 
 class DatabaseManager:
     """Database manager for table operations and data management"""
@@ -1351,7 +1378,8 @@ class DatabaseManager:
             self.schemas.get_user_notification_preferences_schema(),
             self.schemas.get_notification_templates_schema(),
             self.schemas.get_learning_engine_state_schema(),
-            self.schemas.get_health_checks_schema()
+            self.schemas.get_health_checks_schema(),
+            self.schemas.get_trade_analyses_schema()
         ]
         
         success = True
@@ -1728,7 +1756,8 @@ def ensure_required_tables() -> bool:
             schemas.get_user_notification_preferences_schema(),
             schemas.get_notification_templates_schema(),
             TableSchemas.get_health_checks_schema(),
-            schemas.get_learning_engine_state_schema()
+            schemas.get_learning_engine_state_schema(),
+            TableSchemas.get_trade_analyses_schema()
         ]
         
         success_count = 0

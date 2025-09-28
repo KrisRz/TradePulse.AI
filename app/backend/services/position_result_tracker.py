@@ -126,18 +126,19 @@ class PositionResultTracker:
                 self.successful_positions += 1
             self.total_pnl += result.pnl_absolute
             
-            # Save to database
+            # Save to database - FIXED: Convert float to Decimal for DynamoDB
+            from decimal import Decimal
             result_data = {
                 'position_id': result.position_id,
                 'symbol': result.symbol,
                 'outcome': result.outcome.value,
                 'was_successful': result.was_successful,
-                'pnl_absolute': result.pnl_absolute,
-                'pnl_percentage': result.pnl_percentage,
+                'pnl_absolute': Decimal(str(result.pnl_absolute)),  # FIXED: Decimal
+                'pnl_percentage': Decimal(str(result.pnl_percentage)),  # FIXED: Decimal
                 'time_in_position_minutes': result.time_in_position_minutes,
-                'entry_price': result.entry_price,
-                'exit_price': result.exit_price,
-                'ai_confidence': result.ai_confidence,
+                'entry_price': Decimal(str(result.entry_price)),  # FIXED: Decimal
+                'exit_price': Decimal(str(result.exit_price)),  # FIXED: Decimal
+                'ai_confidence': Decimal(str(result.ai_confidence)),  # FIXED: Decimal
                 'risk_assessment': result.risk_assessment,
                 'patterns_detected': result.patterns_detected,
                 'pattern_analysis_enabled': result.pattern_analysis_enabled,

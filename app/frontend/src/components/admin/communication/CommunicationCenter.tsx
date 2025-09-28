@@ -111,19 +111,19 @@ export default function CommunicationCenter() {
       const token = 'enterprise_admin_token';
 
       const [messagesResponse, announcementsResponse, analyticsResponse] = await Promise.all([
-        fetch('http://localhost:9002/api/admin/communications/messages/sent', {
+        fetch('/api/admin/communications/messages/sent', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         }),
-        fetch('http://localhost:9002/api/admin/communications/announcements', {
+        fetch('/api/admin/communications/announcements', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         }),
-        fetch('http://localhost:9002/api/admin/communications/analytics/overview', {
+        fetch('/api/admin/communications/analytics/overview', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -158,7 +158,7 @@ export default function CommunicationCenter() {
 
   const handleSendMessage = async () => {
     try {
-      const response = await fetch('http://localhost:9002/api/communication/messages/send', {
+      const response = await fetch('/api/communication/messages/send', {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer enterprise_admin_token',

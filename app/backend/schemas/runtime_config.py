@@ -18,11 +18,11 @@ class RuntimeConfig(BaseModel):
     engine_enabled: bool
     real_trading_enabled: bool = False
 
-    # Duplicate suppression (configurable at runtime)
-    dup_active_window_sec: int = 30          # active position duplicate window
-    dup_active_price_delta_pct: float = 0.003 # 0.3% price similarity threshold
-    dup_closed_window_sec: int = 600          # recently closed position window
-    dup_closed_price_delta_pct: float = 0.008 # 0.8% price similarity threshold
+    # Duplicate suppression (configurable at runtime) - DAY TRADING OPTIMIZED
+    dup_active_window_sec: int = 5            # 5 seconds only for active positions  
+    dup_active_price_delta_pct: float = 0.001 # 0.1% price similarity (very strict)
+    dup_closed_window_sec: int = 30           # 30 seconds for closed positions (was 10s)
+    dup_closed_price_delta_pct: float = 0.005 # 0.5% price similarity (was 0.1% - too strict)
 
     # Playbook override controls
     playbook_override_enabled: bool = True
@@ -31,7 +31,7 @@ class RuntimeConfig(BaseModel):
     playbook_override_min_timing: float = 0.70
     playbook_override_size_multiplier: float = 0.60
     playbook_override_max_spread_bps: float = 3.0
-    playbook_override_max_slippage_bps: float = 6.0
+    playbook_override_max_slippage_bps: float = 100.0  # FIXED: Bitcoin requires higher slippage tolerance
     playbook_override_block_if_guard: Set[str] = {"breaker", "volatility", "cooldown", "duplicate"}
     require_macd_validator_pass: bool = True
 

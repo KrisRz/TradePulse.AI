@@ -65,7 +65,7 @@ export default function MarketIntelligence({ }: MarketIntelligenceProps) {
     const fetchMarketData = async () => {
       try {
         // Fetch comprehensive market intelligence data
-        const response = await fetch('http://localhost:9002/api/signals/market-intelligence');
+        const response = await fetch('/api/signals/market-intelligence');
         if (response.ok) {
           const data = await response.json();
           setMarketData(data);

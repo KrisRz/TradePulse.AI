@@ -110,7 +110,7 @@ export default function UserManagementAdmin() {
         params.append(key, String(value));
       }
     });
-    return `http://localhost:9002/api/admin/users?${params.toString()}`;
+    return `/api/admin/users?${params.toString()}`;
   };
 
   const { data: userData, loading, error, refresh } = useAdminData(buildUserDataUrl());

@@ -32,7 +32,7 @@ try {
   }
 
   // Fetch real dashboard data from backend (using available analytics endpoint)
-  const response = await fetch('http://localhost:9002/api/analytics/signals/metrics', {
+  const response = await fetch('/api/analytics/signals/metrics', {
     headers: {
       'Authorization': `Bearer ${authToken}`,
       'Content-Type': 'application/json'

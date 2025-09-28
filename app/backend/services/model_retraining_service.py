@@ -535,10 +535,12 @@ class ModelRetrainingService:
         )
     
     def _create_lightgbm_regressor(self):
-        """Create professional LightGBM regressor"""
+        """Create professional LightGBM regressor with explicit parameters"""
         return lgb.LGBMRegressor(
             n_estimators=200,
             max_depth=6,
+            num_leaves=31,  # FIXED: Explicit num_leaves parameter
+            min_data_in_leaf=20,  # FIXED: Explicit min_data_in_leaf parameter
             learning_rate=0.1,
             subsample=0.8,
             colsample_bytree=0.8,

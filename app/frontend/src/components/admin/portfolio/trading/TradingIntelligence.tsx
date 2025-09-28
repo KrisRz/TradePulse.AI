@@ -32,7 +32,7 @@ export default function TradingIntelligence({ portfolioData }: TradingIntelligen
       try {
         const token = localStorage.getItem('auth_token') || '';
         // Fetch positions (open + closed stream key)
-        const resp = await fetch('http://localhost:9002/api/portfolio/virtual/positions', {
+        const resp = await fetch('/api/portfolio/virtual/positions', {
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : { 'Authorization': 'Bearer enterprise_admin_token' })
@@ -53,7 +53,7 @@ export default function TradingIntelligence({ portfolioData }: TradingIntelligen
 
         // Fetch real AI signals with layer analysis
         try {
-          const signalResp = await fetch('http://localhost:9002/api/trading/signals/latest', {
+          const signalResp = await fetch('/api/trading/signals/latest', {
             headers: {
               'Content-Type': 'application/json',
               ...(token ? { 'Authorization': `Bearer ${token}` } : { 'Authorization': 'Bearer enterprise_admin_token' })

@@ -173,9 +173,10 @@ class FeatureRegistry:
         logger.info(f"✅ Initialized {len(self.specs)} feature specifications")
     
     def register(self, spec: FeatureSpec):
-        """Register a feature specification"""
-        self.specs[spec.name] = spec
-        logger.debug(f"Registered feature: {spec.name}")
+        """Register a feature specification (idempotent)"""
+        if spec.name not in self.specs:
+            self.specs[spec.name] = spec
+            logger.debug(f"Registered feature: {spec.name}")  # Only log once
     
     def get_spec(self, name: str) -> Optional[FeatureSpec]:
         """Get feature specification by name"""

@@ -592,11 +592,11 @@ class TradingPerformanceTracker:
         """Get current market context for trade analysis"""
         try:
             # Get live market data
-            price_data = await get_live_bitcoin_price()
-            market_data = await get_live_market_data()
+            price_data = await get_live_bitcoin_price()  # Returns float
+            market_data = await get_live_market_data()   # Returns dict
             
             context = {
-                "price": price_data.get("price", 0) if price_data else 0,
+                "price": float(price_data) if price_data and price_data > 0 else 0,
                 "volatility": 0.0,
                 "liquidity": 0.5,  # Default moderate
                 "trend": "sideways"
@@ -636,9 +636,20 @@ class TradingPerformanceTracker:
             quality_score += signal.confidence * 0.4
             
             # Layer consensus (30% weight)
-            layer_scores = list(signal.layer_analysis.values())
+            layer_scores = []
+            if hasattr(signal, 'layer_analysis') and signal.layer_analysis:
+                for layer_data in signal.layer_analysis.values():
+                    if isinstance(layer_data, dict):
+                        # Extract confidence score from dict
+                        confidence = layer_data.get('confidence', 0.0)
+                        if isinstance(confidence, (int, float)):
+                            layer_scores.append(abs(float(confidence)))
+                    elif isinstance(layer_data, (int, float)):
+                        # Direct numeric value
+                        layer_scores.append(abs(float(layer_data)))
+            
             if layer_scores:
-                layer_consensus = statistics.mean([abs(score) for score in layer_scores])
+                layer_consensus = statistics.mean(layer_scores)
                 quality_score += layer_consensus * 0.3
             
             # Market conditions (20% weight)

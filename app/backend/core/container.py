@@ -18,18 +18,25 @@ logger = get_logger(__name__)
 
 T = TypeVar('T')
 
+def require_instance(name: str, obj):
+    """PRODUCTION SAFE: Assert that DI returned an instance, not a callable"""
+    if callable(obj) and not hasattr(obj, "__dict__"):
+        raise TypeError(f"DI misuse: '{name}' is callable. Use container.get('{name}') WITHOUT '()'.")
+    return obj
+
 
 class ServiceContainer:
     """
-    Professional dependency injection container
+    Production-safe dependency injection container with hardened guarantees
     Manages service lifecycle and dependencies with real data only
     """
     
     def __init__(self):
-        self._services: Dict[str, Any] = {}
-        self._singletons: Dict[str, Any] = {}
+        self._instances: Dict[str, object] = {}
         self._factories: Dict[str, callable] = {}
+        self._sealed = False
         self._initialized = False
+        self._initialization_in_progress = False
         
         # Register core services
         self._register_core_services()
@@ -52,12 +59,20 @@ class ServiceContainer:
         
         logger.info("✅ Core services registered")
     
-    def register_singleton(self, name: str, factory: callable) -> None:
-        """Register a singleton service (idempotent)"""
-        if name in self._factories:
+    def register_singleton(self, name: str, instance_or_factory) -> None:
+        """Register a singleton service - PRODUCTION SAFE"""
+        if self._sealed:
+            raise RuntimeError(f"DI sealed — registration after seal: {name}")
+        
+        if name in self._instances or name in self._factories:
             logger.debug(f"🔄 PIPELINE DEBUG: Service {name} already registered, skipping")
             return
-        self._factories[name] = factory
+        
+        if callable(instance_or_factory) and not hasattr(instance_or_factory, "__dict__"):
+            self._factories[name] = instance_or_factory
+        else:
+            self._instances[name] = instance_or_factory
+        
         logger.debug(f"Registered singleton service: {name}")
     
     def register_transient(self, name: str, factory: callable) -> None:
@@ -65,27 +80,39 @@ class ServiceContainer:
         self._services[name] = factory
         logger.debug(f"Registered transient service: {name}")
     
-    def get(self, name: str) -> Any:
-        """Get service by name"""
-        # Check singletons first
+    def get(self, name: str):
+        """Get service by name - PRODUCTION SAFE"""
+        # Check instances first (direct singletons)
+        if name in self._instances:
+            return self._instances[name]
+        
+        # Check legacy singletons  
         if name in self._singletons:
             return self._singletons[name]
         
         # Check if it's a singleton factory
         if name in self._factories:
-            instance = self._factories[name]()
-            self._singletons[name] = instance
+            instance = self._factories[name](self)
+            self._instances[name] = instance
             return instance
         
         # Check transient services
         if name in self._services:
             return self._services[name]()
         
-        raise ValueError(f"Service '{name}' not registered")
+        raise KeyError(f"Service not registered: {name}")
+    
+    def seal(self):
+        """Seal container to prevent further registrations"""
+        self._sealed = True
+        logger.info(f"🔒 DI Container sealed with {len(self._instances)} instances, {len(self._singletons)} legacy singletons, and {len(self._factories)} factories")
     
     def is_registered(self, name: str) -> bool:
-        """Check if service is registered"""
-        return name in self._factories or name in self._services or name in self._singletons
+        """Check if service is registered - PRODUCTION SAFE"""
+        return (name in self._instances or 
+                name in self._factories or 
+                name in self._services or 
+                name in self._singletons)
     
     def get_typed(self, service_type: Type[T]) -> T:
         """Get service by type (for type safety)"""
@@ -109,10 +136,17 @@ class ServiceContainer:
         return await get_tensorflow_async_service()
     
     async def initialize_async_services(self) -> None:
-        """Initialize async services that require startup"""
+        """Initialize async services that require startup - FIXED: Idempotent"""
         if self._initialized:
+            logger.debug("🔄 Services already initialized, skipping...")
             return
         
+        # FIXED: Prevent double initialization during race conditions
+        if self._initialization_in_progress:
+            logger.debug("🔄 Initialization already in progress, skipping...")
+            return
+        
+        self._initialization_in_progress = True
         logger.info("🚀 Initializing async services")
         
         try:
@@ -126,9 +160,11 @@ class ServiceContainer:
             await self._initialize_trading_services()
             
             self._initialized = True
+            self._initialization_in_progress = False  # FIXED: Reset progress flag
             logger.info("✅ All async services initialized")
             
         except Exception as e:
+            self._initialization_in_progress = False  # FIXED: Reset flag on error
             logger.error(f"❌ Failed to initialize async services: {e}")
             raise
     
@@ -185,25 +221,25 @@ class ServiceContainer:
                 logger.error(f"❌ Failed to initialize continuous learning engine: {e}")
                 self.register_singleton("continuous_learning_engine", lambda: None)
             
-            # Entry engine (REAL AI ANALYSIS) - INITIALIZE AND START
+            # Entry engine (REAL AI ANALYSIS) - FIXED: Register instance directly  
             try:
                 entry_engine = IntelligentEntryEngine()
                 await entry_engine.initialize()
-                self.register_singleton("entry_engine", lambda: entry_engine)
+                self.register_singleton("entry_engine", entry_engine)  # FIXED: Direct instance, not lambda
                 logger.info("✅ Intelligent Entry Engine initialized")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize entry engine: {e}")
-                self.register_singleton("entry_engine", lambda: None)
+                self.register_singleton("entry_engine", None)
             
-            # Exit engine (REAL AI ANALYSIS) - INITIALIZE AND START
+            # Exit engine (REAL AI ANALYSIS) - FIXED: Register instance directly
             try:
                 exit_engine = IntelligentExitEngine()
                 await exit_engine.initialize()
-                self.register_singleton("exit_engine", lambda: exit_engine)
+                self.register_singleton("exit_engine", exit_engine)  # FIXED: Direct instance
                 logger.info("✅ Intelligent Exit Engine initialized")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize exit engine: {e}")
-                self.register_singleton("exit_engine", lambda: None)
+                self.register_singleton("exit_engine", None)
             
             logger.info("✅ AI services initialized with REAL MODELS")
             
@@ -231,8 +267,8 @@ class ServiceContainer:
                 from app.backend.services.enterprise_trading_engine import EnterpriseTradingEngine
                 trading_engine = EnterpriseTradingEngine()
                 
-                # Always register first, then try to initialize
-                self.register_singleton("enterprise_trading_engine", lambda: trading_engine)
+                # FIXED: Register direct instance (not lambda)
+                self.register_singleton("enterprise_trading_engine", trading_engine)
                 logger.info("✅ Enterprise Trading Engine registered")
                 
                 # Try to initialize in background to avoid blocking other services
@@ -275,7 +311,7 @@ class ServiceContainer:
                 logger.info("🔄 Creating Session-Aware Trading Engine without circular dependencies...")
                 from app.backend.services.session_aware_trading_engine import SessionAwareTradingEngine
                 session_engine = SessionAwareTradingEngine()  # Don't call initialize yet
-                self.register_singleton("session_aware_trading_engine", lambda: session_engine)
+                self.register_singleton("session_aware_trading_engine", session_engine)  # FIXED: Direct instance
                 logger.info("✅ Session-Aware Trading Engine registered (will initialize after all services ready)")
             except Exception as e:
                 logger.error(f"❌ Session-Aware Trading Engine creation failed: {e}")

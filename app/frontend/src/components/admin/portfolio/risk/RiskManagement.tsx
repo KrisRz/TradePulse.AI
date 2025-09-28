@@ -51,7 +51,7 @@ export default function RiskManagement({ portfolioData }: RiskManagementProps) {
     const fetchRiskData = async () => {
       try {
         const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-        const response = await fetch(`http://localhost:9002/api/portfolio/virtual/risk-metrics?timeframe=${riskTimeframe}`, {
+        const response = await fetch(`/api/portfolio/virtual/risk-metrics?timeframe=${riskTimeframe}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'

@@ -95,6 +95,15 @@ Thumbs.db
 # AWS
 .aws/
 
+# AWS Access Keys (SECURITY CRITICAL)
+*accessKeys.csv
+KrisRz_accessKeys.csv
+*_accessKeys.csv
+
+# Binance API Documentation (SECURITY)
+Binance API.png
+*Binance*.png
+
 # Logs
 *.log
 logs/

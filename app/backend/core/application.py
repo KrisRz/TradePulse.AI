@@ -117,7 +117,7 @@ class TradePulseApplication:
                     enterprise_engine = EnterpriseTradingEngine()
                     
                     # Register in container
-                    self.container.register_singleton("enterprise_trading_engine", lambda: enterprise_engine)
+                    self.container.register_singleton("enterprise_trading_engine", enterprise_engine)  # FIXED: Direct instance
                     
                     # Initialize with recursion protection
                     try:
@@ -136,12 +136,12 @@ class TradePulseApplication:
                     
                     from app.backend.services.day_trading_engine import DayTradingEngine
                     day_engine = DayTradingEngine()
-                    self.container.register_singleton("day_trading_engine", lambda: day_engine)
+                    self.container.register_singleton("day_trading_engine", day_engine)  # FIXED: Direct instance
                     
-                    # Initialize Day Trading Engine
+                    # Initialize Day Trading Engine (but don't start - Brain Controller will orchestrate)
                     await day_engine.initialize()
-                    await day_engine.start_analysis_loop()
-                    logger.info("✅ PHASE 2 COMPLETE: Day Trading Engine operational")
+                    # ORCHESTRATION FIX: Don't auto-start - let Brain Controller manage it
+                    logger.info("✅ PHASE 2 COMPLETE: Day Trading Engine ready for orchestration")
                     
                     # PHASE 3: Add Continuous Learning Engine
                     await asyncio.sleep(2)
@@ -162,17 +162,19 @@ class TradePulseApplication:
                     logger.info("🚀 PHASE 4: Adding missing core services...")
                     
                     try:
-                        # Entry Engine
+                        # Entry Engine - FIXED: Register instance directly to prevent callable errors
                         from app.backend.services.intelligent_entry_engine import IntelligentEntryEngine
-                        entry_engine = IntelligentEntryEngine()
-                        await entry_engine.initialize()
-                        self.container.register_singleton("entry_engine", lambda: entry_engine)
+                        if not self.container.get("entry_engine"):  # Prevent duplicate initialization
+                            entry_engine = IntelligentEntryEngine()
+                            await entry_engine.initialize()
+                            self.container.register_singleton("entry_engine", entry_engine)  # FIXED: Direct instance
                         
-                        # Exit Engine
+                        # Exit Engine - FIXED: Register instance directly
                         from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
-                        exit_engine = IntelligentExitEngine()
-                        await exit_engine.initialize()
-                        self.container.register_singleton("exit_engine", lambda: exit_engine)
+                        if not self.container.get("exit_engine"):  # Prevent duplicate initialization
+                            exit_engine = IntelligentExitEngine()
+                            await exit_engine.initialize()
+                            self.container.register_singleton("exit_engine", exit_engine)  # FIXED: Direct instance
                         
                         # Risk Manager
                         from app.backend.services.dynamic_risk_manager import DynamicRiskManager
@@ -209,14 +211,14 @@ class TradePulseApplication:
                     try:
                         from app.backend.services.session_aware_trading_engine import SessionAwareTradingEngine
                         session_engine = SessionAwareTradingEngine()
-                        self.container.register_singleton("session_aware_trading_engine", lambda: session_engine)
+                        self.container.register_singleton("session_aware_trading_engine", session_engine)  # FIXED: Direct instance
                         await session_engine.initialize()
                         await session_engine.start()
                         logger.info("✅ PHASE 5 COMPLETE: Session-Aware Engine operational")
                     except Exception as session_error:
                         logger.warning(f"⚠️ Session-Aware Engine failed: {session_error}")
                         # Override placeholder registration
-                        self.container.register_singleton("session_aware_trading_engine", lambda: None)
+                        self.container.register_singleton("session_aware_trading_engine", None)  # FIXED: Direct None
                     
                     # PHASE 6: Initialize Missing Services
                     await asyncio.sleep(1)
@@ -307,7 +309,7 @@ class TradePulseApplication:
                         brain_controller = BrainController()
                         
                         # Register immediately and FORCE initialization
-                        self.container.register_singleton("brain_controller", lambda: brain_controller)
+                        self.container.register_singleton("brain_controller", brain_controller)  # FIXED: Direct instance
                         logger.info("🔧 Brain Controller registered in DI container")
                         
                         # 🚀 INDUSTRY STANDARD: Initialize with automatic startup

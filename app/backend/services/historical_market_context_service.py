@@ -243,6 +243,11 @@ class HistoricalMarketContextService:
         
         logger.info(f"✅ OPTIMIZED FOR DAY TRADING: Using only {len(df):,} records from last {cutoff_hours} hours")
         
+        # CRITICAL FIX: Add technical indicators before pattern calculation
+        logger.info("🔧 Adding technical indicators to historical data...")
+        df = await self._add_technical_indicators_to_dataframe(df)
+        logger.info("✅ Technical indicators added successfully")
+        
         # Pre-calculate price ranges
         await self._calculate_price_ranges(df)
         
@@ -259,6 +264,64 @@ class HistoricalMarketContextService:
         await self._calculate_volatility_percentiles(df)
         
         logger.info("✅ Historical data pre-calculation completed")
+    
+    async def _add_technical_indicators_to_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add technical indicators (RSI, MACD, Bollinger Bands) to historical data"""
+        try:
+            import numpy as np
+            
+            if len(df) < 50:  # Need minimum data for indicators
+                logger.warning("Insufficient data for technical indicators")
+                return df
+            
+            # Sort by timestamp to ensure proper calculation
+            df = df.sort_index()
+            
+            # 1. RSI Calculation (14-period)
+            logger.info("   Calculating RSI...")
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['rsi'] = 100 - (100 / (1 + rs))
+            
+            # 2. MACD Calculation (12, 26, 9)
+            logger.info("   Calculating MACD...")
+            ema_12 = df['close'].ewm(span=12).mean()
+            ema_26 = df['close'].ewm(span=26).mean()
+            df['macd'] = ema_12 - ema_26
+            df['macd_signal'] = df['macd'].ewm(span=9).mean()
+            df['macd_histogram'] = df['macd'] - df['macd_signal']
+            
+            # 3. Bollinger Bands (20-period, 2 std)
+            logger.info("   Calculating Bollinger Bands...")
+            bb_middle = df['close'].rolling(window=20).mean()
+            bb_std = df['close'].rolling(window=20).std()
+            df['bb_upper'] = bb_middle + (bb_std * 2)
+            df['bb_lower'] = bb_middle - (bb_std * 2)
+            df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
+            
+            # 4. Volume indicators
+            logger.info("   Calculating Volume indicators...")
+            df['volume_sma'] = df['volume'].rolling(window=20).mean()
+            df['volume_ratio'] = df['volume'] / df['volume_sma']
+            
+            # Fill NaN values with neutral defaults
+            df['rsi'] = df['rsi'].fillna(50.0)
+            df['macd'] = df['macd'].fillna(0.0)
+            df['macd_signal'] = df['macd_signal'].fillna(0.0)
+            df['bb_position'] = df['bb_position'].fillna(0.5)
+            df['volume_ratio'] = df['volume_ratio'].fillna(1.0)
+            
+            indicators_added = ['rsi', 'macd', 'macd_signal', 'bb_position', 'volume_ratio']
+            logger.info(f"✅ Added technical indicators: {', '.join(indicators_added)}")
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to add technical indicators: {e}")
+            # Return original dataframe if indicators fail
+            return df
     
     async def _load_live_data_from_dynamodb(self) -> pd.DataFrame:
         """Load live data from DynamoDB Local for fresh historical context"""
@@ -363,6 +426,16 @@ class HistoricalMarketContextService:
                     )
                     
                     logger.info(f"   {period_name}: ${low:,.0f} - ${high:,.0f} (current: {current_position:.1%})")
+                    
+                    # DIAGNOSTIC: Log data source details for debugging inconsistencies
+                    logger.info(f"   {period_name} DATA SOURCE: symbol={getattr(self, 'symbol', 'unknown')}, bars_count={len(period_data)}, date_range={start_date.date()} to {end_date.date()}")
+                    
+                    # CONSISTENCY CHECK: Compare with current RSI/BB if available
+                    if hasattr(self, '_last_rsi') and hasattr(self, '_last_bb_pos'):
+                        if current_position > 0.9 and getattr(self, '_last_rsi', 50) < 10:
+                            logger.warning(f"⚠️ INCONSISTENCY: {period_name} position {current_position:.1%} vs RSI {getattr(self, '_last_rsi', 50):.1f}")
+                        if current_position > 0.9 and getattr(self, '_last_bb_pos', 0.5) < 0.1:
+                            logger.warning(f"⚠️ INCONSISTENCY: {period_name} position {current_position:.1%} vs BB_pos {getattr(self, '_last_bb_pos', 0.5):.3f}")
                     
             except Exception as e:
                 logger.warning(f"Failed to calculate {period_name} range: {e}")
@@ -511,7 +584,17 @@ class HistoricalMarketContextService:
                 avg_loss = np.mean(losses) if losses else 0.0
                 risk_reward = avg_profit / max(avg_loss, 0.001)
                 
-                self.pattern_success_rates[f"rsi_{range_name}"] = PatternSuccessRate(
+                # Map range names to expected pattern names
+                pattern_name_map = {
+                    "oversold": "rsi_oversold",
+                    "oversold_moderate": "rsi_oversold_moderate", 
+                    "neutral": "rsi_neutral",
+                    "overbought_moderate": "rsi_overbought_moderate",
+                    "overbought": "rsi_overbought"
+                }
+                pattern_key = pattern_name_map.get(range_name, f"rsi_{range_name}")
+                
+                self.pattern_success_rates[pattern_key] = PatternSuccessRate(
                     pattern_name=f"RSI {range_name}",
                     success_rate=success_rate,
                     total_occurrences=total_signals,
@@ -578,7 +661,14 @@ class HistoricalMarketContextService:
                 avg_profit = np.mean(profits) if profits else 0.0
                 avg_loss = np.mean(losses) if losses else 0.0
                 
-                self.pattern_success_rates[f"macd_{cross_type}"] = PatternSuccessRate(
+                # Map cross types to expected pattern names  
+                pattern_name_map = {
+                    "bullish": "macd_bullish",
+                    "bearish": "macd_bearish"
+                }
+                pattern_key = pattern_name_map.get(cross_type, f"macd_{cross_type}")
+                
+                self.pattern_success_rates[pattern_key] = PatternSuccessRate(
                     pattern_name=f"MACD {cross_type} crossover",
                     success_rate=success_rate,
                     total_occurrences=total_signals,
@@ -649,7 +739,14 @@ class HistoricalMarketContextService:
                 avg_profit = np.mean(profits) if profits else 0.0
                 avg_loss = np.mean(losses) if losses else 0.0
                 
-                self.pattern_success_rates[f"bollinger_{touch_type}"] = PatternSuccessRate(
+                # Map touch types to expected pattern names
+                pattern_name_map = {
+                    "support": "bollinger_support", 
+                    "resistance": "bollinger_resistance"
+                }
+                pattern_key = pattern_name_map.get(touch_type, f"bollinger_{touch_type}")
+                
+                self.pattern_success_rates[pattern_key] = PatternSuccessRate(
                     pattern_name=f"Bollinger {touch_type}",
                     success_rate=success_rate,
                     total_occurrences=total_signals,
@@ -884,6 +981,11 @@ class HistoricalMarketContextService:
                 return max(0.0, min(1.0, position))
         
         return None
+    
+    def set_current_indicators(self, rsi: float, bb_position: float):
+        """Set current RSI and BB position for consistency checking"""
+        self._last_rsi = rsi
+        self._last_bb_pos = bb_position
     
     def get_pattern_success_rate(self, pattern_name: str) -> Optional[PatternSuccessRate]:
         """Get pre-calculated pattern success rate"""

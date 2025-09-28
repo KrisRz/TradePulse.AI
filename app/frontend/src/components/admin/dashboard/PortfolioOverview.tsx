@@ -38,7 +38,7 @@ export default function PortfolioOverview({ portfolioId }: PortfolioOverviewProp
       
       // PRODUCTION: Fetch real portfolio summary from backend/DynamoDB
       const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-      const response = await fetch(`http://localhost:9002/api/portfolio/summary${portfolioId ? `/${portfolioId}` : ''}`, {
+      const response = await fetch(`/api/portfolio/summary${portfolioId ? `/${portfolioId}` : ''}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

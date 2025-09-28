@@ -77,7 +77,7 @@ export default function SystemControlAdmin() {
         const token = 'enterprise_admin_token';
         
         // Fetch real system status
-        const statusResponse = await fetch('http://localhost:9002/api/admin/system-status', {
+        const statusResponse = await fetch('/api/admin/system-status', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -85,7 +85,7 @@ export default function SystemControlAdmin() {
         });
         
         // Also fetch health data for additional system metrics
-        const healthResponse = await fetch('http://localhost:9002/api/health', {
+        const healthResponse = await fetch('/api/health', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -123,7 +123,7 @@ export default function SystemControlAdmin() {
         }
 
         // Fetch real system settings
-        const settingsResponse = await fetch('http://localhost:9002/api/system/settings', {
+        const settingsResponse = await fetch('/api/system/settings', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -139,7 +139,7 @@ export default function SystemControlAdmin() {
         }
 
         // Fetch real cache stats
-        const cacheResponse = await fetch('http://localhost:9002/api/system/cache-stats', {
+        const cacheResponse = await fetch('/api/system/cache-stats', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -169,7 +169,7 @@ export default function SystemControlAdmin() {
     
     try {
       const token = 'enterprise_admin_token';
-      const response = await fetch(`http://localhost:9002/api/system/action`, {
+      const response = await fetch(`/api/system/action`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

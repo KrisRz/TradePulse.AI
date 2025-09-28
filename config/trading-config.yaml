@@ -41,8 +41,8 @@ trading_engine:
   take_profit_percentage: 3.0          # 3% take profit
   max_hold_time_hours: 24              # 24 hour maximum hold time
   
-  # Trading controls
-  max_daily_positions: 20              # Maximum positions per day
+  # Trading controls - SMALL TRADES OPTIMIZATION
+  max_daily_positions: 50              # Maximum positions per day (increased for scalping)
   micro_swing_threshold: 0.002         # Micro swing detection (0.2%)
   
   # AI Model weights

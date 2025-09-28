@@ -30,6 +30,7 @@ import asyncio
 import logging
 import numpy as np
 import pickle
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timezone
@@ -107,6 +108,15 @@ class IntelligentExitEngine:
         self.consensus_threshold = 0.50   # SCALPING: Lower consensus for faster exits (was 65%)
         self.emergency_threshold = 0.90   # SCALPING: Quicker emergency exits (was 95%)
         self.scalping_mode = True         # NEW: Enable scalping optimizations
+        
+        # EXIT HYSTERESIS: Prevent aggressive exits
+        self.MIN_HOLD_SECONDS = 90        # Don't exit faster than 90s after entry
+        self.MIN_ABS_PNL_BP = 8           # Min abs PnL in basis points (0.08%) to consider EXIT
+        self.REVERSAL_CONFIRM_TICKS = 2   # Reversal > 0.75 must be confirmed N ticks
+        self.DONOT_EXIT_IF_ENTRY_BUY = 15 # If fresh BUY (<=15s), ignore reversal unless PnL<-0.25%
+        self._rev_hits = {}               # Track reversal confirmation hits
+        self._last_exit_at = {}           # Track last exit time per symbol
+        self.REENTRY_COOLDOWN_S = 60      # Cooldown period after exit
         
         # SCALPING MODE - Professional Parameters for Conservative Scalping
         self.current_mode = "scalping"  # NEW: Set scalping as default
@@ -306,7 +316,7 @@ class IntelligentExitEngine:
     
     async def analyze_exit_conditions(self, symbol: str, position_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyze exit conditions for a position using 6-layer AI analysis
+        Analyze exit conditions for a position using 6-layer AI analysis with hysteresis
         
         Args:
             symbol: Trading symbol
@@ -322,6 +332,37 @@ class IntelligentExitEngine:
         logger.info(f"🎯 PIPELINE DEBUG: Exit Engine - Analyzing exit conditions for {symbol}")
         logger.info(f"📊 PIPELINE DEBUG: Exit Engine - Position ID: {position_data.get('position_id', 'Unknown')}")
         logger.info(f"💼 PIPELINE DEBUG: Exit Engine - Position data keys: {list(position_data.keys()) if position_data else 'None'}")
+        
+        # HYSTERESIS CHECK: Minimum hold time and PnL thresholds
+        position_id = position_data.get('position_id', '')
+        entry_time_str = position_data.get('entry_time')
+        if entry_time_str:
+            try:
+                if isinstance(entry_time_str, str):
+                    entry_time = datetime.fromisoformat(entry_time_str.replace('Z', '+00:00'))
+                else:
+                    entry_time = entry_time_str
+                
+                age_s = (datetime.now(timezone.utc) - entry_time.replace(tzinfo=timezone.utc)).total_seconds()
+                
+                # Get current price for PnL calculation
+                current_price = await get_live_bitcoin_price()
+                entry_price = position_data.get('entry_price', current_price)
+                pnl_pct = ((current_price - entry_price) / entry_price) if entry_price else 0.0
+                abs_bp = abs(pnl_pct) * 10000  # Convert to basis points
+                
+                # MIN HOLD TIME CHECK
+                if age_s < self.MIN_HOLD_SECONDS:
+                    logger.info(f"⏳ Position {position_id} too fresh ({age_s:.0f}s < {self.MIN_HOLD_SECONDS}s) - HOLD")
+                    return self._create_hold_result("min_hold_time", age_s, current_price)
+                
+                # PNL HYSTERESIS CHECK  
+                if abs_bp < self.MIN_ABS_PNL_BP:
+                    logger.info(f"📊 Position {position_id} PnL too small ({abs_bp:.1f}bp < {self.MIN_ABS_PNL_BP}bp) - HOLD")
+                    return self._create_hold_result("pnl_hysteresis", abs_bp, current_price)
+                    
+            except Exception as e:
+                logger.warning(f"Failed to parse entry time for hysteresis check: {e}")
         
         start_time = datetime.now()
         
@@ -370,6 +411,23 @@ class IntelligentExitEngine:
             # Calculate consensus decision
             exit_decision = await self._calculate_exit_consensus(layer_results)
             
+            # REVERSAL CONFIRMATION: Track reversal hits for confirmation
+            if position_id and "layer_3_reversal" in layer_results:
+                reversal_data = layer_results["layer_3_reversal"]
+                reversal_score = reversal_data.get("confidence", 0.0) if reversal_data.get("recommendation") == "exit" else 0.0
+                
+                if reversal_score > 0.75:
+                    self._rev_hits[position_id] = self._rev_hits.get(position_id, 0) + 1
+                else:
+                    self._rev_hits[position_id] = 0
+                
+                # Require confirmation for reversal exits
+                if (exit_decision.get("reason") == "consensus_exit" and 
+                    reversal_score > 0.75 and 
+                    self._rev_hits[position_id] < self.REVERSAL_CONFIRM_TICKS):
+                    logger.info(f"🔄 Reversal needs confirmation: {self._rev_hits[position_id]}/{self.REVERSAL_CONFIRM_TICKS} ticks")
+                    return self._create_hold_result("need_reversal_confirmation", self._rev_hits[position_id], current_price)
+            
             # Check for emergency conditions
             emergency_conditions = self._check_emergency_conditions(
                 position_data, current_price, market_data
@@ -404,6 +462,10 @@ class IntelligentExitEngine:
             self.total_analyses += 1
             if not exit_decision["should_exit"] and position_data.get("manual_close_requested", False):
                 self.blind_closes_prevented += 1
+            
+            # Record exit decision for cooldown tracking
+            if exit_decision["should_exit"]:
+                self._last_exit_at[symbol] = datetime.now(timezone.utc).timestamp()
             
             # Create comprehensive result
             result = {
@@ -441,6 +503,33 @@ class IntelligentExitEngine:
         except Exception as e:
             logger.error(f"❌ Exit analysis failed: {e}")
             raise
+    
+    def _create_hold_result(self, reason: str, value: float, current_price: float) -> Dict[str, Any]:
+        """Create a standardized HOLD result for hysteresis checks"""
+        return {
+            "should_exit": False,
+            "confidence": 0.3,
+            "exit_reason": reason,
+            "consensus_score": 0.0,
+            "layer_analysis": {},
+            "emergency_conditions": {"emergency_exit": False, "reasons": [], "severity": "normal"},
+            "current_price": current_price,
+            "analysis_time_ms": 0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "engine_status": "operational",
+            "layer_health": self.layer_health.copy(),
+            "position_id": None,
+            "symbol": None,
+            "entry_price": 0,
+            "current_pnl": 0.0,
+            "pnl_percent": 0.0,
+            "position_age_hours": 0.0,
+            "risk_score": 0.5,
+            "drawdown": 0.0,
+            "volatility": 0.0,
+            "hysteresis_reason": reason,
+            "hysteresis_value": value
+        }
 
     async def _evaluate_atr_trailing_and_time_stop(
         self,
@@ -582,9 +671,9 @@ class IntelligentExitEngine:
             logger.warning(f"Layer 5 (Confidence) failed: {e}")
             layer_results["layer_5_confidence"] = {"recommendation": "uncertain", "confidence": 0.0}
         
-        # Layer 6: Adaptive Timing
+        # Layer 6: Adaptive Timing - FIXED: Pass layer_results for reversal integration
         try:
-            timing_analysis = await self._analyze_exit_timing(position_data, market_data, current_price)
+            timing_analysis = await self._analyze_exit_timing(position_data, market_data, current_price, layer_results)
             layer_results["layer_6_timing"] = timing_analysis
         except Exception as e:
             logger.warning(f"Layer 6 (Timing) failed: {e}")
@@ -673,7 +762,7 @@ class IntelligentExitEngine:
                         # Build proper timestep window for LSTM
                         try:
                             input_seq = self._build_lstm_window(symbol, timeframe, model, market_data, current_price)
-                            pred = model.predict(input_seq, verbose=0)[0][0]
+                            pred = model.predict(input_seq)[0][0]
                             predictions[timeframe] = float(pred)
                             price_changes.append((pred - current_price) / current_price)
                             logger.debug(f"LSTM window OK: {input_seq.shape} → y={pred:.4f}")
@@ -839,7 +928,10 @@ class IntelligentExitEngine:
                 logger.debug(f"🔍 REVERSAL MODEL: Feature array shape: {feature_array.shape} (expecting: (1, 8))")
 
                 # Get raw prediction and apply adaptive confidence calibration
-                raw_proba = self.models["reversal"].predict_proba(feature_array)[0][1]
+                # Suppress model warnings during prediction
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    raw_proba = self.models["reversal"].predict_proba(feature_array)[0][1]
                 reversal_prob = adaptive_confidence_calibration(raw_proba, model_type="reversal")
 
                 # Log prediction details for debugging
@@ -1025,7 +1117,7 @@ class IntelligentExitEngine:
             "reasoning": f"Consensus: {exit_votes} exit, {hold_votes} hold votes with {avg_confidence:.1%} avg confidence"
         }
     
-    async def _analyze_exit_timing(self, position_data: Dict[str, Any], market_data: Dict[str, Any], current_price: float) -> Dict[str, Any]:
+    async def _analyze_exit_timing(self, position_data: Dict[str, Any], market_data: Dict[str, Any], current_price: float, layer_results: Dict[str, Any] = None) -> Dict[str, Any]:
         """Layer 6: Analyze exit timing optimization"""
         
         # Get position metrics
@@ -1046,42 +1138,64 @@ class IntelligentExitEngine:
         market_hours = True  # Bitcoin trades 24/7 - always market hours
         position_mature = position_age > 0.17  # DAY TRADING: 10 minutes = mature (scalping)
         
-        # DAY TRADING: AGGRESSIVE SCALPING - więcej trades, mniejsze zyski
-        excellent_profit = current_pnl_pct > 0.4  # 0.4%+ = quick profit target ($240-300)
-        good_profit = current_pnl_pct > 0.25     # 0.25%+ = good profit, exit quickly
-        small_profit = current_pnl_pct > 0.15    # 0.15%+ = take any profit fast
-        stop_loss_hit = current_pnl_pct < -1.5   # 1.5% stop loss (wider for Bitcoin volatility)
-        profitable = current_pnl_pct > 0.05      # 0.05%+ = any profit counts in scalping
+        # SMART DAY TRADING: Dynamic exits based on market conditions and reversal signals
+        excellent_profit = current_pnl_pct > 0.8  # 0.8%+ = excellent profit ($400+ on $50K)
+        good_profit = current_pnl_pct > 0.4       # 0.4%+ = good profit ($200+ on $50K)  
+        small_profit = current_pnl_pct > 0.15     # 0.15%+ = small profit ($75+ on $50K)
+        stop_loss_hit = current_pnl_pct < -1.5    # 1.5% stop loss (wider for Bitcoin volatility)
+        any_profit = current_pnl_pct > 0.05       # Any profit (for reversal detection)
         
-        # DAY TRADING: AGGRESSIVE SCALPING EXIT LOGIC WITH VOLATILITY
-        if extreme_volatility and profitable:  # High volatility + any profit = EXIT NOW!
+        # SMART EXIT: Get reversal signals from Layer 3 - FIXED: Handle None layer_results
+        if layer_results:
+            reversal_data = layer_results.get("layer_3_reversal", {})
+            reversal_recommendation = reversal_data.get("recommendation", "hold") 
+            reversal_confidence = reversal_data.get("confidence", 0.0)
+            reversal_detected = reversal_recommendation == "exit" and reversal_confidence > 0.7
+        else:
+            reversal_detected = False
+            reversal_confidence = 0.0
+        
+        # SMART EXIT LOGIC: Integrates reversal detection with profit thresholds  
+        if stop_loss_hit:  # Always exit on stop loss
             recommendation = "exit"
             confidence = 0.98
-            timing_score = 0.98
-        elif excellent_profit:  # 0.4%+ profit = immediate exit
-            recommendation = "exit"
-            confidence = 0.95
             timing_score = 0.95
-        elif good_profit and (position_mature or high_volatility):  # 0.25%+ profit + conditions
-            recommendation = "exit"
-            confidence = 0.9
-            timing_score = 0.9
-        elif small_profit and (position_age > 0.33 or high_volatility):  # 0.15%+ profit + conditions
+            reason = "stop_loss"
+        elif reversal_detected and any_profit:  # SMART: Exit on reversal if any profit
             recommendation = "exit"
             confidence = 0.85
-            timing_score = 0.8
-        elif profitable and position_age > 0.5:  # Any profit after 30 minutes
+            timing_score = 0.80
+            reason = "reversal_with_profit"
+        elif excellent_profit:  # 0.8%+ profit = excellent exit 
             recommendation = "exit"
-            confidence = 0.8
+            confidence = 0.90
+            timing_score = 0.85
+            reason = "excellent_profit"
+        elif good_profit and reversal_detected:  # 0.4%+ profit + reversal = exit
+            recommendation = "exit"
+            confidence = 0.85
+            timing_score = 0.80
+            reason = "good_profit_with_reversal"
+        elif good_profit and extreme_volatility:  # 0.4%+ profit + extreme volatility = exit
+            recommendation = "exit"
+            confidence = 0.80
             timing_score = 0.75
-        elif stop_loss_hit:  # 1.5% stop loss hit
+            reason = "profit_with_volatility"
+        elif small_profit and position_age > 0.5:  # 0.15%+ profit after 30 minutes
             recommendation = "exit"
-            confidence = 0.98
-            timing_score = 0.95
+            confidence = 0.70
+            timing_score = 0.65
+            reason = "time_based_profit"
+        elif any_profit and position_age > 1.0:  # Any profit after 1 hour = take it
+            recommendation = "exit"
+            confidence = 0.75
+            timing_score = 0.70
+            reason = "extended_hold_profit"
         else:
             recommendation = "hold"
             confidence = 0.3
             timing_score = 0.2
+            reason = "continue_holding"
         
         return {
             "recommendation": recommendation,
@@ -1092,8 +1206,10 @@ class IntelligentExitEngine:
             "high_volume": high_volume,
             "market_hours": market_hours,
             "position_mature": position_mature,
-            "profitable": profitable,
-            "reasoning": f"Timing score: {timing_score:.1f}, PnL: {current_pnl_pct:+.1f}%, Age: {position_age:.1f}h, Vol: {volatility:.1%}"
+            "profitable": any_profit,
+            "reversal_detected": reversal_detected,
+            "exit_reason": reason,
+            "reasoning": f"SMART EXIT: {reason} | PnL: {current_pnl_pct:+.2f}% | Age: {position_age:.1f}h | Reversal: {reversal_detected}"
         }
     
     async def _calculate_exit_consensus(self, layer_results: Dict[str, Any]) -> Dict[str, Any]:
@@ -1325,6 +1441,23 @@ class IntelligentExitEngine:
             "consensus_threshold": self.consensus_threshold,
             "status": "operational" if self.is_initialized else "initializing"
         }
+    
+    def check_reentry_cooldown(self, symbol: str) -> bool:
+        """Check if symbol is in re-entry cooldown period"""
+        if symbol not in self._last_exit_at:
+            return False
+        
+        time_since_exit = datetime.now(timezone.utc).timestamp() - self._last_exit_at[symbol]
+        return time_since_exit < self.REENTRY_COOLDOWN_S
+    
+    def get_cooldown_remaining(self, symbol: str) -> float:
+        """Get remaining cooldown time in seconds"""
+        if symbol not in self._last_exit_at:
+            return 0.0
+        
+        time_since_exit = datetime.now(timezone.utc).timestamp() - self._last_exit_at[symbol]
+        remaining = self.REENTRY_COOLDOWN_S - time_since_exit
+        return max(0.0, remaining)
     
     def get_performance_metrics(self) -> Dict[str, Any]:
         """Get engine performance metrics"""

@@ -82,7 +82,7 @@ export default function TradeHistory({
       
       // PRODUCTION: Fetch real trade history from professional backend
       const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-      const response = await fetch(`http://localhost:9002/api/trading/trades/history?limit=${limit}`, {
+      const response = await fetch(`/api/trading/trades/history?limit=${limit}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

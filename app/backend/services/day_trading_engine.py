@@ -140,13 +140,13 @@ class DayTradingEngine:
         self.mode_configs = {
             TradingMode.DAY_TRADING: TradingModeConfig(
                 mode=TradingMode.DAY_TRADING,
-                analysis_interval=12,       # 12 seconds - SCALPING: szybsze reakcje
+                analysis_interval=8,        # 8 seconds - MICRO SCALPING: jeszcze szybsze (was 12s)
                 position_duration=900,     # 15 minutes average (krótsze pozycje)
-                confidence_threshold=0.35,  # SCALPING: 35% confidence (więcej sygnałów dla testów)
-                max_positions=int(getattr(s, "MAX_CONCURRENT_POSITIONS", 8)),
-                position_size_pct=0.020,   # SCALPING: 2.0% per position (~$1,000 for $40 profit targets)
-                stop_loss_pct=0.005,       # SCALPING: 0.5% = $50 max strata
-                take_profit_pct=0.004      # SCALPING: 0.4% = $40 target zysk
+                confidence_threshold=0.30,  # JUMP CATCHING: 30% confidence (więcej okazji na reversal)
+                max_positions=int(getattr(s, "MAX_CONCURRENT_POSITIONS", 12)),  # Więcej małych pozycji (was 8)
+                position_size_pct=0.015,   # SMALL TRADES: 1.5% per position (~$750 for $30 profit targets)
+                stop_loss_pct=0.004,       # TIGHT: 0.4% = $40 max loss (tighter)
+                take_profit_pct=0.003      # FREQUENT: 0.3% = $30 target (więcej okazji)
             )
         }
         
@@ -173,7 +173,9 @@ class DayTradingEngine:
             # Get engines from DI container (they're already initialized)
             logger.info("🤖 PIPELINE DEBUG: Day Trading Engine - Retrieving Enterprise Engine...")
             try:
-                self.enterprise_engine = container.get("enterprise_trading_engine")
+                enterprise_engine_obj = container.get("enterprise_trading_engine")
+                from app.backend.core.container import require_instance
+                self.enterprise_engine = require_instance("enterprise_trading_engine", enterprise_engine_obj)
                 logger.info("✅ Enterprise engine retrieved from DI container")
                 logger.info("✅ PIPELINE DEBUG: Day Trading Engine - Enterprise Engine connected")
             except Exception:
@@ -189,14 +191,14 @@ class DayTradingEngine:
                 await container._initialize_ai_services()
                 
                 logger.info("🤖 PIPELINE DEBUG: Day Trading Engine - Retrieving Entry Engine from DI...")
-                entry_engine_factory = container.get("entry_engine")
-                if entry_engine_factory is None:
-                    raise ValueError("Entry engine factory not found in DI container")
-                
-                # Get the already initialized Entry Engine
-                self.entry_engine = entry_engine_factory()  # This should return initialized instance
+                self.entry_engine = container.get("entry_engine")
                 if self.entry_engine is None:
-                    raise ValueError("Entry engine is None from DI container factory")
+                    raise ValueError("Entry engine not found in DI container")
+                
+                # FIXED: Direct instance access (no function call needed)
+                logger.info(f"✅ Retrieved Entry Engine instance: {type(self.entry_engine).__name__}")
+                if self.entry_engine is None:
+                    raise ValueError("Entry engine is None from DI container")
                 
                 logger.info("✅ PIPELINE DEBUG: Day Trading Engine - Using shared Entry Engine from DI")
                 
@@ -206,14 +208,14 @@ class DayTradingEngine:
                 logger.error(f"❌ Entry engine DI retrieval failed: {e}")
                 logger.warning("⚠️ PIPELINE DEBUG: Day Trading Engine - Creating and registering Entry Engine")
                 
-                # Create and register in container to avoid duplication
+                # FIXED: Create and register instance directly to avoid callable errors
                 from app.backend.services.intelligent_entry_engine import IntelligentEntryEngine
                 self.entry_engine = IntelligentEntryEngine()
                 await self.entry_engine.initialize()
                 
-                # Register in container to prevent future duplication
+                # FIXED: Register direct instance (not lambda) to prevent callable errors
                 try:
-                    container.register_singleton("entry_engine", lambda: self.entry_engine)
+                    container.register_singleton("entry_engine", self.entry_engine)  # Direct instance
                     logger.info("✅ Entry Engine registered in DI container")
                 except:
                     pass  # Continue if registration fails
@@ -223,8 +225,15 @@ class DayTradingEngine:
                 logger.info("✅ Exit engine retrieved from DI container")
             except Exception:
                 logger.warning("⚠️ Exit engine not in DI, creating local instance")
+                from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
                 self.exit_engine = IntelligentExitEngine()
                 await self.exit_engine.initialize()
+                # FIXED: Register immediately to prevent orphans
+                try:
+                    container.register_singleton("exit_engine", self.exit_engine)
+                    logger.info("✅ Exit Engine registered in DI container")
+                except:
+                    pass
             
             # PHASE 1A: Use DI container for risk and safety systems
             logger.info("🛡️ Getting professional risk management from DI...")
@@ -233,8 +242,15 @@ class DayTradingEngine:
                 logger.info("✅ Risk manager retrieved from DI container")
             except Exception:
                 logger.warning("⚠️ Risk manager not in DI, creating local instance")
+                from app.backend.services.dynamic_risk_manager import DynamicRiskManager
                 self.risk_manager = DynamicRiskManager()
                 await self.risk_manager.initialize()
+                # FIXED: Register immediately to prevent orphans
+                try:
+                    container.register_singleton("risk_manager", self.risk_manager)
+                    logger.info("✅ Risk Manager registered in DI container")
+                except:
+                    pass
             
             logger.info("🚨 Initializing emergency control system...")
             self.emergency_system = EmergencyControlSystem()
@@ -467,7 +483,16 @@ class DayTradingEngine:
             logger.error(f"❌ Position monitoring failed: {e}")
     
     async def _is_duplicate_entry(self, signal, portfolio) -> bool:
-        """Check if this entry would be a duplicate of recent positions"""
+        """Check if this entry would be a duplicate of recent positions - SCALPING OPTIMIZED"""
+        
+        # AGGRESSIVE SCALPING: Bypass duplicate prevention for high confidence signals
+        # This enables rapid re-entry for profitable setups
+        if hasattr(signal, 'confidence') and signal.confidence > 0.75:  # Lower threshold to 75%
+            logger.info(f"🚀 HIGH CONFIDENCE BYPASS ({signal.confidence:.1%}) - allowing rapid re-entry")
+            return False
+            
+        # SCALPING MODE: Much more permissive duplicate checking
+        # For small trades, we want more opportunities, not strict prevention
         try:
             current_time = datetime.now(timezone.utc)
             current_price = await get_live_bitcoin_price()
@@ -501,11 +526,12 @@ class DayTradingEngine:
             except Exception:
                 pass
 
-            # Adapt price deltas and windows based on realized vol
-            adapt_active_delta = max(active_delta, 0.4 * realized_vol_5m)
-            adapt_closed_delta = max(closed_delta, 0.5 * realized_vol_5m)
-            adapt_active_window = max(20, int(active_window * (0.7 if realized_vol_5m > 0.0015 else 1.0)))
-            adapt_closed_window = max(300, int(closed_window * (0.6 if realized_vol_5m > 0.0015 else 1.0)))
+            # ULTRA-AGGRESSIVE SCALPING: Minimal duplicate prevention for rapid trading
+            adapt_active_delta = max(active_delta, 1.0 * realized_vol_5m)  # Very tolerant
+            adapt_closed_delta = max(closed_delta * 3.0, 1.2 * realized_vol_5m)  # Extremely tolerant for re-entry  
+            adapt_active_window = max(10, int(active_window * (0.5 if realized_vol_5m > 0.0015 else 0.8)))  # Shorter active window
+            # MICRO-SCALPING: Absolute minimum re-entry cooldown
+            adapt_closed_window = max(5, int(closed_window * (0.2 if realized_vol_5m > 0.0015 else 0.3)))  # 5s minimum for micro-trades
 
             # Check recent positions (active) within adaptive window
             for position in portfolio.get_active_positions():
@@ -541,8 +567,11 @@ class DayTradingEngine:
                             (signal.action == "SELL" and position.type == PositionType.SHORT)
                         )
                         
-                        if same_direction and price_diff < adapt_closed_delta:
-                            logger.warning(f"🚫 Re-entry too soon: {signal.action} position closed {time_diff/60:.1f}min ago")
+                        # SCALPING FIX: Allow re-entry if different playbook or significant price move
+                        playbook_match = getattr(signal, 'playbook', 'default') == getattr(position, 'playbook', 'default')
+                        
+                        if same_direction and price_diff < adapt_closed_delta and playbook_match:
+                            logger.warning(f"🚫 Re-entry too soon: {signal.action} position closed {time_diff/60:.1f}min ago (same playbook)")
                             try:
                                 from app.backend.services.metrics import inc_decision_dupe
                                 inc_decision_dupe("reentry_cooldown")
@@ -676,15 +705,35 @@ class DayTradingEngine:
             except Exception:
                 pass
             
-            # (B) Safety first - hard stop check (EMERGENCY CONTROLS)
-            if self.emergency_system and await self.emergency_system.is_trading_halted():
-                logger.warning("🚨 EMERGENCY: Trading halted by emergency controls")
-                # Cancel all positions and return
-                portfolio = await get_professional_portfolio("admin")
-                active_positions = portfolio.get_active_positions()
-                for position in active_positions:
-                    await portfolio.close_position(position.position_id, "emergency_halt")
-                return
+            # (B) SMART EMERGENCY: Separate data-plane vs control-plane
+            try:
+                from app.backend.services.smart_emergency_controller import get_smart_emergency_controller
+                smart_emergency = get_smart_emergency_controller()
+                emergency_state = smart_emergency.evaluate()
+                
+                if emergency_state == "halt":
+                    logger.critical("🚨 EMERGENCY HALT: Both data and control planes failed")
+                    # Full stop - close all positions
+                    portfolio = await get_professional_portfolio("admin")
+                    active_positions = portfolio.get_active_positions()
+                    for position in active_positions:
+                        await portfolio.close_position(position.position_id, "emergency_halt")
+                    return
+                elif emergency_state == "pause":
+                    logger.warning(f"⏸️ EMERGENCY PAUSE: New entries blocked (API fail rate: {smart_emergency.api.fail_rate:.2f})")
+                    # Only manage existing positions - no new entries
+                    await self._monitor_open_positions()
+                    return
+                else:
+                    # NORMAL - proceed with full trading
+                    logger.debug(f"✅ Emergency status: {emergency_state}")
+                    
+            except Exception as e:
+                logger.error(f"Smart emergency check failed: {e}")
+                # Fallback to legacy emergency system
+                if self.emergency_system and await self.emergency_system.is_trading_halted():
+                    logger.warning("🚨 EMERGENCY: Trading halted by legacy emergency controls")
+                    return
             
             # (C) Enterprise signal (6-layer analysis) with REAL DATA
             signal = await self.enterprise_engine.generate_signal("BTCUSDT", market_snapshot=market_data.get("snapshot", market_data))
@@ -1184,11 +1233,14 @@ class DayTradingEngine:
     
     def _get_session_confidence_multiplier(self) -> float:
         """Get confidence multiplier based on current trading session"""
+        # BITCOIN JUMP CATCHING - Higher multipliers for volatility sessions
         session_multipliers = {
-            TradingSession.ASIAN: 0.85,      # Lower volatility
-            TradingSession.EUROPEAN: 1.0,    # Standard
-            TradingSession.AMERICAN: 1.1,    # Higher volume
-            TradingSession.OVERLAP_EU_US: 1.2 # Highest liquidity
+            TradingSession.ASIAN: 0.80,            # Lower volatility (reduced from 0.85)
+            TradingSession.EUROPEAN: 1.0,          # Standard
+            TradingSession.AMERICAN: 1.15,         # Higher Bitcoin activity (increased from 1.1)
+            TradingSession.OVERLAP_EU_US: 1.30,    # Peak volatility for Bitcoin (increased from 1.2)
+            TradingSession.OVERLAP_ASIAN_EU: 1.10, # Morning volatility
+            TradingSession.OVERLAP_US_ASIAN: 1.05  # Evening overlap
         }
         
         base_multiplier = session_multipliers.get(self.current_session, 1.0)

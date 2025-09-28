@@ -699,16 +699,31 @@ class DynamicRiskManager:
             active_positions = portfolio.get_active_positions() if hasattr(portfolio, 'get_active_positions') else []
             
             for position in active_positions:
-                # Dynamic trailing stop (simplified implementation)
+                # Dynamic trailing stop with caps for aggressive adjustments
                 if hasattr(position, 'position_id') and hasattr(position, 'stop_loss'):
                     new_stop = self._calculate_trailing_stop(position, tick)
+                    
+                    # CAP AGGRESSIVE TRAILING: Limit max trailing stop adjustment from entry
+                    MAX_TS_FROM_ENTRY_BP = 60  # Max 0.60% from entry price at start
+                    entry_price = getattr(position, 'entry_price', tick.get('tick', 0.0))
+                    if entry_price > 0:
+                        max_stop_from_entry = entry_price * (1 - 0.006)  # 0.60% max drawdown
+                        new_stop = max(max_stop_from_entry, new_stop)  # Don't go below cap
+                    
                     if new_stop != position.stop_loss:
-                        logger.debug(f"Adjusting trailing stop for {position.position_id}: {position.stop_loss} -> {new_stop}")
+                        old_stop = position.stop_loss
+                        change_pct = ((new_stop - old_stop) / old_stop) * 100 if old_stop else 0
+                        logger.info(f"📊 Adjusting trailing stop: {position.position_id} {old_stop:.2f} -> {new_stop:.2f} ({change_pct:+.1f}%)")
                         
-                # VaR monitoring (simplified)
+                # VaR monitoring with proper caps for day trading
                 var_risk = self._calculate_position_var(position, tick)
-                if var_risk > 0.05:  # 5% VaR limit
-                    logger.warning(f"🚨 High VaR: {position.position_id} - {var_risk:.1%}")
+                # CAP VaR for day trading: Max 15% VaR tolerance (fresh positions can be volatile)
+                var_threshold = 0.15  # 15% VaR limit for day trading
+                
+                if var_risk > var_threshold:
+                    # Ensure VaR is properly bounded
+                    var_pct = min(max(var_risk * 100.0, 0.0), 100.0)  # 0-100% bounds
+                    logger.warning(f"🚨 High VaR (capped): {position.position_id} - {var_pct:.1f}% (threshold: {var_threshold*100:.1f}%)")
                     
         except Exception as e:
             logger.error(f"In-position risk assessment failed: {e}")
@@ -736,7 +751,7 @@ class DynamicRiskManager:
             return 0.5  # Medium risk default
             
     def _calculate_trailing_stop(self, position, tick) -> float:
-        """Calculate trailing stop price"""
+        """Calculate conservative trailing stop price for day trading"""
         try:
             if hasattr(tick, 'get'):
                 current_price = tick.get('price', 0)
@@ -745,25 +760,43 @@ class DynamicRiskManager:
             else:
                 current_price = float(tick)
                 
-            # Simple trailing stop (2% below current price for long positions)
+            # Get entry price for position age check
+            entry_price = float(getattr(position, 'entry_price', current_price))
+            current_stop = float(getattr(position, 'stop_loss', entry_price * 0.97))
+            
+            # CONSERVATIVE DAY TRADING: Only tighten stop loss, never widen it
             if hasattr(position, 'type') and hasattr(position.type, 'value') and position.type.value.upper() == 'LONG':
-                return current_price * 0.98
+                # For LONG: New stop is 1% below current price, but never below current stop
+                potential_stop = current_price * 0.99  # More conservative 1% (was 2%)
+                return max(potential_stop, current_stop)  # Only tighten, never loosen
             else:
-                return current_price * 1.02
+                # For SHORT: New stop is 1% above current price, but never above current stop  
+                potential_stop = current_price * 1.01
+                return min(potential_stop, current_stop)  # Only tighten, never loosen
                 
         except Exception:
             return getattr(position, 'stop_loss', 0)
             
     def _calculate_position_var(self, position, tick) -> float:
-        """Calculate position Value at Risk"""
+        """Calculate position Value at Risk as percentage (0-1 range)"""
         try:
-            # Simplified VaR calculation
-            if hasattr(position, 'size') and hasattr(position, 'entry_price'):
-                position_value = float(position.size) * float(position.entry_price)
-                return position_value * 0.02  # 2% VaR assumption
-            return 0.0
+            # Return VaR as percentage for day trading
+            # For new positions, VaR can be higher due to initial volatility
+            if hasattr(position, 'entry_price') and hasattr(position, 'current_price'):
+                entry_price = float(getattr(position, 'entry_price', 0))
+                current_price = float(getattr(position, 'current_price', entry_price))
+                
+                if entry_price > 0:
+                    # VaR based on current price deviation from entry
+                    price_change_pct = abs(current_price - entry_price) / entry_price
+                    # Cap at reasonable bounds for day trading (max 20%)
+                    var_pct = min(price_change_pct + 0.02, 0.20)  # Add 2% base VaR
+                    return var_pct
+            
+            # Default 2% VaR for new positions
+            return 0.02
         except Exception:
-            return 0.0
+            return 0.02
             
     async def _calculate_current_volatility_from_candles(self, candles) -> float:
         """Calculate current market volatility from candle data"""

@@ -24,18 +24,19 @@ prometheus-client==0.21.0
 aiohttp==3.12.15
 websockets==15.0.1
 requests==2.31.0
+tenacity==9.1.2
 
 # AWS SDK (DynamoDB Local / AWS)
 boto3==1.34.0
 botocore==1.34.0
 
-# AI/ML stack used by enterprise engine - compatible versions for Python 3.13
-numpy>=2.1.0
-scikit-learn>=1.7.1
-# Classical models may depend on gradient boosters
-xgboost==3.0.4
-lightgbm==4.6.0
-# TensorFlow STABLE VERSION - OFFICIALLY SUPPORTED
+# AI/ML stack - Python 3.11 compatible versions 
+numpy>=1.23.5,<2.0.0
+scikit-learn==1.7.1
+# Classical models may depend on gradient boosters - FIXED: Exact versions
+xgboost==2.1.3
+lightgbm==4.3.0
+# TensorFlow STABLE VERSION - Python 3.11 compatible
 tensorflow==2.16.1
 # NOTE: Using official stable TensorFlow 2.16.1 from https://www.tensorflow.org/api_docs
 # TensorFlow 2.20.0 had mutex deadlock - FIXED by using stable version

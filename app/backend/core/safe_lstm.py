@@ -44,8 +44,10 @@ class SafeLSTM:
             self._in_call = True
             logger.debug(f"🔍 LSTM {self.model_name} predicting on shape {X.shape}")
             
-            # Call actual model with verbose=0 to reduce noise
-            result = self.model.predict(X, verbose=0, **kwargs)
+            # Call actual model - remove verbose parameter to avoid API conflict
+            # Filter out verbose from kwargs if present to prevent duplicate parameter error
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'verbose'}
+            result = self.model.predict(X, **filtered_kwargs)
             
             logger.debug(f"✅ LSTM {self.model_name} prediction completed")
             return result

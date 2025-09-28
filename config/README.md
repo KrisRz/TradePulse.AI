@@ -4,7 +4,7 @@
 
 This folder contains **simplified trading configuration** for TradePulse.AI. The configuration has been streamlined to focus only on core trading parameters that affect AI behavior and risk management.
 
-> **Note**: Infrastructure settings (AWS, database, networking) are now managed by Terraform in `/infra/terraform/` for professional deployment.
+> **Note**: Infrastructure settings (database, networking) are managed separately from trading configuration.
 
 ## Configuration Files Structure
 
@@ -17,7 +17,7 @@ config/
 ## Configuration Philosophy
 
 **What's included**: Core trading logic, AI thresholds, risk management
-**What's removed**: Infrastructure settings (now in Terraform), duplicated environment configs
+**What's removed**: Infrastructure settings (managed separately), duplicated environment configs
 
 The configuration focuses on parameters that directly affect:
 - ✅ **Trading signals generation**
@@ -302,10 +302,10 @@ trading_engine:
 4. **Monitor system behavior**
 5. **Rollback if issues detected**
 
-### AWS Deployment Considerations
+### Deployment Considerations
 - **Environment variables** override YAML settings
-- **Configuration persistence** across container restarts
-- **Centralized configuration management** for multi-instance deployments
+- **Configuration persistence** across application restarts
+- **File-based configuration management**
 - **Configuration backup and restore** procedures
 
 ## Support and Troubleshooting

@@ -148,7 +148,8 @@ def bootstrap_all_tables():
         schemas.get_announcements_schema(),
         schemas.get_user_notification_preferences_schema(),
         schemas.get_notification_templates_schema(),
-        TableSchemas.get_health_checks_schema()
+        TableSchemas.get_health_checks_schema(),
+        TableSchemas.get_trade_analyses_schema()
     ]
     
     success_count = 0

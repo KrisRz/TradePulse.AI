@@ -1,0 +1,31 @@
+# TradePulse.AI Terraform Variables
+# Copy this file to terraform.tfvars and customize the values
+
+# Basic Configuration
+region       = "eu-central-1"
+environment  = "prod"
+project_name = "tradepulse"
+
+# Binance API Credentials (required)
+binance_api_key    = "your-binance-api-key-here"
+binance_api_secret = "your-binance-api-secret-here"
+
+# App Runner Configuration
+app_runner_cpu    = "1024"  # 1 vCPU
+app_runner_memory = "2048"  # 2 GB
+app_runner_min_size = 1
+app_runner_max_size = 3
+
+# Network Configuration (VPC adds ~$45/month NAT Gateway cost)
+enable_vpc = false  # Keep disabled for cost optimization
+
+# Monitoring
+enable_monitoring = true
+
+# GitHub Repository (for OIDC)
+github_repo   = "KrisRz/TradePulse.AI"
+github_branch = "main"
+
+# Optional: Custom Domain
+# custom_domain    = "api.tradepulse.ai"
+# hosted_zone_id   = "Z1D633PJN98FT9"

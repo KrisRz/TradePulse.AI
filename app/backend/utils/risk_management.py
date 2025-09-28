@@ -246,7 +246,7 @@ def log_risk_metrics(
                 "risk_pct": float(risk_pct)
             })
 
-        logger.info("Position risk metrics calculated", **log_data)
+        logger.info("Position risk metrics calculated", extra=log_data)
 
     except Exception as e:
         logger.error(f"Failed to calculate risk metrics: {e}")

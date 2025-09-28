@@ -129,7 +129,7 @@ export function useAdminUserActions() {
   const updateUserStatus = async (userId: string, status: string) => {
     try {
       const token = 'enterprise_admin_token';
-      const response = await fetch(`http://localhost:9002/api/admin/users/${userId}`, {
+      const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -153,7 +153,7 @@ export function useAdminUserActions() {
   const updateUserRole = async (userId: string, role: string) => {
     try {
       const token = 'enterprise_admin_token';
-      const response = await fetch(`http://localhost:9002/api/admin/users/${userId}`, {
+      const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

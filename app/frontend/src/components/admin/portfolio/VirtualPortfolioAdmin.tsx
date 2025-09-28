@@ -75,7 +75,7 @@ export default function VirtualPortfolioAdmin() {
       setError(null);
       
       // Use CORRECT portfolio overview endpoint with REAL DATA
-      const portfolioResponse = await fetch('http://localhost:9002/api/portfolio/virtual/overview', {
+      const portfolioResponse = await fetch('/api/portfolio/virtual/overview', {
         headers: {
           'Authorization': 'Bearer enterprise_admin_token',
           'Content-Type': 'application/json'
@@ -167,7 +167,7 @@ export default function VirtualPortfolioAdmin() {
   const checkSystemStatus = async () => {
     try {
       // Check engines status
-      const enginesResp = await fetch('http://localhost:9002/api/v1/engines/status');
+      const enginesResp = await fetch('/api/v1/engines/status');
       if (enginesResp.ok) {
         const enginesData = await enginesResp.json();
         const engines = enginesData.engines || {};
