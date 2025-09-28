@@ -8,13 +8,11 @@ terraform {
     }
   }
 
-  # Optional: Terraform Cloud backend
-  # backend "remote" {
-  #   organization = "your-org"
-  #   workspaces {
-  #     name = "tradepulse-prod"
-  #   }
-  # }
+  backend "s3" {
+    bucket = "tradepulse-terraform-state-590183672693"
+    key    = "terraform.tfstate"
+    region = "eu-west-2"
+  }
 }
 
 provider "aws" {

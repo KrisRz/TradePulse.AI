@@ -130,6 +130,7 @@ class SingletonTradingApp:
             import boto3
             from botocore.exceptions import ClientError
             
+            # Use explicit region and let boto3 use instance role credentials
             ddb = boto3.client(
                 "dynamodb",
                 region_name=self.settings.AWS_REGION,

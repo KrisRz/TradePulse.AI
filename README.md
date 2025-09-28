@@ -975,7 +975,7 @@ cd app/frontend && npm install && npm run dev
 
 ### **Demo Credentials:**
 - **Username**: admin@tradepulse.ai
-- **Password**: admin123
+- **Password**: admin0000
 - **Role**: Administrator (full access)
 
 ### **Troubleshooting:**

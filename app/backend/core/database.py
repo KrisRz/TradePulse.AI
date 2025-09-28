@@ -93,11 +93,10 @@ class DynamoDBClient:
                 else:
                     # Only fallback to AWS in production
                     logger.warning("DynamoDB Local not available, falling back to AWS DynamoDB")
+                # Let boto3 use instance role credentials in production
                 self.dynamodb = boto3.resource(
                     'dynamodb',
                     region_name=settings.AWS_REGION,
-                    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                     config=config
                 )
         else:

@@ -110,6 +110,7 @@ resource "aws_iam_policy" "github_actions_policy" {
           "dynamodb:*",
           "ssm:*",
           "logs:*",
+          "cloudwatch:*",
           "ec2:DescribeVpcs",
           "ec2:DescribeSubnets",
           "ec2:DescribeSecurityGroups",
@@ -196,6 +197,14 @@ resource "aws_iam_policy" "app_runner_instance_policy" {
           "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.project_name}_*",
           "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.project_name}_*/index/*"
         ]
+      },
+      {
+        Sid    = "DynamoDBListTables"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:ListTables"
+        ]
+        Resource = ["*"]
       },
       {
         Sid    = "CloudWatchLogs"

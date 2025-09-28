@@ -27,7 +27,7 @@ resource "aws_apprunner_service" "backend" {
 
         # Environment variables (non-sensitive)
         runtime_environment_variables = {
-          ENV                   = var.environment
+          ENVIRONMENT           = var.environment
           AWS_REGION            = var.region
           DYNAMODB_TABLE_PREFIX = "${var.project_name}_"
           PROFESSIONAL_MODE     = "true"
