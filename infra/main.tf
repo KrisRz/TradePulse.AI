@@ -43,26 +43,30 @@ resource "aws_ecr_repository" "backend" {
     scan_on_push = true
   }
 
-  lifecycle_policy {
-    policy = jsonencode({
-      rules = [{
-        rulePriority = 1
-        description  = "Keep last 20 images"
-        selection = {
-          tagStatus     = "any"
-          countType     = "imageCountMoreThan"
-          countNumber   = 20
-        }
-        action = {
-          type = "expire"
-        }
-      }]
-    })
-  }
 
   tags = {
     Name = "${var.project_name}-backend-ecr"
   }
+}
+
+# ECR Lifecycle Policy (separate resource)
+resource "aws_ecr_lifecycle_policy" "backend_lifecycle" {
+  repository = aws_ecr_repository.backend.name
+
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep last 20 images"
+      selection = {
+        tagStatus     = "any"
+        countType     = "imageCountMoreThan"
+        countNumber   = 20
+      }
+      action = {
+        type = "expire"
+      }
+    }]
+  })
 }
 
 # ECR Repository policy for GitHub Actions

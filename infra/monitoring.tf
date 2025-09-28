@@ -64,10 +64,6 @@ resource "aws_cloudwatch_dashboard" "tradepulse" {
       }
     ]
   })
-
-  tags = {
-    Name = "${var.project_name}-dashboard"
-  }
 }
 
 # App Runner Alarms
