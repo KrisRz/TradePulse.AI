@@ -132,13 +132,7 @@ jobs:
 
       - name: Terraform Apply
         run: |
-          terraform apply -auto-approve tfplan \
-            -var="region=eu-west-2" \
-            -var="project_name=tradepulse" \
-            -var="environment=prod" \
-            -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
-            -var="binance_api_secret=${{ secrets.BINANCE_API_SECRET }}" \
-            -var="github_repo=${{ github.repository }}"
+          terraform apply -auto-approve tfplan
           echo "✅ Infrastructure deployed successfully"
 
       - name: Get App Runner Service URL
