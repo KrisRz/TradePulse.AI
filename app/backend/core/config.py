@@ -110,6 +110,9 @@ class Settings(BaseSettings):
     # Enforce WebSocket-only decision paths (no REST fallback during runtime decisions)
     STRICT_LIVE_STREAM: bool = Field(default=False, env="STRICT_LIVE_STREAM")
     
+    # Professional mode settings
+    PROFESSIONAL_MODE: bool = Field(default=False, env="PROFESSIONAL_MODE")
+    
     # ML and trading settings
     MODEL_S3_BUCKET: str = Field(default="tradepulse-models", env="MODEL_S3_BUCKET")
     DEFAULT_STARTING_BALANCE: float = Field(default=10000.0, env="DEFAULT_STARTING_BALANCE")

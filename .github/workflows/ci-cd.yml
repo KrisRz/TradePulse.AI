@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: eu-central-1
+  AWS_REGION: eu-west-2
   ECR_REPOSITORY: tradepulse-backend
   APP_RUNNER_SERVICE: tradepulse-backend
   SERVICE_NAME: tradepulse-backend
@@ -133,7 +133,7 @@ jobs:
       - name: Terraform Apply
         run: |
           terraform apply -auto-approve tfplan \
-            -var="region=${{ env.AWS_REGION }}" \
+            -var="region=eu-west-2" \
             -var="project_name=tradepulse" \
             -var="environment=prod" \
             -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
