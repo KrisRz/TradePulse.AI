@@ -37,6 +37,27 @@ class SingletonTradingApp:
         """Startup sequence with lease acquisition"""
         try:
             logger.info("🚀 TradePulse.AI Singleton App - Starting up...")
+            # Sanitize any stray static AWS credentials that could override instance role
+            try:
+                import os
+                removed_keys = []
+                for key in (
+                    "AWS_ACCESS_KEY_ID",
+                    "AWS_SECRET_ACCESS_KEY",
+                    "AWS_SESSION_TOKEN",
+                    "AWS_PROFILE",
+                    "AWS_SHARED_CREDENTIALS_FILE",
+                    "AWS_CONFIG_FILE",
+                ):
+                    if os.environ.pop(key, None) is not None:
+                        removed_keys.append(key)
+                if removed_keys:
+                    logger.warning(
+                        "Removed conflicting AWS_* environment variables to prefer instance role",
+                        extra={"removed": removed_keys},
+                    )
+            except Exception:
+                pass
             # Diagnostics: log AWS identity and environment to verify credentials source
             try:
                 import boto3  # local import to avoid global dependency at import-time
