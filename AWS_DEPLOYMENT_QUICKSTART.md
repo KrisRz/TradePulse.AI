@@ -190,6 +190,7 @@ aws logs filter-log-events \
 - **URL**: AWS Console → CloudWatch → Dashboards → tradepulse-prod
 - **Metrics**: App Runner requests, DynamoDB usage, custom trading metrics
 - **Alarms**: High response time, DynamoDB throttling, missing heartbeat
+- **Notifications**: Alarms visible in CloudWatch console (no SNS for cost optimization)
 
 ### **Cost Monitoring**
 ```bash

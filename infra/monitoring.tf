@@ -83,7 +83,7 @@ resource "aws_cloudwatch_metric_alarm" "app_runner_high_response_time" {
   statistic           = "Average"
   threshold           = "5000"  # 5 seconds
   alarm_description   = "This metric monitors app runner response time"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+  # alarm_actions = []  # No SNS - alarms visible in CloudWatch console
 
   dimensions = {
     ServiceName = "${var.project_name}-backend"
@@ -106,7 +106,7 @@ resource "aws_cloudwatch_metric_alarm" "app_runner_high_error_rate" {
   statistic           = "Sum"
   threshold           = "10"
   alarm_description   = "This metric monitors app runner 4xx errors"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+  # alarm_actions = []  # No SNS - alarms visible in CloudWatch console
 
   dimensions = {
     ServiceName = "${var.project_name}-backend"
@@ -130,7 +130,7 @@ resource "aws_cloudwatch_metric_alarm" "dynamodb_throttled_requests" {
   statistic           = "Sum"
   threshold           = "0"
   alarm_description   = "This metric monitors DynamoDB throttled requests"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+  # alarm_actions = []  # No SNS - alarms visible in CloudWatch console
 
   dimensions = {
     TableName = "${var.project_name}_signals"
@@ -141,16 +141,8 @@ resource "aws_cloudwatch_metric_alarm" "dynamodb_throttled_requests" {
   }
 }
 
-# SNS Topic for Alerts
-resource "aws_sns_topic" "alerts" {
-  count = var.enable_monitoring ? 1 : 0
-  
-  name = "${var.project_name}-alerts"
-
-  tags = {
-    Name = "${var.project_name}-alerts-topic"
-  }
-}
+# SNS removed for cost optimization - alarms visible in CloudWatch console
+# Add SNS back later if email/SMS notifications needed
 
 # CloudWatch Log Insights Queries (saved)
 resource "aws_cloudwatch_query_definition" "trading_signals" {
@@ -280,7 +272,7 @@ resource "aws_cloudwatch_metric_alarm" "brain_controller_down" {
   period              = "60"
   threshold           = "0"
   alarm_description   = "No BrainHeartbeat for >3 minutes"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+  # alarm_actions = []  # No SNS - alarms visible in CloudWatch console
   treat_missing_data  = "breaching"   # Missing data = alarm
 
   tags = {

@@ -7,7 +7,7 @@
 - **DynamoDB**: On-demand billing (no reserved capacity)
 - **ECR**: Basic container registry
 - **SSM Parameter Store**: Free tier (< 10,000 parameters)
-- **CloudWatch**: Basic monitoring + logs
+- **CloudWatch**: Basic monitoring + logs (alarms without SNS)
 - **No VPC/NAT Gateway**: Saves $45/month
 
 ### 💰 Monthly Cost Breakdown (eu-central-1)
