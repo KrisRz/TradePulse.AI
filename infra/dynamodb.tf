@@ -272,7 +272,7 @@ resource "aws_dynamodb_table" "runtime" {
 # Optional: DynamoDB VPC Endpoint for cost optimization
 resource "aws_vpc_endpoint" "dynamodb" {
   count = var.enable_vpc ? 1 : 0
-  
+
   vpc_id            = aws_vpc.main[0].id
   service_name      = "com.amazonaws.${var.region}.dynamodb"
   vpc_endpoint_type = "Gateway"

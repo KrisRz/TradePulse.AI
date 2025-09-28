@@ -1,6 +1,6 @@
 terraform {
   required_version = ">= 1.5"
-  
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -58,9 +58,9 @@ resource "aws_ecr_lifecycle_policy" "backend_lifecycle" {
       rulePriority = 1
       description  = "Keep last 20 images"
       selection = {
-        tagStatus     = "any"
-        countType     = "imageCountMoreThan"
-        countNumber   = 20
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 20
       }
       action = {
         type = "expire"

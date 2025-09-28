@@ -55,7 +55,7 @@ variable "app_runner_max_size" {
 variable "enable_vpc" {
   description = "Enable VPC for private networking (adds ~$45/month NAT Gateway cost)"
   type        = bool
-  default     = false  # Disabled by default for cost optimization
+  default     = false # Disabled by default for cost optimization
 }
 
 variable "enable_monitoring" {

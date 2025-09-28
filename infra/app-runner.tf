@@ -3,8 +3,8 @@
 # Auto Scaling Configuration
 resource "aws_apprunner_auto_scaling_configuration_version" "backend" {
   auto_scaling_configuration_name = "${var.project_name}-backend-autoscaling"
-  
-  max_concurrency = 100  # Concurrent requests per instance
+
+  max_concurrency = 100 # Concurrent requests per instance
   max_size        = var.app_runner_max_size
   min_size        = var.app_runner_min_size
 
@@ -23,28 +23,28 @@ resource "aws_apprunner_service" "backend" {
       image_repository_type = "ECR"
 
       image_configuration {
-        port = "9002"  # TradePulse.AI backend port
+        port = "9002" # TradePulse.AI backend port
 
         # Environment variables (non-sensitive)
         runtime_environment_variables = {
-          ENV                     = var.environment
-          AWS_REGION             = var.region
-          DYNAMODB_TABLE_PREFIX  = "${var.project_name}_"
-          PROFESSIONAL_MODE      = "true"
+          ENV                   = var.environment
+          AWS_REGION            = var.region
+          DYNAMODB_TABLE_PREFIX = "${var.project_name}_"
+          PROFESSIONAL_MODE     = "true"
           STRICT_LIVE_STREAM    = "true"
           TRADING_SYMBOL        = "BTCUSDT"
           TRADING_MODE          = "DAY_TRADING"
           LOG_LEVEL             = "INFO"
           LOG_FORMAT            = "json"
           HEALTH_CHECK_INTERVAL = "30"
-          
+
           # DynamoDB endpoint for managed service
           DYNAMODB_ENDPOINT = "https://dynamodb.${var.region}.amazonaws.com"
-          
+
           # Override local development settings
           HOST = "0.0.0.0"
           PORT = "9002"
-          
+
           # CloudWatch Heartbeat configuration
           CW_NAMESPACE = "TradePulse/Brain"
           SERVICE_NAME = "${var.project_name}-backend"
@@ -91,10 +91,10 @@ resource "aws_apprunner_service" "backend" {
   # Network configuration (only if VPC is enabled - saves ~$45/month)
   dynamic "network_configuration" {
     for_each = var.enable_vpc ? [1] : []
-    
+
     content {
       egress_configuration {
-        egress_type        = "VPC"
+        egress_type       = "VPC"
         vpc_connector_arn = aws_apprunner_vpc_connector.main[0].arn
       }
       ingress_configuration {
@@ -116,7 +116,7 @@ resource "aws_apprunner_service" "backend" {
 # CloudWatch Log Group for App Runner
 resource "aws_cloudwatch_log_group" "app_runner" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   name              = "/aws/apprunner/${var.project_name}-backend"
   retention_in_days = 14
 

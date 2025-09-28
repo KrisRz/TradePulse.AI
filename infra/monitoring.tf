@@ -3,7 +3,7 @@
 # CloudWatch Dashboard
 resource "aws_cloudwatch_dashboard" "tradepulse" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   dashboard_name = "${var.project_name}-${var.environment}"
 
   dashboard_body = jsonencode({
@@ -56,10 +56,10 @@ resource "aws_cloudwatch_dashboard" "tradepulse" {
         height = 6
 
         properties = {
-          query   = "SOURCE '/aws/apprunner/${var.project_name}-backend'\n| fields @timestamp, @message\n| filter @message like /ERROR/\n| sort @timestamp desc\n| limit 100"
-          region  = var.region
-          title   = "Recent Errors"
-          view    = "table"
+          query  = "SOURCE '/aws/apprunner/${var.project_name}-backend'\n| fields @timestamp, @message\n| filter @message like /ERROR/\n| sort @timestamp desc\n| limit 100"
+          region = var.region
+          title  = "Recent Errors"
+          view   = "table"
         }
       }
     ]
@@ -69,7 +69,7 @@ resource "aws_cloudwatch_dashboard" "tradepulse" {
 # App Runner Alarms
 resource "aws_cloudwatch_metric_alarm" "app_runner_high_response_time" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   alarm_name          = "${var.project_name}-high-response-time"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
@@ -77,7 +77,7 @@ resource "aws_cloudwatch_metric_alarm" "app_runner_high_response_time" {
   namespace           = "AWS/AppRunner"
   period              = "300"
   statistic           = "Average"
-  threshold           = "5000"  # 5 seconds
+  threshold           = "5000" # 5 seconds
   alarm_description   = "This metric monitors app runner response time"
   # alarm_actions = []  # No SNS - alarms visible in CloudWatch console
 
@@ -92,7 +92,7 @@ resource "aws_cloudwatch_metric_alarm" "app_runner_high_response_time" {
 
 resource "aws_cloudwatch_metric_alarm" "app_runner_high_error_rate" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   alarm_name          = "${var.project_name}-high-error-rate"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
@@ -116,7 +116,7 @@ resource "aws_cloudwatch_metric_alarm" "app_runner_high_error_rate" {
 # DynamoDB Alarms
 resource "aws_cloudwatch_metric_alarm" "dynamodb_throttled_requests" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   alarm_name          = "${var.project_name}-dynamodb-throttled"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
@@ -143,7 +143,7 @@ resource "aws_cloudwatch_metric_alarm" "dynamodb_throttled_requests" {
 # CloudWatch Log Insights Queries (saved)
 resource "aws_cloudwatch_query_definition" "trading_signals" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   name = "${var.project_name}/trading-signals"
 
   log_group_names = [
@@ -162,7 +162,7 @@ EOF
 
 resource "aws_cloudwatch_query_definition" "trading_errors" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   name = "${var.project_name}/trading-errors"
 
   log_group_names = [
@@ -179,7 +179,7 @@ EOF
 
 resource "aws_cloudwatch_query_definition" "websocket_health" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   name = "${var.project_name}/websocket-health"
 
   log_group_names = [
@@ -197,7 +197,7 @@ EOF
 # Custom CloudWatch Metrics (for application-specific metrics)
 resource "aws_cloudwatch_log_metric_filter" "trading_signals_generated" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   name           = "${var.project_name}-signals-generated"
   log_group_name = "/aws/apprunner/${var.project_name}-backend"
   pattern        = "UNIFIED Signal Generated"
@@ -211,7 +211,7 @@ resource "aws_cloudwatch_log_metric_filter" "trading_signals_generated" {
 
 resource "aws_cloudwatch_log_metric_filter" "trading_errors" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   name           = "${var.project_name}-trading-errors"
   log_group_name = "/aws/apprunner/${var.project_name}-backend"
   pattern        = "ERROR"
@@ -225,7 +225,7 @@ resource "aws_cloudwatch_log_metric_filter" "trading_errors" {
 
 resource "aws_cloudwatch_log_metric_filter" "websocket_reconnections" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   name           = "${var.project_name}-websocket-reconnections"
   log_group_name = "/aws/apprunner/${var.project_name}-backend"
   pattern        = "Reconnecting"
@@ -240,7 +240,7 @@ resource "aws_cloudwatch_log_metric_filter" "websocket_reconnections" {
 # Brain Controller heartbeat monitoring
 resource "aws_cloudwatch_log_metric_filter" "brain_heartbeat" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   name           = "${var.project_name}-brain-heartbeat"
   log_group_name = "/aws/apprunner/${var.project_name}-backend"
   pattern        = "Acquired trading brain lease"
@@ -255,7 +255,7 @@ resource "aws_cloudwatch_log_metric_filter" "brain_heartbeat" {
 # Alarm for missing brain controller heartbeat (improved with your suggestions)
 resource "aws_cloudwatch_metric_alarm" "brain_controller_down" {
   count = var.enable_monitoring ? 1 : 0
-  
+
   alarm_name          = "${var.project_name}-brain-missing-heartbeat"
   comparison_operator = "LessThanOrEqualToThreshold"
   evaluation_periods  = "3"
@@ -264,12 +264,12 @@ resource "aws_cloudwatch_metric_alarm" "brain_controller_down" {
   dimensions = {
     Service = "${var.project_name}-backend"
   }
-  statistic           = "Sum"
-  period              = "60"
-  threshold           = "0"
-  alarm_description   = "No BrainHeartbeat for >3 minutes"
+  statistic         = "Sum"
+  period            = "60"
+  threshold         = "0"
+  alarm_description = "No BrainHeartbeat for >3 minutes"
   # alarm_actions = []  # No SNS - alarms visible in CloudWatch console
-  treat_missing_data  = "breaching"   # Missing data = alarm
+  treat_missing_data = "breaching" # Missing data = alarm
 
   tags = {
     Name = "${var.project_name}-brain-missing-heartbeat-alarm"
