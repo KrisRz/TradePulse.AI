@@ -67,11 +67,12 @@ RUN mkdir -p /app/logs /app/data && \
 USER tradepulse
 
 # Health check endpoint for App Runner
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+# Increased start-period for model loading (2 min grace period)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -f http://127.0.0.1:9002/health || exit 1
 
 # Expose the application port
 EXPOSE 9002
 
-# Start command - will be overridden by App Runner
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9002"]
+# Start command - properly reference main module in app/backend
+CMD ["python", "-m", "uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "9002", "--workers", "1"]

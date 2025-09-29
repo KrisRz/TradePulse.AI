@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals';
-import { getEnvironmentConfig } from '@/config/environments';
+import { api } from './api';
 
 interface User {
   id: string;
@@ -40,30 +40,22 @@ export const authActions = {
     errorSignal.value = null;
     
     try {
-      const config = getEnvironmentConfig();
-      const apiUrl = `${config.api.base}/api/v1/auth/login`;
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
-      });
+      // Use new API client
+      const response = await api.auth.login(email, password);
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.success && response.data) {
+        const data = response.data;
         const token = data.access_token;
         
         console.log('🔐 Auth Store: Raw API response:', data);
         
         // Create user object from API response
         const user = {
-          id: data.user_id,
-          email: data.email,
-          name: data.email.split('@')[0], // Extract username from email
-          role: data.is_admin ? 'admin' : 'user', // Convert is_admin to role
-          is_admin: data.is_admin // Keep original field too
+          id: data.user.user_id,
+          email: data.user.email,
+          name: data.user.username || data.user.email.split('@')[0],
+          role: data.user.is_admin ? 'admin' : 'user' as 'user' | 'admin',
+          is_admin: data.user.is_admin
         };
 
         console.log('🔐 Auth Store: Created user object:', user);
@@ -74,8 +66,6 @@ export const authActions = {
           localStorage.setItem('auth_token', token);
           localStorage.setItem('user_data', JSON.stringify(user));
           console.log('🔐 Auth Store: ✅ localStorage updated successfully');
-          console.log('🔐 Auth Store: Verify token saved:', localStorage.getItem('auth_token'));
-          console.log('🔐 Auth Store: Verify user saved:', localStorage.getItem('user_data'));
         }
         
         // Update all signals
@@ -95,8 +85,7 @@ export const authActions = {
 
         return { success: true };
       } else {
-        const error = await response.json();
-        const errorMsg = error.detail || 'Login failed';
+        const errorMsg = response.error?.message || 'Login failed';
         
         isLoadingSignal.value = false;
         errorSignal.value = errorMsg;
@@ -130,53 +119,23 @@ export const authActions = {
     errorSignal.value = null;
     
     try {
-      const config = getEnvironmentConfig();
-      const apiUrl = `${config.api.base}/api/v1/auth/register`;
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username: name, email, password })
-      });
+      // Use new API client
+      const response = await api.auth.register(email, password, name);
 
-      if (response.ok) {
-        const data = await response.json();
-        const token = data.access_token;
+      if (response.success && response.data) {
+        // Note: Register endpoint returns different structure than login
+        // Typically need to login after register, but if it returns token:
+        const data = response.data;
         
-        // Create user object from API response
-        const user = {
-          id: data.user_id,
-          email: data.email,
-          name: data.email.split('@')[0],
-          role: data.is_admin ? 'admin' : 'user'
-        };
-
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('auth_token', token);
-          localStorage.setItem('user_data', JSON.stringify(user));
-        }
-        
-        // Update all signals
-        userSignal.value = user;
-        tokenSignal.value = token;
-        isAuthenticatedSignal.value = true;
+        // For now, registration just creates account - need to login after
         isLoadingSignal.value = false;
-        errorSignal.value = null;
         
-        authStateSignal.value = {
-          user,
-          token,
-          isAuthenticated: true,
-          loading: false,
-          error: null
+        return { 
+          success: true,
+          message: 'Registration successful. Please login.'
         };
-
-        return { success: true };
       } else {
-        const error = await response.json();
-        const errorMsg = error.detail || 'Registration failed';
+        const errorMsg = response.error?.message || 'Registration failed';
         
         isLoadingSignal.value = false;
         errorSignal.value = errorMsg;
@@ -206,6 +165,9 @@ export const authActions = {
   },
 
   logout: () => {
+    // Clear API client token
+    api.auth.logout();
+    
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_data');
@@ -242,25 +204,22 @@ export const authActions = {
       return;
     }
 
+    // Set token in API client
+    api.auth.setAuthToken(token);
+
     isLoadingSignal.value = true;
 
     try {
-      const config = getEnvironmentConfig();
-      const apiUrl = `${config.api.base}/api/v1/auth/me`;
-      
-      const response = await fetch(apiUrl, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      // Use new API client
+      const response = await api.auth.getCurrentUser();
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.success && response.data) {
+        const data = response.data;
         const user = {
           id: data.user_id,
           email: data.email,
           name: data.username || data.email.split('@')[0],
-          role: data.is_admin ? 'admin' : 'user'
+          role: data.is_admin ? 'admin' : 'user' as 'user' | 'admin'
         };
         
         if (typeof window !== 'undefined') {
@@ -282,7 +241,9 @@ export const authActions = {
           error: null
         };
       } else {
-        // Token is invalid
+        // Token is invalid - clear everything
+        api.auth.logout();
+        
         if (typeof window !== 'undefined') {
           localStorage.removeItem('auth_token');
           localStorage.removeItem('user_data');
