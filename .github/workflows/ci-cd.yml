@@ -240,6 +240,26 @@ jobs:
             fi
           done
 
+      - name: Upload Frontend (if provisioned)
+        if: needs.terraform-deploy.result == 'success'
+        run: |
+          echo "🔎 Checking for frontend outputs..."
+          cd infra
+          FRONTEND_BUCKET=$(terraform output -raw frontend_bucket_name 2>/dev/null || echo "")
+          FRONTEND_DISTRIBUTION=$(terraform output -raw frontend_distribution_id 2>/dev/null || echo "")
+          if [ -z "$FRONTEND_BUCKET" ]; then
+            echo "No frontend bucket provisioned. Skipping upload."
+            exit 0
+          fi
+          echo "📦 Syncing frontend build to s3://$FRONTEND_BUCKET"
+          cd ..
+          if [ -d app/frontend/dist ]; then BUILD_DIR=app/frontend/dist; elif [ -d app/frontend ]; then BUILD_DIR=app/frontend; else BUILD_DIR=.; fi
+          aws s3 sync "$BUILD_DIR" s3://$FRONTEND_BUCKET --delete --exclude "*.map"
+          if [ -n "$FRONTEND_DISTRIBUTION" ]; then
+            echo "🧹 Invalidating CloudFront $FRONTEND_DISTRIBUTION"
+            aws cloudfront create-invalidation --distribution-id "$FRONTEND_DISTRIBUTION" --paths "/*"
+          fi
+
       - name: Test Trading Brain Status
         run: |
           echo "🧠 Testing Trading Brain status..."

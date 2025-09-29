@@ -140,9 +140,47 @@ resource "aws_route53_record" "frontend_alias" {
   }
 }
 
+# Bucket policy to allow CloudFront (OAC) to read objects
+data "aws_iam_policy_document" "frontend_s3_policy" {
+  count = length(aws_cloudfront_distribution.frontend) == 0 ? 0 : 1
+
+  statement {
+    sid     = "AllowCloudFrontReadOAC"
+    actions = ["s3:GetObject"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    resources = [
+      "${aws_s3_bucket.frontend[0].arn}/*"
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.frontend[0].arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "frontend_oac" {
+  count  = length(data.aws_iam_policy_document.frontend_s3_policy) == 0 ? 0 : 1
+  bucket = aws_s3_bucket.frontend[0].id
+  policy = data.aws_iam_policy_document.frontend_s3_policy[0].json
+}
+
 output "frontend_url" {
   description = "Frontend CloudFront URL"
   value       = length(aws_cloudfront_distribution.frontend) == 0 ? null : aws_cloudfront_distribution.frontend[0].domain_name
+}
+
+output "frontend_bucket_name" {
+  description = "Frontend S3 bucket name"
+  value       = length(aws_s3_bucket.frontend) == 0 ? null : aws_s3_bucket.frontend[0].id
+}
+
+output "frontend_distribution_id" {
+  description = "Frontend CloudFront distribution ID"
+  value       = length(aws_cloudfront_distribution.frontend) == 0 ? null : aws_cloudfront_distribution.frontend[0].id
 }
 
 # Data sources
