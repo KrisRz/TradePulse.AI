@@ -105,5 +105,5 @@ variable "custom_domain" {
 variable "hosted_zone_id" {
   description = "Route53 hosted zone ID for custom domain"
   type        = string
-  default     = ""
+  default     = "Z017716812TEZM23GFDIL"
 }

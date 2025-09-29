@@ -30,7 +30,7 @@ provider "aws" {
 
 # Route53 zone lookup (used when hosted_zone_id not explicitly provided)
 data "aws_route53_zone" "primary" {
-  count = var.domain_name != "" && var.hosted_zone_id == "" ? 1 : 0
+  count = 0
   name  = var.domain_name
 }
 
@@ -88,7 +88,7 @@ resource "aws_route53_record" "frontend_cert_validation" {
       value = dvo.resource_record_value
     }
   }
-  zone_id = var.hosted_zone_id != "" ? var.hosted_zone_id : data.aws_route53_zone.primary[0].zone_id
+  zone_id = var.hosted_zone_id
   name    = each.value.name
   type    = each.value.type
   records = [each.value.value]
@@ -302,7 +302,7 @@ locals {
 
 resource "aws_route53_record" "backend_alias" {
   count   = local.backend_fqdn != "" ? 1 : 0
-  zone_id = var.hosted_zone_id != "" ? var.hosted_zone_id : data.aws_route53_zone.primary[0].zone_id
+  zone_id = var.hosted_zone_id
   name    = local.backend_fqdn
   type    = "CNAME"
   ttl     = 60
