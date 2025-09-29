@@ -78,7 +78,7 @@ export default function BinanceCandle({
     };
 
     const load = async () => {
-      const r = await fetch(`/charts/binance/klines.json?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+      const r = await fetch(`https://api.tradepulseai.co.uk/api/v1/market/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
       const { candles } = await r.json();
 
       C = candles.map((d: any) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close }));

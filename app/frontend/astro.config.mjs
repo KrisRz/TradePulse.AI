@@ -215,7 +215,10 @@ export default defineConfig({
       '**/*.spec.ts',
       '**/*.spec.tsx',
       'playwright-report/**/*',
-      'test-results/**/*'
+      'test-results/**/*',
+      // Exclude SSR API routes from static build
+      'src/pages/api/**',
+      'src/pages/charts/**'
     ]
   },
   // Production optimizations for 24/7 AWS deployment
