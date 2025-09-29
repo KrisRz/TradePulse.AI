@@ -110,9 +110,9 @@ class SingletonTradingApp:
             else:
                 logger.info("🔒 Another instance holds the lease - Running in API-only mode")
             
-            # Mark as ready regardless of lease status (API should work)
-            self.is_ready = True
-            logger.info("✅ TradePulse.AI startup complete")
+            # Don't mark ready until DB connectivity confirmed
+            # API will serve /health immediately; /ready depends on flags
+            logger.info("✅ TradePulse.AI startup sequence completed (awaiting readiness flags)")
             
         except Exception as e:
             logger.error(f"❌ Startup failed: {e}")
@@ -198,9 +198,11 @@ class SingletonTradingApp:
             logger.info(f"✅ DynamoDB connected - Found {len(response.get('TableNames', []))} tables")
             
         except Exception as e:
+            # Do NOT crash the process during startup; health must come up fast.
+            # We'll report not-ready via /ready while continuing to serve /health.
             logger.error(f"❌ DynamoDB connectivity failed: {e}")
             self.ddb_connected = False
-            raise
+            # Intentionally not raising here to let the app start and pass health checks
     
     async def _start_trading_brain(self):
         """Start the trading brain loop"""
