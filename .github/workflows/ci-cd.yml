@@ -201,6 +201,33 @@ jobs:
           cd infra
           terraform init -upgrade -reconfigure
 
+      - name: Read Frontend Outputs (safe)
+        id: tf_out
+        run: |
+          cd infra
+          JSON=$(terraform output -json || echo "{}")
+          BKT=$(echo "$JSON" | jq -r '.frontend_bucket_name.value // empty')
+          DIST=$(echo "$JSON" | jq -r '.frontend_distribution_id.value // empty')
+          echo "bucket=$BKT" >> $GITHUB_OUTPUT
+          echo "distribution=$DIST" >> $GITHUB_OUTPUT
+          echo "Frontend bucket: ${BKT:-<none>} | distribution: ${DIST:-<none>}"
+
+      - name: Setup Node.js (for Astro)
+        if: steps.tf_out.outputs.bucket != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies
+        if: steps.tf_out.outputs.bucket != ''
+        run: npm ci
+        working-directory: app/frontend
+
+      - name: Build Frontend (Astro)
+        if: steps.tf_out.outputs.bucket != ''
+        run: npm run build
+        working-directory: app/frontend
+
       - name: Wait for App Runner deployment
         run: |
           echo "⏳ Waiting for App Runner service to be ready..."
@@ -254,20 +281,12 @@ jobs:
           done
 
       - name: Upload Frontend (if provisioned)
-        if: needs.terraform-deploy.result == 'success'
+        if: steps.tf_out.outputs.bucket != ''
         run: |
-          echo "🔎 Checking for frontend outputs..."
-          cd infra
-          FRONTEND_BUCKET=$(terraform output -raw frontend_bucket_name 2>/dev/null || echo "")
-          FRONTEND_DISTRIBUTION=$(terraform output -raw frontend_distribution_id 2>/dev/null || echo "")
-          if [ -z "$FRONTEND_BUCKET" ]; then
-            echo "No frontend bucket provisioned. Skipping upload."
-            exit 0
-          fi
+          FRONTEND_BUCKET='${{ steps.tf_out.outputs.bucket }}'
+          FRONTEND_DISTRIBUTION='${{ steps.tf_out.outputs.distribution }}'
           echo "📦 Syncing frontend build to s3://$FRONTEND_BUCKET"
-          cd ..
-          if [ -d app/frontend/dist ]; then BUILD_DIR=app/frontend/dist; elif [ -d app/frontend ]; then BUILD_DIR=app/frontend; else BUILD_DIR=.; fi
-          aws s3 sync "$BUILD_DIR" s3://$FRONTEND_BUCKET --delete --exclude "*.map"
+          aws s3 sync app/frontend/dist s3://$FRONTEND_BUCKET --delete --exclude "*.map"
           if [ -n "$FRONTEND_DISTRIBUTION" ]; then
             echo "🧹 Invalidating CloudFront $FRONTEND_DISTRIBUTION"
             aws cloudfront create-invalidation --distribution-id "$FRONTEND_DISTRIBUTION" --paths "/*"
