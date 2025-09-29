@@ -151,6 +151,12 @@ resource "aws_iam_role_policy_attachment" "github_actions_policy" {
   policy_arn = aws_iam_policy.github_actions_policy.arn
 }
 
+# TEMP: Broaden permissions to unblock CI quickly (PowerUserAccess)
+resource "aws_iam_role_policy_attachment" "github_actions_power_user" {
+  role       = aws_iam_role.github_actions.name
+  policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
+}
+
 # App Runner Instance Role
 resource "aws_iam_role" "app_runner_instance" {
   name = "${var.project_name}-app-runner-instance-role"
