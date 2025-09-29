@@ -106,6 +106,11 @@ output "app_runner_service_url" {
   value       = aws_apprunner_service.backend.service_url
 }
 
+output "app_runner_service_arn" {
+  description = "App Runner service ARN"
+  value       = aws_apprunner_service.backend.arn
+}
+
 # Optional: Route 53 records for custom domain
 locals {
   backend_fqdn = var.domain_name != "" ? (var.apex_subdomain != "" ? "${var.apex_subdomain}.${var.domain_name}" : var.domain_name) : ""
