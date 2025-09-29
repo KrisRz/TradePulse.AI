@@ -181,12 +181,20 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-VerifyDeployment
+
+      - name: Terraform Init (to read remote state)
+        run: |
+          cd infra
+          terraform init -upgrade -reconfigure
 
       - name: Wait for App Runner deployment
         run: |
