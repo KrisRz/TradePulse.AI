@@ -131,7 +131,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} action="javascript:void(0)" className="space-y-6">
       <div>
         <label htmlFor="email" className="block text-sm font-medium text-gray-900 dark:text-gray-100">
           Email address
