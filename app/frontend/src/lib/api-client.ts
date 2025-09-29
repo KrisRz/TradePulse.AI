@@ -59,7 +59,7 @@ class ApiClient {
     const envConfig = getEnvironmentConfig();
     this.config = {
       baseUrl: envConfig.api.base,
-      timeout: envConfig.api.timeout,
+      timeout: 30000, // 30s timeout for AWS (models loading)
       retryAttempts: 3,
       retryDelay: 1000,
     };
@@ -108,10 +108,17 @@ class ApiClient {
    * Build request headers
    */
   private buildHeaders(options: RequestOptions): HeadersInit {
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers,
     };
+
+    // Add existing headers
+    if (options.headers) {
+      const existingHeaders = new Headers(options.headers);
+      existingHeaders.forEach((value, key) => {
+        headers[key] = value;
+      });
+    }
 
     // Add auth token if available and not skipped
     if (!options.skipAuth && this.authToken) {
@@ -192,12 +199,13 @@ class ApiClient {
             data = (await response.text()) as any;
           }
 
+          const requestId = response.headers.get('x-request-id');
           return {
             success: true,
             data,
             meta: {
               timestamp: new Date().toISOString(),
-              requestId: response.headers.get('x-request-id') ?? undefined,
+              ...(requestId ? { requestId } : {}),
             },
           };
         }
@@ -265,10 +273,11 @@ class ApiClient {
     body?: any,
     options: RequestOptions = {}
   ): Promise<ApiResponse<T>> {
+    const requestBody = body ? JSON.stringify(body) : null;
     return this.makeRequest<T>(path, {
       ...options,
       method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
+      ...(requestBody ? { body: requestBody } : {}),
     });
   }
 
@@ -280,10 +289,11 @@ class ApiClient {
     body?: any,
     options: RequestOptions = {}
   ): Promise<ApiResponse<T>> {
+    const requestBody = body ? JSON.stringify(body) : null;
     return this.makeRequest<T>(path, {
       ...options,
       method: 'PUT',
-      body: body ? JSON.stringify(body) : undefined,
+      ...(requestBody ? { body: requestBody } : {}),
     });
   }
 
@@ -295,10 +305,11 @@ class ApiClient {
     body?: any,
     options: RequestOptions = {}
   ): Promise<ApiResponse<T>> {
+    const requestBody = body ? JSON.stringify(body) : null;
     return this.makeRequest<T>(path, {
       ...options,
       method: 'PATCH',
-      body: body ? JSON.stringify(body) : undefined,
+      ...(requestBody ? { body: requestBody } : {}),
     });
   }
 

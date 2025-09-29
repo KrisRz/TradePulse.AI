@@ -18,7 +18,8 @@
       "@/lib/*": ["./src/lib/*"],
       "@/hooks/*": ["./src/hooks/*"],
       "@/contexts/*": ["./src/contexts/*"],
-      "@/stores/*": ["./src/stores/*"]
+      "@/stores/*": ["./src/stores/*"],
+      "@/config/*": ["./src/config/*"]
     },
     "skipLibCheck": true,
     "allowImportingTsExtensions": false,
