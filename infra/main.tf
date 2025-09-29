@@ -49,8 +49,8 @@ resource "aws_s3_bucket_ownership_controls" "frontend" {
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
-  count  = length(aws_s3_bucket.frontend) == 0 ? 0 : 1
-  bucket = aws_s3_bucket.frontend[0].id
+  count                   = length(aws_s3_bucket.frontend) == 0 ? 0 : 1
+  bucket                  = aws_s3_bucket.frontend[0].id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -58,12 +58,12 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
 }
 
 resource "aws_cloudfront_origin_access_control" "oac" {
-  count                            = var.domain_name != "" ? 1 : 0
-  name                             = "${var.project_name}-frontend-oac"
-  description                      = "OAC for ${var.project_name} frontend"
+  count                             = var.domain_name != "" ? 1 : 0
+  name                              = "${var.project_name}-frontend-oac"
+  description                       = "OAC for ${var.project_name} frontend"
   origin_access_control_origin_type = "s3"
-  signing_behavior                 = "always"
-  signing_protocol                 = "sigv4"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }
 
 resource "aws_acm_certificate" "frontend" {
@@ -105,11 +105,11 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   default_cache_behavior {
-    allowed_methods  = ["GET", "HEAD"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = aws_s3_bucket.frontend[0].id
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = aws_s3_bucket.frontend[0].id
     viewer_protocol_policy = "redirect-to-https"
-    compress = true
+    compress               = true
 
     forwarded_values {
       query_string = false
@@ -122,9 +122,9 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   viewer_certificate {
-    acm_certificate_arn            = aws_acm_certificate_validation.frontend[0].certificate_arn
-    ssl_support_method             = "sni-only"
-    minimum_protocol_version       = "TLSv1.2_2021"
+    acm_certificate_arn      = aws_acm_certificate_validation.frontend[0].certificate_arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 }
 
