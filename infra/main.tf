@@ -167,9 +167,9 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   # Custom error response only for 404 (client-side routing fallback)
   custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
     error_caching_min_ttl = 0
   }
 
