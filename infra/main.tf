@@ -70,6 +70,7 @@ resource "aws_acm_certificate" "frontend" {
   provider          = aws.us_east_1
   count             = var.domain_name != "" ? 1 : 0
   domain_name       = "${var.frontend_subdomain}.${var.domain_name}"
+  subject_alternative_names = [var.domain_name]
   validation_method = "DNS"
 }
 
