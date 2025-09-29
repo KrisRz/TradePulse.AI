@@ -1,4 +1,7 @@
 name: TradePulse.AI CI/CD Pipeline
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
 
 on:
   push:
@@ -167,6 +170,8 @@ jobs:
           APP_RUNNER_URL=$(terraform output -raw app_runner_service_url)
           echo "🚀 App Runner Service URL: $APP_RUNNER_URL"
           echo "APP_RUNNER_URL=$APP_RUNNER_URL" >> $GITHUB_ENV
+          FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "")
+          if [ -n "$FRONTEND_URL" ]; then echo "🌐 Frontend CF URL: $FRONTEND_URL"; fi
 
   # Job 3: Health check and deployment verification
   verify-deployment:
