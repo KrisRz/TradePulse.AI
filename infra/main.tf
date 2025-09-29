@@ -28,6 +28,123 @@ provider "aws" {
   }
 }
 
+# Additional provider for us-east-1 (ACM for CloudFront)
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+# Frontend S3 bucket (private) and CloudFront (OAC)
+resource "aws_s3_bucket" "frontend" {
+  count  = var.domain_name != "" ? 1 : 0
+  bucket = "${var.project_name}-frontend-${data.aws_caller_identity.current.account_id}-${var.region}"
+}
+
+resource "aws_s3_bucket_ownership_controls" "frontend" {
+  count  = length(aws_s3_bucket.frontend) == 0 ? 0 : 1
+  bucket = aws_s3_bucket.frontend[0].id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "frontend" {
+  count  = length(aws_s3_bucket.frontend) == 0 ? 0 : 1
+  bucket = aws_s3_bucket.frontend[0].id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_cloudfront_origin_access_control" "oac" {
+  count                            = var.domain_name != "" ? 1 : 0
+  name                             = "${var.project_name}-frontend-oac"
+  description                      = "OAC for ${var.project_name} frontend"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                 = "always"
+  signing_protocol                 = "sigv4"
+}
+
+resource "aws_acm_certificate" "frontend" {
+  provider          = aws.us_east_1
+  count             = var.domain_name != "" ? 1 : 0
+  domain_name       = "${var.frontend_subdomain}.${var.domain_name}"
+  validation_method = "DNS"
+}
+
+resource "aws_route53_record" "frontend_cert_validation" {
+  count   = length(aws_acm_certificate.frontend) == 0 ? 0 : length(aws_acm_certificate.frontend[0].domain_validation_options)
+  zone_id = var.hosted_zone_id
+  name    = aws_acm_certificate.frontend[0].domain_validation_options[count.index].resource_record_name
+  type    = aws_acm_certificate.frontend[0].domain_validation_options[count.index].resource_record_type
+  records = [aws_acm_certificate.frontend[0].domain_validation_options[count.index].resource_record_value]
+  ttl     = 60
+}
+
+resource "aws_acm_certificate_validation" "frontend" {
+  provider                = aws.us_east_1
+  count                   = length(aws_acm_certificate.frontend) == 0 ? 0 : 1
+  certificate_arn         = aws_acm_certificate.frontend[0].arn
+  validation_record_fqdns = [for r in aws_route53_record.frontend_cert_validation : r.fqdn]
+}
+
+resource "aws_cloudfront_distribution" "frontend" {
+  count = var.domain_name != "" ? 1 : 0
+
+  enabled             = true
+  comment             = "${var.project_name} frontend"
+  default_root_object = "index.html"
+
+  aliases = ["${var.frontend_subdomain}.${var.domain_name}"]
+
+  origin {
+    domain_name              = aws_s3_bucket.frontend[0].bucket_regional_domain_name
+    origin_id                = aws_s3_bucket.frontend[0].id
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac[0].id
+  }
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = aws_s3_bucket.frontend[0].id
+    viewer_protocol_policy = "redirect-to-https"
+    compress = true
+
+    forwarded_values {
+      query_string = false
+      cookies { forward = "none" }
+    }
+  }
+
+  restrictions {
+    geo_restriction { restriction_type = "none" }
+  }
+
+  viewer_certificate {
+    acm_certificate_arn            = aws_acm_certificate_validation.frontend[0].certificate_arn
+    ssl_support_method             = "sni-only"
+    minimum_protocol_version       = "TLSv1.2_2021"
+  }
+}
+
+resource "aws_route53_record" "frontend_alias" {
+  count   = length(aws_cloudfront_distribution.frontend) == 0 ? 0 : 1
+  zone_id = var.hosted_zone_id
+  name    = "${var.frontend_subdomain}.${var.domain_name}"
+  type    = "A"
+  alias {
+    name                   = aws_cloudfront_distribution.frontend[0].domain_name
+    zone_id                = aws_cloudfront_distribution.frontend[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+output "frontend_url" {
+  description = "Frontend CloudFront URL"
+  value       = length(aws_cloudfront_distribution.frontend) == 0 ? null : aws_cloudfront_distribution.frontend[0].domain_name
+}
+
 # Data sources
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}

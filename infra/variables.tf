@@ -77,6 +77,12 @@ variable "apex_subdomain" {
   default     = "api"
 }
 
+variable "frontend_subdomain" {
+  description = "Subdomain for frontend app (e.g., app)"
+  type        = string
+  default     = "app"
+}
+
 variable "github_repo" {
   description = "GitHub repository for OIDC trust (format: org/repo)"
   type        = string
