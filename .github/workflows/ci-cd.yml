@@ -142,13 +142,24 @@ jobs:
             sleep 20
           done
 
-      - name: Terraform Apply (with retry)
+      - name: Terraform Apply (re-plan on stale)
+        env:
+          TF_VAR_binance_api_key: ${{ secrets.BINANCE_API_KEY }}
+          TF_VAR_binance_api_secret: ${{ secrets.BINANCE_API_SECRET }}
         run: |
           for i in 1 2 3; do
-            terraform apply -auto-approve tfplan && exit 0
-            echo "Apply failed, retry $i/3 in 30s..."
+            echo "🔄 (re)planning before apply attempt $i..."
+            terraform plan -detailed-exitcode -out=tfplan \
+              -var="region=${{ env.AWS_REGION }}" \
+              -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
+              -var="binance_api_secret=${{ secrets.BINANCE_API_SECRET }}" || true
+
+            terraform apply -auto-approve tfplan && exit 0 || true
+
+            echo "Apply failed (possibly stale plan). Re-trying in 30s..."
             sleep 30
           done
+          echo "❌ Terraform apply failed after retries"
           exit 1
 
       - name: Get App Runner Service URL
