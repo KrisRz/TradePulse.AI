@@ -81,11 +81,17 @@ resource "aws_acm_certificate" "frontend" {
 }
 
 resource "aws_route53_record" "frontend_cert_validation" {
-  count   = length(aws_acm_certificate.frontend) == 0 ? 0 : length(aws_acm_certificate.frontend[0].domain_validation_options)
-  zone_id = var.hosted_zone_id
-  name    = aws_acm_certificate.frontend[0].domain_validation_options[count.index].resource_record_name
-  type    = aws_acm_certificate.frontend[0].domain_validation_options[count.index].resource_record_type
-  records = [aws_acm_certificate.frontend[0].domain_validation_options[count.index].resource_record_value]
+  for_each = length(aws_acm_certificate.frontend) == 0 ? {} : {
+    for dvo in aws_acm_certificate.frontend[0].domain_validation_options : dvo.domain_name => {
+      name  = dvo.resource_record_name
+      type  = dvo.resource_record_type
+      value = dvo.resource_record_value
+    }
+  }
+  zone_id = var.hosted_zone_id != "" ? var.hosted_zone_id : data.aws_route53_zone.primary[0].zone_id
+  name    = each.value.name
+  type    = each.value.type
+  records = [each.value.value]
   ttl     = 60
 }
 
