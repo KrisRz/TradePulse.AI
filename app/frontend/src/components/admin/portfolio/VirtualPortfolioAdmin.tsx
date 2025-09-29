@@ -2,6 +2,7 @@ import { useState, useEffect } from 'preact/hooks';
 import { RefreshCw, AlertTriangle,
          Brain, Shield, Settings, BarChart3, Activity, CheckCircle } from 'lucide-preact';
 import type { PortfolioOverviewResponse } from '../../../types';
+import { apiClient } from '@/lib/api-client';
 
 // Enterprise Virtual Portfolio Components
 import PortfolioDashboard from '../dashboard/PortfolioDashboard';
@@ -74,19 +75,14 @@ export default function VirtualPortfolioAdmin() {
       console.log('📡 Fetching REAL portfolio data from professional backend...');
       setError(null);
       
-      // Use CORRECT portfolio overview endpoint with REAL DATA
-      const portfolioResponse = await fetch('/api/portfolio/virtual/overview', {
-        headers: {
-          'Authorization': 'Bearer enterprise_admin_token',
-          'Content-Type': 'application/json'
-        }
-      });
+      // Use CORRECT portfolio overview endpoint with REAL DATA via API client
+      const portfolioResponse = await apiClient.get('/api/portfolio/virtual/overview');
 
-      if (!portfolioResponse.ok) {
-        throw new Error(`Portfolio API error: ${portfolioResponse.status}`);
+      if (!portfolioResponse.success) {
+        throw new Error(`Portfolio API error: ${portfolioResponse.error?.code || 'UNKNOWN'}`);
       }
 
-      const portfolioOverview = await portfolioResponse.json();
+      const portfolioOverview = portfolioResponse.data;
       console.log('📡 REAL portfolio overview data received:', portfolioOverview);
 
       // Position data is handled by TradingIntelligence component separately
@@ -166,11 +162,10 @@ export default function VirtualPortfolioAdmin() {
   // 🚀 INDUSTRY STANDARD: Status checking function (read-only)
   const checkSystemStatus = async () => {
     try {
-      // Check engines status
-      const enginesResp = await fetch('/api/v1/engines/status');
-      if (enginesResp.ok) {
-        const enginesData = await enginesResp.json();
-        const engines = enginesData.engines || {};
+      // Check engines status via API client
+      const enginesResp = await apiClient.get('/api/v1/engines/status');
+      if (enginesResp.success && enginesResp.data) {
+        const engines = enginesResp.data.engines || {};
         
         // Brain Controller status - Fix for missing detailed_status
         const brainController = engines.brain_controller;

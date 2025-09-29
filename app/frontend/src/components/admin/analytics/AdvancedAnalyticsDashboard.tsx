@@ -5,6 +5,7 @@ Comprehensive enterprise analytics with real-time metrics and insights
 
 import { useState, useEffect } from 'preact/hooks';
 import { TrendingUp, Users, Mail, Shield, DollarSign, RefreshCw, Download, AlertTriangle, CheckCircle, Activity, BarChart3, Clock, Bell } from 'lucide-preact';
+import { apiClient } from '@/lib/api-client';
 
 interface AnalyticsData {
   executive_summary: {
@@ -116,26 +117,16 @@ export default function AdvancedAnalyticsDashboard() {
       setError(null);
 
       const [dashboardResponse, realTimeResponse] = await Promise.all([
-        fetch(`/api/user-analytics/dashboard?days=${selectedPeriod}`, {
-          headers: {
-            'Authorization': 'Bearer enterprise_admin_token',
-            'Content-Type': 'application/json'
-          }
-        }),
-        fetch('/api/user-analytics/real-time-stats', {
-          headers: {
-            'Authorization': 'Bearer enterprise_admin_token',
-            'Content-Type': 'application/json'
-          }
-        })
+        apiClient.get(`/api/user-analytics/dashboard?days=${selectedPeriod}`),
+        apiClient.get('/api/user-analytics/real-time-stats')
       ]);
 
-      if (dashboardResponse.ok && realTimeResponse.ok) {
-        const dashboardData = await dashboardResponse.json();
-        const realTimeData = await realTimeResponse.json();
+      if (dashboardResponse.success && realTimeResponse.success) {
+        const dashboardData = dashboardResponse.data;
+        const realTimeData = realTimeResponse.data;
         
-        setAnalyticsData(dashboardData.data);
-        setRealTimeStats(realTimeData.data);
+        setAnalyticsData(dashboardData.data || dashboardData);
+        setRealTimeStats(realTimeData.data || realTimeData);
         setLastUpdated(new Date());
         
         console.log('📊 Loaded analytics dashboard data');

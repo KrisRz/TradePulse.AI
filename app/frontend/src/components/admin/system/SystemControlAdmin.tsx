@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Settings, Power, Database, Trash2, RefreshCw, Server, Shield, AlertTriangle, CheckCircle, Clock, Download } from 'lucide-preact';
+import { apiClient } from '@/lib/api-client';
 
 interface SystemStatus {
   status: string;
@@ -69,35 +70,23 @@ export default function SystemControlAdmin() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    // PRODUCTION: Load real system data from backend
+    // PRODUCTION: Load real system data from backend using API client
     const loadSystemData = async () => {
       setLoading(true);
       
       try {
-        const token = 'enterprise_admin_token';
-        
-        // Fetch real system status
-        const statusResponse = await fetch('/api/admin/system-status', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        // Fetch real system status using API client
+        const statusResponse = await apiClient.get('/api/admin/system-status');
         
         // Also fetch health data for additional system metrics
-        const healthResponse = await fetch('/api/health', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const healthResponse = await apiClient.get('/api/health');
 
-        if (statusResponse.ok) {
-          const statusData = await statusResponse.json();
+        if (statusResponse.success && statusResponse.data) {
+          const statusData = statusResponse.data;
           
           // Merge with health data if available
-          if (healthResponse.ok) {
-            const healthData = await healthResponse.json();
+          if (healthResponse.success && healthResponse.data) {
+            const healthData = healthResponse.data;
             const cpuCheck = healthData.checks?.find((c: any) => c.component === 'cpu');
             const memoryCheck = healthData.checks?.find((c: any) => c.component === 'memory');
             const diskCheck = healthData.checks?.find((c: any) => c.component === 'disk');
@@ -119,39 +108,27 @@ export default function SystemControlAdmin() {
             console.log('✅ Real system status loaded:', statusData);
           }
         } else {
-          console.error('Failed to fetch system status:', statusResponse.status);
+          console.error('Failed to fetch system status:', statusResponse.error);
         }
 
         // Fetch real system settings
-        const settingsResponse = await fetch('/api/system/settings', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const settingsResponse = await apiClient.get('/api/system/settings');
 
-        if (settingsResponse.ok) {
-          const settingsData = await settingsResponse.json();
-          setSystemSettings(settingsData);
-          console.log('✅ Real system settings loaded:', settingsData);
+        if (settingsResponse.success && settingsResponse.data) {
+          setSystemSettings(settingsResponse.data);
+          console.log('✅ Real system settings loaded:', settingsResponse.data);
         } else {
-          console.error('Failed to fetch system settings:', settingsResponse.status);
+          console.error('Failed to fetch system settings:', settingsResponse.error);
         }
 
         // Fetch real cache stats
-        const cacheResponse = await fetch('/api/system/cache-stats', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const cacheResponse = await apiClient.get('/api/system/cache-stats');
 
-        if (cacheResponse.ok) {
-          const cacheData = await cacheResponse.json();
-          setCacheStats(cacheData);
-          console.log('✅ Real cache stats loaded:', cacheData);
+        if (cacheResponse.success && cacheResponse.data) {
+          setCacheStats(cacheResponse.data);
+          console.log('✅ Real cache stats loaded:', cacheResponse.data);
         } else {
-          console.error('Failed to fetch cache stats:', cacheResponse.status);
+          console.error('Failed to fetch cache stats:', cacheResponse.error);
         }
         
       } catch (error) {
@@ -168,19 +145,10 @@ export default function SystemControlAdmin() {
     setActionLoading(action);
     
     try {
-      const token = 'enterprise_admin_token';
-      const response = await fetch(`/api/system/action`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ action })
-      });
+      const response = await apiClient.post('/api/system/action', { action });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`✅ System action ${action} completed:`, result);
+      if (response.success) {
+        console.log(`✅ System action ${action} completed:`, response.data);
         
         // Update local state based on action
         if (action === 'toggle_maintenance' && systemStatus) {
@@ -193,7 +161,7 @@ export default function SystemControlAdmin() {
         // Reload system data to get updated status
         setTimeout(() => window.location.reload(), 1000);
       } else {
-        console.error(`Failed to execute ${action}:`, response.status);
+        console.error(`Failed to execute ${action}:`, response.error);
       }
     } catch (error) {
       console.error(`Error executing ${action}:`, error);
