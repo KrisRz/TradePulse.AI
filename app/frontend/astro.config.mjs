@@ -6,7 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://tradepulse.ai',
+  site: 'https://app.tradepulseai.co.uk',
   integrations: [
     preact({
       compat: true,
@@ -215,10 +215,7 @@ export default defineConfig({
       '**/*.spec.ts',
       '**/*.spec.tsx',
       'playwright-report/**/*',
-      'test-results/**/*',
-      // Exclude SSR API routes from static build
-      'src/pages/api/**',
-      'src/pages/charts/**'
+      'test-results/**/*'
     ]
   },
   // Production optimizations for 24/7 AWS deployment

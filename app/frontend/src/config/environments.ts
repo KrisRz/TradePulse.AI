@@ -150,13 +150,13 @@ const configurations: Record<Environment, EnvironmentConfig> = {
     debug: false,
     version: '1.0.0',
     api: {
-      base: 'https://api.tradepulse.ai',
-      websocket: 'wss://api.tradepulse.ai',
-      auth: 'https://api.tradepulse.ai/api/auth',
-      trading: 'https://api.tradepulse.ai/api/trading',
-      portfolio: 'https://api.tradepulse.ai/api/portfolio',
-      admin: 'https://api.tradepulse.ai/api/admin',
-      analytics: 'https://api.tradepulse.ai/api/analytics'
+      base: 'https://api.tradepulseai.co.uk',
+      websocket: 'wss://api.tradepulseai.co.uk',
+      auth: 'https://api.tradepulseai.co.uk/api/auth',
+      trading: 'https://api.tradepulseai.co.uk/api/trading',
+      portfolio: 'https://api.tradepulseai.co.uk/api/portfolio',
+      admin: 'https://api.tradepulseai.co.uk/api/admin',
+      analytics: 'https://api.tradepulseai.co.uk/api/analytics'
     },
     security: {
       tokenStorageKey: 'tradepulse_token',
@@ -198,7 +198,7 @@ function detectEnvironment(): Environment {
   const hostname = window.location.hostname;
   
   // Production domains
-  if (hostname === 'tradepulse.ai' || hostname === 'app.tradepulse.ai') {
+  if (hostname === 'tradepulseai.co.uk' || hostname === 'app.tradepulseai.co.uk' || hostname === 'tradepulse.ai' || hostname === 'app.tradepulse.ai') {
     return Environment.PRODUCTION;
   }
   
