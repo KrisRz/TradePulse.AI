@@ -594,6 +594,275 @@ DEVOPS_METRICS = {
 - Structured logging with correlation IDs for distributed tracing
 - Executive dashboards showing business KPIs alongside technical metrics
 
+---
+
+## 🚀 How to Deploy to AWS - Step by Step
+
+### **Prerequisites**
+```bash
+# Required tools
+- AWS Account with administrative access
+- GitHub Account and repository
+- Domain purchased (optional, but recommended for production)
+- AWS CLI installed and configured
+- Terraform v1.0+ installed
+- Docker Desktop (for local testing)
+```
+
+### **📋 Deployment Workflow Overview**
+
+```
+Local Development → Docker Build → AWS Deployment → DNS Configuration
+       ↓                 ↓                ↓                  ↓
+   Test locally    Build image      Deploy infra      Connect domain
+   Port 9002       Push to ECR      App Runner        Route53 setup
+```
+
+### **🔧 Step 1: AWS Credentials Setup**
+
+#### **Option A: OIDC (Recommended for CI/CD)**
+```bash
+# 1. Create OIDC Provider in AWS IAM
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com \
+  --thumbprint-list <GITHUB_OIDC_THUMBPRINT>
+
+# 2. Create IAM Role for GitHub Actions
+# See: infra/iam.tf for complete role definition
+# Role ARN will be: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActionsRole
+
+# 3. Add to GitHub Repository Variables (NOT Secrets)
+# Settings → Secrets and variables → Actions → Variables
+AWS_ROLE_TO_ASSUME: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActionsRole
+AWS_REGION: eu-west-2  # Or your preferred region
+```
+
+#### **Option B: Access Keys (For Manual Deployment)**
+```bash
+# Generate access keys in AWS Console
+# IAM → Users → Your User → Security credentials → Create access key
+
+# Configure AWS CLI
+aws configure
+# AWS Access Key ID: <YOUR_KEY>
+# AWS Secret Access Key: <YOUR_SECRET>
+# Default region: eu-west-2
+# Default output format: json
+```
+
+### **🔧 Step 2: Binance API Keys Setup**
+
+```bash
+# 1. Get API keys from Binance (https://www.binance.com/en/my/settings/api-management)
+# 2. Store in AWS Systems Manager Parameter Store
+
+aws ssm put-parameter \
+  --name "/tradepulse/binance/api-key" \
+  --value "YOUR_BINANCE_API_KEY" \
+  --type "SecureString" \
+  --description "Binance API Key for TradePulse.AI"
+
+aws ssm put-parameter \
+  --name "/tradepulse/binance/api-secret" \
+  --value "YOUR_BINANCE_API_SECRET" \
+  --type "SecureString" \
+  --description "Binance API Secret for TradePulse.AI"
+```
+
+### **🔧 Step 3: Infrastructure Deployment (Terraform)**
+
+```bash
+cd infra/
+
+# 1. Initialize Terraform
+terraform init
+
+# 2. Create terraform.tfvars (copy from terraform.tfvars.example)
+cat > terraform.tfvars << EOF
+project_name    = "tradepulse"
+environment     = "production"
+aws_region      = "eu-west-2"
+domain_name     = "tradepulseai.co.uk"  # Optional
+api_subdomain   = "api"
+app_subdomain   = "app"
+EOF
+
+# 3. Validate configuration
+terraform validate
+
+# 4. Plan deployment (review changes)
+terraform plan -out=tfplan
+
+# 5. Apply infrastructure
+terraform apply tfplan
+
+# 6. Note outputs (important!)
+terraform output -json > outputs.json
+```
+
+**Expected Resources Created:**
+- ✅ ECR Repository for Docker images
+- ✅ App Runner service (backend)
+- ✅ 7 DynamoDB tables (brain_state, positions, signals, etc.)
+- ✅ CloudWatch dashboards and alarms
+- ✅ IAM roles and policies
+- ✅ SSM parameters (if not created manually)
+- ✅ Route53 records (if domain configured)
+
+### **🔧 Step 4: Backend Deployment (Docker + App Runner)**
+
+#### **Manual Deployment:**
+```bash
+cd app/backend/
+
+# 1. Build Docker image locally
+docker build -t tradepulse-backend:latest .
+
+# 2. Test locally (optional but recommended)
+docker run -p 9002:9002 \
+  -e AWS_REGION=eu-west-2 \
+  -e DYNAMODB_TABLE_PREFIX=tradepulse_ \
+  tradepulse-backend:latest
+
+# 3. Tag for ECR
+ECR_URL=$(terraform -chdir=../infra output -raw ecr_repository_url)
+docker tag tradepulse-backend:latest $ECR_URL:latest
+
+# 4. Login to ECR
+aws ecr get-login-password --region eu-west-2 | \
+  docker login --username AWS --password-stdin $ECR_URL
+
+# 5. Push to ECR
+docker push $ECR_URL:latest
+
+# 6. App Runner will auto-deploy (check console or run)
+aws apprunner list-services --query 'ServiceSummaryList[?ServiceName==`tradepulse-backend-service`]'
+```
+
+#### **Automated Deployment (GitHub Actions):**
+```bash
+# Just push to main branch!
+git add .
+git commit -m "feat: deploy to AWS"
+git push origin main
+
+# GitHub Actions will automatically:
+# 1. Build Docker image
+# 2. Push to ECR
+# 3. Deploy to App Runner
+# 4. Run health checks
+```
+
+### **🔧 Step 5: Frontend Deployment (S3 + CloudFront)**
+
+```bash
+cd app/frontend/
+
+# 1. Build production frontend
+npm run build
+
+# 2. Get S3 bucket name from Terraform
+S3_BUCKET=$(terraform -chdir=../../infra output -raw s3_bucket_name)
+
+# 3. Sync to S3
+aws s3 sync dist/ s3://$S3_BUCKET/ --delete
+
+# 4. Invalidate CloudFront cache
+DISTRIBUTION_ID=$(terraform -chdir=../../infra output -raw cloudfront_distribution_id)
+aws cloudfront create-invalidation \
+  --distribution-id $DISTRIBUTION_ID \
+  --paths "/*"
+
+# 5. Wait for invalidation to complete (~2-5 minutes)
+```
+
+### **🔧 Step 6: DNS Configuration (Route53)**
+
+If you have a domain:
+
+```bash
+# Terraform handles this automatically if domain_name is set in terraform.tfvars
+
+# Verify DNS records
+aws route53 list-resource-record-sets \
+  --hosted-zone-id $(terraform -chdir=infra output -raw hosted_zone_id)
+
+# Expected records:
+# ✅ app.tradepulseai.co.uk → CloudFront distribution
+# ✅ api.tradepulseai.co.uk → App Runner service
+# ✅ tradepulseai.co.uk → CloudFront (root domain)
+```
+
+### **✅ Step 7: Verify Deployment**
+
+```bash
+# 1. Check backend health
+curl https://api.tradepulseai.co.uk/health
+
+# Expected: {"status": "healthy", "timestamp": "..."}
+
+# 2. Check frontend
+open https://app.tradepulseai.co.uk
+
+# Expected: Login page loads
+
+# 3. Test login
+# Email: admin@tradepulse.ai
+# Password: admin0000
+
+# 4. Check CloudWatch metrics
+aws cloudwatch get-dashboard \
+  --dashboard-name tradepulse-production-dashboard
+```
+
+### **🎯 Deployment Complete!**
+
+Your application is now live on AWS with:
+- ✅ **Backend**: Running on App Runner with auto-scaling
+- ✅ **Frontend**: Deployed on S3/CloudFront with global CDN
+- ✅ **Database**: DynamoDB tables ready for trading data
+- ✅ **Monitoring**: CloudWatch dashboards and alarms active
+- ✅ **Security**: OIDC authentication, encrypted secrets
+- ✅ **Cost**: Optimized for <$50/month
+
+### **📚 Detailed Guides**
+
+For comprehensive deployment documentation, see:
+- 📖 [DEVOPS_DEPLOYMENT_GUIDE.md](DEVOPS_DEPLOYMENT_GUIDE.md) - Complete DevOps guide
+- 📖 [AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) - AWS-specific details
+- 📖 [COST_OPTIMIZATION.md](COST_OPTIMIZATION.md) - Cost optimization strategies
+
+### **🐛 Troubleshooting**
+
+**Backend won't start:**
+```bash
+# Check App Runner logs
+aws logs tail /aws/apprunner/tradepulse-backend/application --follow
+
+# Check health endpoint
+curl https://api.tradepulseai.co.uk/health
+```
+
+**Frontend shows 403:**
+```bash
+# Check CloudFront distribution status
+aws cloudfront get-distribution --id $DISTRIBUTION_ID
+
+# Verify S3 bucket policy allows CloudFront access
+```
+
+**Login fails:**
+```bash
+# Check CORS configuration in App Runner
+# Verify api.tradepulseai.co.uk resolves correctly
+dig api.tradepulseai.co.uk
+
+# Check browser console for CORS errors
+```
+
+---
+
 ### **🎯 Enhanced System Workflow - How It Works**
 
 #### **🚀 Startup Sequence (Enhanced)**
@@ -973,10 +1242,9 @@ cd app/frontend && npm install && npm run dev
 - ✅ **Professional Dashboard**: Real-time portfolio management
 - ✅ **Autonomous Operation**: Brain Controller FSM orchestration
 
-### **Demo Credentials:**
-- **Username**: admin@tradepulse.ai
-- **Password**: admin0000
-- **Role**: Administrator (full access)
+Credentials:
+- Admin: admin@tradepulse.ai / admin0000
+- Trader: trader1@example.com / user1234
 
 ### **Troubleshooting:**
 - **Java not found**: `brew install openjdk@17`
