@@ -73,11 +73,11 @@ resource "aws_cloudfront_origin_access_control" "oac" {
 }
 
 resource "aws_acm_certificate" "frontend" {
-  provider          = aws.us_east_1
-  count             = var.domain_name != "" ? 1 : 0
-  domain_name       = "${var.frontend_subdomain}.${var.domain_name}"
+  provider                  = aws.us_east_1
+  count                     = var.domain_name != "" ? 1 : 0
+  domain_name               = "${var.frontend_subdomain}.${var.domain_name}"
   subject_alternative_names = [var.domain_name]
-  validation_method = "DNS"
+  validation_method         = "DNS"
 }
 
 resource "aws_route53_record" "frontend_cert_validation" {
