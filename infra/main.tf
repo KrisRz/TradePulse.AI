@@ -96,7 +96,10 @@ resource "aws_cloudfront_distribution" "frontend" {
   comment             = "${var.project_name} frontend"
   default_root_object = "index.html"
 
-  aliases = ["${var.frontend_subdomain}.${var.domain_name}"]
+  aliases = [
+    "${var.frontend_subdomain}.${var.domain_name}",
+    var.domain_name
+  ]
 
   origin {
     domain_name              = aws_s3_bucket.frontend[0].bucket_regional_domain_name
@@ -132,6 +135,19 @@ resource "aws_route53_record" "frontend_alias" {
   count   = length(aws_cloudfront_distribution.frontend) == 0 ? 0 : 1
   zone_id = var.hosted_zone_id
   name    = "${var.frontend_subdomain}.${var.domain_name}"
+  type    = "A"
+  alias {
+    name                   = aws_cloudfront_distribution.frontend[0].domain_name
+    zone_id                = aws_cloudfront_distribution.frontend[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+# Apex alias to CloudFront so root domain serves the app as well
+resource "aws_route53_record" "frontend_apex_alias" {
+  count   = length(aws_cloudfront_distribution.frontend) == 0 ? 0 : 1
+  zone_id = var.hosted_zone_id
+  name    = var.domain_name
   type    = "A"
   alias {
     name                   = aws_cloudfront_distribution.frontend[0].domain_name
