@@ -306,6 +306,7 @@ resource "aws_route53_record" "backend_alias" {
   name    = local.backend_fqdn
   type    = "CNAME"
   ttl     = 60
+  allow_overwrite = true
   records = [aws_apprunner_service.backend.service_url]
 }
 
