@@ -17,42 +17,10 @@ if (isAdmin) {
   return Astro.redirect('/admin/dashboard');
 }
 
-// Fetch real user dashboard data from backend - NO HARDCODED VALUES!
+// Skip SSR fetch - data will be loaded client-side by React components
+// SSR fetch with relative URLs fails during build time
 let userDashboardData = null;
 let fetchError = null;
-
-try {
-  // Get auth token from cookies or headers
-  const authToken = Astro.cookies.get('auth_token')?.value ||
-                   Astro.request.headers.get('authorization')?.replace('Bearer ', '') ||
-                   'enterprise_admin_token'; // Development fallback
-
-  if (!authToken) {
-    throw new Error('No authentication token available');
-  }
-
-  // Fetch real dashboard data from backend (using available analytics endpoint)
-  const response = await fetch('/api/analytics/signals/metrics', {
-    headers: {
-      'Authorization': `Bearer ${authToken}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (response.ok) {
-    userDashboardData = await response.json();
-    console.log('✅ Astro: Loaded real user dashboard data');
-  } else {
-    throw new Error(`Backend API error: ${response.status}`);
-  }
-
-} catch (error) {
-  console.error('❌ Astro: Failed to fetch user dashboard data:', error);
-  fetchError = error instanceof Error ? error.message : 'Failed to load data';
-
-  // NO FALLBACKS - use null to show error state
-  userDashboardData = null;
-}
 
 // Helper function to format currency
 function formatCurrency(amount: number): string {

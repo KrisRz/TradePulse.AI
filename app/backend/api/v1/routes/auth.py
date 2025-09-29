@@ -29,9 +29,10 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
 # PRODUCTION USER DATABASE (Replace with real DynamoDB in AWS)
+# Password hashes are pre-generated to remain consistent across restarts
 PRODUCTION_USERS = {
     "admin@tradepulse.ai": {
-        "password_hash": bcrypt.hashpw("admin0000".encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
+        "password_hash": "$2b$12$RSfEnTeva7e9eVKvDtyFWeVcbnVhXD9iB0HweJWnfIpt30RBdGJTq",  # admin0000
         "user_id": "admin_prod_001",
         "is_admin": True,
         "username": "admin",
@@ -40,7 +41,7 @@ PRODUCTION_USERS = {
         "created_at": "2025-08-15T00:00:00Z"
     },
     "trader1@example.com": {
-        "password_hash": bcrypt.hashpw("user1234".encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
+        "password_hash": "$2b$12$gljRcIHcoIadM7dQHOreT.uzutSRbJjfgUfOzgFcM3KO8wKD.czka",  # user1234
         "user_id": "trader_prod_001", 
         "is_admin": False,
         "username": "trader1",

@@ -15,41 +15,10 @@ if (isAdmin) {
   return Astro.redirect('/admin/dashboard');
 }
 
-// Fetch real portfolio data from backend - NO HARDCODED VALUES!
+// Skip SSR fetch - data will be loaded client-side by React components
+// SSR fetch with relative URLs fails during build time
 let portfolioData = null;
 let fetchError = null;
-
-try {
-  // Get auth token from cookies or headers
-  const authToken = Astro.cookies.get('auth_token')?.value ||
-                   Astro.request.headers.get('authorization')?.replace('Bearer ', '') ||
-                   'enterprise_admin_token'; // Development fallback
-
-  if (!authToken) {
-    throw new Error('No authentication token available');
-  }
-
-  // Fetch real portfolio data from backend (using available analytics endpoint)
-  const response = await fetch('/api/analytics/signals/metrics', {
-    headers: {
-      'Authorization': `Bearer ${authToken}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (response.ok) {
-    portfolioData = await response.json();
-    console.log('✅ Astro: Loaded real portfolio data');
-  } else {
-    throw new Error(`Backend API error: ${response.status}`);
-  }
-
-} catch (error) {
-  console.error('❌ Astro: Failed to fetch portfolio data:', error);
-  fetchError = error instanceof Error ? error.message : 'Failed to load portfolio data';
-  // NO FALLBACKS - keep null to show error state
-  portfolioData = null;
-}
 
 // Helper functions for formatting
 function formatCurrency(amount: number): string {
