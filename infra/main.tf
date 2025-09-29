@@ -301,13 +301,13 @@ locals {
 }
 
 resource "aws_route53_record" "backend_alias" {
-  count   = local.backend_fqdn != "" ? 1 : 0
-  zone_id = var.hosted_zone_id
-  name    = local.backend_fqdn
-  type    = "CNAME"
-  ttl     = 60
+  count           = local.backend_fqdn != "" ? 1 : 0
+  zone_id         = var.hosted_zone_id
+  name            = local.backend_fqdn
+  type            = "CNAME"
+  ttl             = 60
   allow_overwrite = true
-  records = [aws_apprunner_service.backend.service_url]
+  records         = [aws_apprunner_service.backend.service_url]
 }
 
 output "dynamodb_tables" {
