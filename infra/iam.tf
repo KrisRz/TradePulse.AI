@@ -127,6 +127,7 @@ resource "aws_iam_policy" "github_actions_policy" {
           "route53:GetHostedZone",
           "route53:ChangeResourceRecordSets",
           "route53:ListResourceRecordSets",
+          "route53:GetChange",
           "ec2:DescribeVpcs",
           "ec2:DescribeSubnets",
           "ec2:DescribeSecurityGroups",
