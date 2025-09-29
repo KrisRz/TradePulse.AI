@@ -106,6 +106,20 @@ output "app_runner_service_url" {
   value       = aws_apprunner_service.backend.service_url
 }
 
+# Optional: Route 53 records for custom domain
+locals {
+  backend_fqdn = var.domain_name != "" ? (var.apex_subdomain != "" ? "${var.apex_subdomain}.${var.domain_name}" : var.domain_name) : ""
+}
+
+resource "aws_route53_record" "backend_alias" {
+  count   = local.backend_fqdn != "" && var.hosted_zone_id != "" ? 1 : 0
+  zone_id = var.hosted_zone_id
+  name    = local.backend_fqdn
+  type    = "CNAME"
+  ttl     = 60
+  records = [aws_apprunner_service.backend.service_url]
+}
+
 output "dynamodb_tables" {
   description = "DynamoDB table names"
   value = {

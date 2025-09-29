@@ -64,6 +64,19 @@ variable "enable_monitoring" {
   default     = true
 }
 
+# Domain configuration (Route 53)
+variable "domain_name" {
+  description = "Root domain managed in Route 53 (e.g., tradepulseai.co.uk)"
+  type        = string
+  default     = ""
+}
+
+variable "apex_subdomain" {
+  description = "Subdomain for backend (e.g., api). Leave empty to use root."
+  type        = string
+  default     = "api"
+}
+
 variable "github_repo" {
   description = "GitHub repository for OIDC trust (format: org/repo)"
   type        = string

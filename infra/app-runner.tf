@@ -38,9 +38,6 @@ resource "aws_apprunner_service" "backend" {
           LOG_FORMAT            = "json"
           HEALTH_CHECK_INTERVAL = "30"
 
-          # DynamoDB endpoint for managed service
-          DYNAMODB_ENDPOINT = "https://dynamodb.${var.region}.amazonaws.com"
-
           # Override local development settings
           HOST = "0.0.0.0"
           PORT = "9002"
@@ -56,7 +53,7 @@ resource "aws_apprunner_service" "backend" {
           BINANCE_API_SECRET = aws_ssm_parameter.binance_api_secret.arn
         }
 
-        # Start command override if needed
+        # Start command override
         start_command = "uvicorn app.backend.main:app --host 0.0.0.0 --port 9002"
       }
     }
