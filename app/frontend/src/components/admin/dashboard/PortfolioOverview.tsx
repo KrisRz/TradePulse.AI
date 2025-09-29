@@ -1,5 +1,6 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { Portfolio, PortfolioSummary } from '../../types';
+import { apiClient } from '@/lib/api-client';
 
 interface PortfolioOverviewProps {
   portfolioId?: string;
@@ -36,21 +37,15 @@ export default function PortfolioOverview({ portfolioId }: PortfolioOverviewProp
       setLoading(true);
       setError(null);
       
-      // PRODUCTION: Fetch real portfolio summary from backend/DynamoDB
-      const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-      const response = await fetch(`/api/portfolio/summary${portfolioId ? `/${portfolioId}` : ''}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // PRODUCTION: Fetch real portfolio summary from backend/DynamoDB via API client
+      const endpoint = `/api/portfolio/summary${portfolioId ? `/${portfolioId}` : ''}`;
+      const response = await apiClient.get(endpoint);
 
-      if (response.ok) {
-        const data = await response.json();
-        setPortfolioSummary(data);
-        console.log('✅ Real portfolio summary loaded:', data);
+      if (response.success && response.data) {
+        setPortfolioSummary(response.data);
+        console.log('✅ Real portfolio summary loaded:', response.data);
       } else {
-        console.error('Failed to fetch portfolio summary:', response.status);
+        console.error('Failed to fetch portfolio summary:', response.error);
         setError('Failed to load portfolio data from backend');
       }
       

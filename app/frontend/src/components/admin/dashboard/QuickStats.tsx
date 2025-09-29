@@ -1,4 +1,5 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
+import { apiClient } from '@/lib/api-client';
 
 interface QuickStat {
   label: string;
@@ -25,17 +26,11 @@ export default function QuickStats() {
     try {
       setLoading(true);
       
-      // PRODUCTION: Fetch real quick stats from backend/DynamoDB
-      const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-      const response = await fetch('/api/portfolio/quick-stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // PRODUCTION: Fetch real quick stats from backend/DynamoDB via API client
+      const response = await apiClient.get('/api/portfolio/quick-stats');
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.success && response.data) {
+        const data = response.data;
         
         // Map real data to QuickStat format
         const realStats: QuickStat[] = [
