@@ -131,10 +131,25 @@ jobs:
           TF_VAR_binance_api_key: ${{ secrets.BINANCE_API_KEY }}
           TF_VAR_binance_api_secret: ${{ secrets.BINANCE_API_SECRET }}
 
-      - name: Terraform Apply
+      - name: Wait for App Runner idle
         run: |
-          terraform apply -auto-approve tfplan
-          echo "✅ Infrastructure deployed successfully"
+          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" --output text)
+          echo "Waiting for App Runner to be idle: $SERVICE_ARN"
+          for i in {1..30}; do
+            STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.Status' --output text)
+            echo "Attempt $i/30 - Status=$STATUS"
+            if [ "$STATUS" != "OPERATION_IN_PROGRESS" ]; then break; fi
+            sleep 20
+          done
+
+      - name: Terraform Apply (with retry)
+        run: |
+          for i in 1 2 3; do
+            terraform apply -auto-approve tfplan && exit 0
+            echo "Apply failed, retry $i/3 in 30s..."
+            sleep 30
+          done
+          exit 1
 
       - name: Get App Runner Service URL
         run: |
