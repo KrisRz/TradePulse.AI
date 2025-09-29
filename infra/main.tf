@@ -102,6 +102,32 @@ resource "aws_acm_certificate_validation" "frontend" {
   validation_record_fqdns = [for r in aws_route53_record.frontend_cert_validation : r.fqdn]
 }
 
+# CloudFront Function for URL rewriting (directory index)
+resource "aws_cloudfront_function" "url_rewrite" {
+  count   = var.domain_name != "" ? 1 : 0
+  name    = "${var.project_name}-url-rewrite"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rewrite URLs to append /index.html for directory requests"
+  publish = true
+  code    = <<-EOT
+function handler(event) {
+  var request = event.request;
+  var uri = request.uri;
+  
+  // If URI ends with '/', append 'index.html'
+  if (uri.endsWith('/')) {
+    request.uri += 'index.html';
+  }
+  // If URI has no extension, append '/index.html'
+  else if (!uri.includes('.')) {
+    request.uri += '/index.html';
+  }
+  
+  return request;
+}
+EOT
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   count = var.domain_name != "" ? 1 : 0
 
@@ -131,16 +157,15 @@ resource "aws_cloudfront_distribution" "frontend" {
       query_string = false
       cookies { forward = "none" }
     }
+
+    # Attach URL rewrite function
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.url_rewrite[0].arn
+    }
   }
 
-  # Custom error responses for SPA routing (Astro SSG)
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
-    error_caching_min_ttl = 0
-  }
-
+  # Custom error response only for 404 (client-side routing fallback)
   custom_error_response {
     error_code         = 404
     response_code      = 200
