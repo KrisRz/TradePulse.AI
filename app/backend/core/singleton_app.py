@@ -32,6 +32,7 @@ class SingletonTradingApp:
         self.ddb_connected = False
         self._trading_task: Optional[asyncio.Task] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
+        self._ddb_task: Optional[asyncio.Task] = None
         
     async def startup(self):
         """Startup sequence with lease acquisition"""
@@ -95,8 +96,11 @@ class SingletonTradingApp:
             # Step 1: Load ML models
             await self._load_models()
             
-            # Step 2: Check DynamoDB connectivity
+            # Step 2: Check DynamoDB connectivity (non-fatal)
             await self._check_database_connectivity()
+            # If DB not yet reachable, start background reconnect loop
+            if not self.ddb_connected and self._ddb_task is None:
+                self._ddb_task = asyncio.create_task(self._ddb_reconnect_loop())
             
             # Step 3: Try to acquire trading brain lease
             lease_acquired = await self.lease_guard.try_acquire_lease()
@@ -239,6 +243,26 @@ class SingletonTradingApp:
                 
         except Exception as e:
             logger.debug(f"WebSocket close error: {e}")
+
+    async def _ddb_reconnect_loop(self) -> None:
+        """Retry DynamoDB connectivity in background until success."""
+        backoff_seconds = 5
+        max_backoff = 60
+        tries = 0
+        while not self.ddb_connected:
+            tries += 1
+            try:
+                await self._check_database_connectivity()
+                if self.ddb_connected:
+                    logger.info("✅ DynamoDB reconnected successfully")
+                    break
+            except Exception:
+                # _check_database_connectivity already logs the error
+                pass
+            await asyncio.sleep(backoff_seconds)
+            backoff_seconds = min(max_backoff, backoff_seconds * 2 if tries < 5 else max_backoff)
+        # Clear handle once finished
+        self._ddb_task = None
     
     def health_status(self) -> dict:
         """Get health status for /health endpoint"""
