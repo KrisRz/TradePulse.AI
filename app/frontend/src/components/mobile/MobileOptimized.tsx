@@ -1,7 +1,17 @@
-import { useState, useRef } from 'preact/hooks';
-import { ComponentChildren } from 'preact';
-import { ChevronDown, ChevronUp, MoreHorizontal, X } from 'lucide-preact';
-import type { Icon } from 'lucide-preact';
+/** @jsxImportSource preact */
+import { useState, useRef, useEffect } from 'preact/hooks';
+import type { ComponentChildren, FunctionalComponent } from 'preact';
+import { ChevronDown, ChevronUp } from 'lucide-preact';
+
+// Fallback icon type for lucide-preact compatibility
+type IconComponent = FunctionalComponent<any>;
+
+// X icon component (fallback if not available from lucide-preact)
+const X: IconComponent = () => (
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
 
 // Mobile-optimized card component with touch interactions
 interface MobileCardProps {
@@ -10,8 +20,8 @@ interface MobileCardProps {
   onTap?: () => void;
   onLongPress?: () => void;
   swipeActions?: {
-    left?: { icon: Icon; label: string; action: () => void; color?: string };
-    right?: { icon: Icon; label: string; action: () => void; color?: string };
+    left?: { icon: IconComponent; label: string; action: () => void; color?: string };
+    right?: { icon: IconComponent; label: string; action: () => void; color?: string };
   };
 }
 
@@ -25,10 +35,10 @@ export function MobileCard({
   const [isPressed, setIsPressed] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [showActions, setShowActions] = useState(false);
-  const pressTimer = useRef<number | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
-  const handleTouchStart = (e: TouchEvent) => {
+  const handleTouchStart = (_e: TouchEvent) => {
     setIsPressed(true);
     
     if (onLongPress) {
@@ -62,10 +72,9 @@ export function MobileCard({
       clearTimeout(pressTimer.current);
     }
     
-    if (swipeActions) {
-      const touch = e.touches[0];
-      const startX = touch.clientX;
-      // Implement swipe logic here
+    if (swipeActions && e.touches[0]) {
+      // TODO: Implement swipe logic here
+      // const startX = e.touches[0].clientX;
     }
   };
 
@@ -119,9 +128,9 @@ export function BottomSheet({
   snapPoints = [0.3, 0.6, 0.9],
   initialSnap = 1
 }: BottomSheetProps) {
-  const [currentSnap, setCurrentSnap] = useState(initialSnap);
+  const [currentSnap] = useState(initialSnap);
   const [isDragging, setIsDragging] = useState(false);
-  const sheetRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -158,7 +167,7 @@ export function BottomSheet({
         ref={sheetRef}
         className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 rounded-t-2xl shadow-xl transition-transform duration-300 ease-out"
         style={{
-          height: `${snapPoints[currentSnap] * 100}vh`,
+          height: `${(snapPoints[currentSnap] ?? 0.5) * 100}vh`,
           transform: isDragging ? 'none' : 'translateY(0)'
         }}
       >
@@ -257,7 +266,7 @@ export function HorizontalScroll({
 }: HorizontalScrollProps) {
   const [showLeftShadow, setShowLeftShadow] = useState(false);
   const [showRightShadow, setShowRightShadow] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const handleScroll = () => {
     if (scrollRef.current) {
@@ -290,8 +299,7 @@ export function HorizontalScroll({
         onScroll={handleScroll}
         style={{
           scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          WebkitScrollbar: { display: 'none' }
+          msOverflowStyle: 'none'
         }}
       >
         {children}
@@ -311,7 +319,7 @@ export function HorizontalScroll({
 
 // Mobile-optimized floating action button
 interface FloatingActionButtonProps {
-  icon: Icon;
+  icon: IconComponent;
   onClick: () => void;
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
   className?: string;
@@ -369,17 +377,17 @@ export function PullToRefresh({
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [canRefresh, setCanRefresh] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   let startY = 0;
 
   const handleTouchStart = (e: TouchEvent) => {
-    if (window.scrollY === 0) {
+    if (window.scrollY === 0 && e.touches[0]) {
       startY = e.touches[0].clientY;
     }
   };
 
   const handleTouchMove = (e: TouchEvent) => {
-    if (window.scrollY === 0 && !isRefreshing) {
+    if (window.scrollY === 0 && !isRefreshing && e.touches[0]) {
       const currentY = e.touches[0].clientY;
       const diff = currentY - startY;
       
@@ -421,6 +429,7 @@ export function PullToRefresh({
         container.removeEventListener('touchend', handleTouchEnd);
       };
     }
+    return undefined;
   }, [canRefresh, isRefreshing]);
 
   return (
@@ -479,10 +488,9 @@ export function Toast({
   duration = 3000
 }: ToastProps) {
   useEffect(() => {
-    if (isVisible && duration > 0) {
-      const timer = setTimeout(onClose, duration);
-      return () => clearTimeout(timer);
-    }
+    if (!isVisible || duration <= 0) return undefined;
+    const timer = setTimeout(onClose, duration);
+    return () => clearTimeout(timer);
   }, [isVisible, duration, onClose]);
 
   const typeClasses = {
