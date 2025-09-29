@@ -28,6 +28,12 @@ provider "aws" {
   }
 }
 
+# Route53 zone lookup (used when hosted_zone_id not explicitly provided)
+data "aws_route53_zone" "primary" {
+  count = var.domain_name != "" && var.hosted_zone_id == "" ? 1 : 0
+  name  = var.domain_name
+}
+
 # Additional provider for us-east-1 (ACM for CloudFront)
 provider "aws" {
   alias  = "us_east_1"
@@ -289,8 +295,8 @@ locals {
 }
 
 resource "aws_route53_record" "backend_alias" {
-  count   = local.backend_fqdn != "" && var.hosted_zone_id != "" ? 1 : 0
-  zone_id = var.hosted_zone_id
+  count   = local.backend_fqdn != "" ? 1 : 0
+  zone_id = var.hosted_zone_id != "" ? var.hosted_zone_id : data.aws_route53_zone.primary[0].zone_id
   name    = local.backend_fqdn
   type    = "CNAME"
   ttl     = 60

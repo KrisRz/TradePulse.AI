@@ -68,7 +68,7 @@ variable "enable_monitoring" {
 variable "domain_name" {
   description = "Root domain managed in Route 53 (e.g., tradepulseai.co.uk)"
   type        = string
-  default     = ""
+  default     = "tradepulseai.co.uk"
 }
 
 variable "apex_subdomain" {
