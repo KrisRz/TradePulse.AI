@@ -49,13 +49,13 @@ export const authActions = {
         
         console.log('🔐 Auth Store: Raw API response:', data);
         
-        // Create user object from API response
+        // Create user object from API response (backend returns flat structure)
         const user = {
-          id: data.user.user_id,
-          email: data.user.email,
-          name: data.user.username || data.user.email.split('@')[0],
-          role: data.user.is_admin ? 'admin' : 'user' as 'user' | 'admin',
-          is_admin: data.user.is_admin
+          id: data.user_id,
+          email: data.email,
+          name: data.email.split('@')[0],
+          role: data.is_admin ? 'admin' : 'user' as 'user' | 'admin',
+          is_admin: data.is_admin
         };
 
         console.log('🔐 Auth Store: Created user object:', user);
