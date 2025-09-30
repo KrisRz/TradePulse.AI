@@ -1,0 +1,152 @@
+# SSM Parameter Store for secure configuration management
+
+resource "aws_ssm_parameter" "binance_api_key" {
+  name      = "/${var.project_name}/${var.environment}/BINANCE_API_KEY"
+  type      = "SecureString"
+  value     = var.binance_api_key
+  overwrite = true
+
+  tags = {
+    Name        = "${var.project_name}-binance-api-key"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ssm_parameter" "binance_api_secret" {
+  name      = "/${var.project_name}/${var.environment}/BINANCE_API_SECRET"
+  type      = "SecureString"
+  value     = var.binance_api_secret
+  overwrite = true
+
+  tags = {
+    Name        = "${var.project_name}-binance-api-secret"
+    Environment = var.environment
+  }
+}
+
+# Additional configuration parameters
+resource "aws_ssm_parameter" "environment" {
+  name  = "/${var.project_name}/${var.environment}/ENVIRONMENT"
+  type  = "String"
+  value = var.environment
+
+  tags = {
+    Name        = "${var.project_name}-environment"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ssm_parameter" "aws_region" {
+  name  = "/${var.project_name}/${var.environment}/AWS_REGION"
+  type  = "String"
+  value = var.region
+
+  tags = {
+    Name        = "${var.project_name}-aws-region"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ssm_parameter" "dynamodb_table_prefix" {
+  name  = "/${var.project_name}/${var.environment}/DYNAMODB_TABLE_PREFIX"
+  type  = "String"
+  value = "${var.project_name}_"
+
+  tags = {
+    Name        = "${var.project_name}-dynamodb-prefix"
+    Environment = var.environment
+  }
+}
+
+# Professional mode and feature flags
+resource "aws_ssm_parameter" "professional_mode" {
+  name  = "/${var.project_name}/${var.environment}/PROFESSIONAL_MODE"
+  type  = "String"
+  value = "true"
+
+  tags = {
+    Name        = "${var.project_name}-professional-mode"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ssm_parameter" "strict_live_stream" {
+  name  = "/${var.project_name}/${var.environment}/STRICT_LIVE_STREAM"
+  type  = "String"
+  value = "true"
+
+  tags = {
+    Name        = "${var.project_name}-strict-live-stream"
+    Environment = var.environment
+  }
+}
+
+# Trading configuration
+resource "aws_ssm_parameter" "trading_symbol" {
+  name  = "/${var.project_name}/${var.environment}/TRADING_SYMBOL"
+  type  = "String"
+  value = "BTCUSDT"
+
+  tags = {
+    Name        = "${var.project_name}-trading-symbol"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ssm_parameter" "trading_mode" {
+  name  = "/${var.project_name}/${var.environment}/TRADING_MODE"
+  type  = "String"
+  value = "DAY_TRADING"
+
+  tags = {
+    Name        = "${var.project_name}-trading-mode"
+    Environment = var.environment
+  }
+}
+
+# Database configuration
+resource "aws_ssm_parameter" "dynamodb_endpoint" {
+  name  = "/${var.project_name}/${var.environment}/DYNAMODB_ENDPOINT"
+  type  = "String"
+  value = "https://dynamodb.${var.region}.amazonaws.com"
+
+  tags = {
+    Name        = "${var.project_name}-dynamodb-endpoint"
+    Environment = var.environment
+  }
+}
+
+# Logging configuration
+resource "aws_ssm_parameter" "log_level" {
+  name  = "/${var.project_name}/${var.environment}/LOG_LEVEL"
+  type  = "String"
+  value = "INFO"
+
+  tags = {
+    Name        = "${var.project_name}-log-level"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ssm_parameter" "log_format" {
+  name  = "/${var.project_name}/${var.environment}/LOG_FORMAT"
+  type  = "String"
+  value = "json"
+
+  tags = {
+    Name        = "${var.project_name}-log-format"
+    Environment = var.environment
+  }
+}
+
+# Health check configuration
+resource "aws_ssm_parameter" "health_check_interval" {
+  name  = "/${var.project_name}/${var.environment}/HEALTH_CHECK_INTERVAL"
+  type  = "String"
+  value = "30"
+
+  tags = {
+    Name        = "${var.project_name}-health-check-interval"
+    Environment = var.environment
+  }
+}
