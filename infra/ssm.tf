@@ -1,9 +1,9 @@
 # SSM Parameter Store for secure configuration management
 
 resource "aws_ssm_parameter" "binance_api_key" {
-  name  = "/${var.project_name}/${var.environment}/BINANCE_API_KEY"
-  type  = "SecureString"
-  value = var.binance_api_key
+  name      = "/${var.project_name}/${var.environment}/BINANCE_API_KEY"
+  type      = "SecureString"
+  value     = var.binance_api_key
   overwrite = true
 
   tags = {
@@ -13,9 +13,9 @@ resource "aws_ssm_parameter" "binance_api_key" {
 }
 
 resource "aws_ssm_parameter" "binance_api_secret" {
-  name  = "/${var.project_name}/${var.environment}/BINANCE_API_SECRET"
-  type  = "SecureString"
-  value = var.binance_api_secret
+  name      = "/${var.project_name}/${var.environment}/BINANCE_API_SECRET"
+  type      = "SecureString"
+  value     = var.binance_api_secret
   overwrite = true
 
   tags = {
