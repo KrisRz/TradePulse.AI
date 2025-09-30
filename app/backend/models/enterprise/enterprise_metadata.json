@@ -1,0 +1,97 @@
+{
+  "training_date": "2025-09-02T11:19:22.777643+00:00",
+  "feature_names": [
+    "close",
+    "volume",
+    "rsi",
+    "macd",
+    "bb_position",
+    "volatility",
+    "trend_strength",
+    "volume_ratio",
+    "price_change_24h"
+  ],
+  "layer_performance": {
+    "layer_3": {
+      "accuracy": 0.9987992795677406,
+      "model_type": "LightGBM Classifier",
+      "features": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "bb_position",
+        "volatility",
+        "trend_strength",
+        "volume_ratio",
+        "price_change_24h"
+      ],
+      "n_features": 9
+    },
+    "layer_4": {
+      "accuracy": 0.9998999399639784,
+      "model_type": "Random Forest Classifier",
+      "features": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "bb_position",
+        "volatility",
+        "trend_strength",
+        "volume_ratio",
+        "price_change_24h"
+      ],
+      "n_features": 9
+    },
+    "layer_5": {
+      "r2_score": 0.5498649591519406,
+      "model_type": "XGBRegressor_Professional",
+      "features": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "bb_position",
+        "volatility",
+        "trend_strength",
+        "volume_ratio",
+        "price_change_24h"
+      ],
+      "training_samples": 5000,
+      "retrained_at": "2025-09-02T11:19:22.777634+00:00",
+      "bounds_enforced": true,
+      "professional_wrapper": true,
+      "n_features": 9
+    },
+    "layer_6": {
+      "r2_score": 0.9826104416702788,
+      "model_type": "LightGBM Regressor",
+      "features": [
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "bb_position",
+        "volatility",
+        "trend_strength",
+        "volume_ratio",
+        "price_change_24h"
+      ],
+      "n_features": 9
+    }
+  },
+  "model_versions": {
+    "layer_1": "v2.1.0",
+    "layer_2": "v2.1.0",
+    "layer_3": "v2.1.0",
+    "layer_4": "v2.1.0",
+    "layer_5": "v2.1.0",
+    "layer_6": "v2.1.0"
+  },
+  "system_version": "6-Layer Enterprise v3.1.0 (Professional Layer 5)",
+  "last_professional_upgrade": "2025-09-02T10:40:27.623026+00:00",
+  "n_features": 9,
+  "last_fix": "2025-09-29T20:37:20.767059",
+  "fixed_by": "test_model_features.py"
+}

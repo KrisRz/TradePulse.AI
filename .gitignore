@@ -195,16 +195,17 @@ data/historical/BTCUSDT_1m_complete.parquet
 *.parquet
 
 # Large model files (>100MB) - excluded from git
-app/backend/models/enterprise/layer_5_confidence.pkl
-app/backend/models/enterprise/layer_4_filters.pkl
-app/backend/models/enterprise/*.pkl
-app/backend/models/enterprise/*.h5
+# Note: Enterprise models (<5MB total) are now committed for Docker image builds
+# app/backend/models/enterprise/layer_5_confidence.pkl
+# app/backend/models/enterprise/layer_4_filters.pkl
+# app/backend/models/enterprise/*.pkl
+# app/backend/models/enterprise/*.h5
 
 # ML Training scripts and outputs (development only)
 app/backend/scripts/ml/
-app/backend/models/
-*.pkl
-*.h5
+# app/backend/models/ - REMOVED to allow enterprise models to be committed
+# *.pkl - REMOVED to allow enterprise models to be committed
+# *.h5 - REMOVED to allow enterprise models to be committed
 *.model
 *.joblib
 
@@ -257,8 +258,8 @@ data/database/dynamodb/
 
 # Large ML model files and training outputs
 app/backend/models/enterprise/backup_before_sklearn_update/
-*.pkl
-*.h5
+# *.pkl - REMOVED to allow enterprise models
+# *.h5 - REMOVED to allow enterprise models
 *.model
 *.joblib
 *.onnx

@@ -1,0 +1,39 @@
+{
+  "interval": "5m",
+  "symbol": "BTCUSDT",
+  "lookback": 200,
+  "horizon": 3,
+  "best_params": {
+    "batch": 256,
+    "epochs": 50,
+    "units1": 64,
+    "units2": 16,
+    "dropout": 0.11253514529606656,
+    "lr": 0.0021562727391525403
+  },
+  "best_auc": 0.5188330411911011,
+  "trained_at": "2025-08-17T21:13:49.330173+00:00",
+  "features": [
+    "logret",
+    "ema9_delta",
+    "ema21_delta",
+    "macd",
+    "macd_sig",
+    "macd_hist",
+    "rsi14_norm",
+    "%B",
+    "bb_width",
+    "atr14_norm",
+    "vol_ratio"
+  ],
+  "folds": 3,
+  "trials": 30,
+  "stride": 2,
+  "threshold": 0.3,
+  "metrics": {
+    "precision": 0.4991188488874257,
+    "recall": 1.0,
+    "f1": 0.6658829608577703
+  },
+  "calibrated_at": "2025-08-18T12:21:44.713353+00:00"
+}
