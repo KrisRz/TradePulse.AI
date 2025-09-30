@@ -401,10 +401,18 @@ output "github_role_arn" {
   value       = aws_iam_role.github_actions.arn
 }
 
-# Force deployment trigger - increment this to force Terraform apply
-# Last updated: 2025-09-30 20:57 UTC - IAM permissions fix
-variable "deployment_trigger" {
-  description = "Increment this to force Terraform to detect changes"
-  type        = number
-  default     = 1
+# Force deployment trigger - SSM parameter that changes to trigger applies
+# Increment the value in terraform.tfvars to force Terraform to detect changes
+resource "aws_ssm_parameter" "deployment_trigger" {
+  name  = "/tradepulse/deployment/trigger"
+  type  = "String"
+  value = "2025-09-30-21-06-UTC-force-iam-and-tables"
+
+  description = "Deployment trigger to force Terraform apply - update value to trigger changes"
+
+  tags = {
+    Name        = "${var.project_name}-deployment-trigger"
+    Environment = var.environment
+    Purpose     = "Force Terraform state changes"
+  }
 }
