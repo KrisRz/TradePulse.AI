@@ -143,3 +143,5 @@ if __name__ == "__main__":
 # Note: All routing, middleware, and lifespan management is now handled
 # by the application factory in core/application.py
 # This maintains clean separation of concerns and follows industry standards
+# Deployment trigger to sync AWS with latest local code
+# This ensures all 3 CI/CD workflows have the most recent fixes
