@@ -186,17 +186,18 @@ class ApiClient {
       'Content-Type': 'application/json',
     };
 
-    // Add existing headers
+    // Add auth token if available and not skipped
+    if (!options.skipAuth && this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`;
+    }
+
+    // Add existing headers AFTER auth token (allows override)
+    // CRITICAL: This must come after auth token so custom headers take precedence
     if (options.headers) {
       const existingHeaders = new Headers(options.headers);
       existingHeaders.forEach((value, key) => {
         headers[key] = value;
       });
-    }
-
-    // Add auth token if available and not skipped
-    if (!options.skipAuth && this.authToken) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
     }
 
     return headers;
