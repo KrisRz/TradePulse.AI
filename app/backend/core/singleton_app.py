@@ -93,6 +93,32 @@ class SingletonTradingApp:
             except Exception as diag_err:
                 logger.warning(f"AWS identity diagnostic failed: {diag_err}")
             
+            # Step 0: Load secrets from SSM Parameter Store (production only)
+            if not self.settings.is_development:
+                try:
+                    logger.info("🔐 Loading secrets from AWS SSM Parameter Store...")
+                    from app.backend.core.ssm_config import SSMConfigReader
+                    ssm_reader = SSMConfigReader()
+                    secrets = await ssm_reader.load_secrets()
+                    
+                    # Inject secrets into environment for Settings to pick up
+                    import os
+                    for key, value in secrets.items():
+                        os.environ[key] = value
+                        logger.info(f"✅ Loaded {key} from SSM and injected into environment")
+                    
+                    # Force Settings reload to pick up new env vars
+                    from app.backend.core.config import get_settings
+                    self.settings = get_settings()
+                    logger.info(f"✅ Successfully loaded {len(secrets)} secrets from SSM")
+                    
+                except Exception as ssm_err:
+                    logger.error(f"❌ Failed to load secrets from SSM: {ssm_err}")
+                    logger.error(f"❌ Application may not function correctly without Binance API keys!")
+                    # Don't raise - allow app to start even if SSM fails (degraded mode)
+            else:
+                logger.info("🔧 Development mode - using secrets from environment variables")
+            
             # Step 1: Load ML models
             await self._load_models()
             
