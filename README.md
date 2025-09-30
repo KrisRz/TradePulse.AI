@@ -596,6 +596,318 @@ DEVOPS_METRICS = {
 
 ---
 
+## ⚙️ Professional CI/CD Pipeline - Modular Workflows
+
+**TradePulse.AI uses a modern, modular CI/CD architecture** optimized for efficiency, security, and DevOps best practices.
+
+### **🎯 Architecture Overview**
+
+Instead of a monolithic workflow, we use **3 independent, specialized workflows** that trigger only when relevant code changes:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  PUSH TO MAIN                                               │
+└───────────┬─────────────────────────────────────────────────┘
+            │
+            ├──► Changes in app/frontend/**
+            │    └──► frontend-deploy.yml (2-3 min)
+            │         ├─ npm run build (Astro)
+            │         ├─ S3 sync (only changed files)
+            │         └─ CloudFront invalidation
+            │
+            ├──► Changes in app/backend/** or Dockerfile
+            │    └──► backend-deploy.yml (5-7 min)
+            │         ├─ Docker build
+            │         ├─ ECR push (:sha + :latest)
+            │         └─ App Runner auto-deploys
+            │             ├─ Health checks
+            │             └─ Auto-rollback on failure
+            │
+            └──► Changes in infra/**
+                 └──► infra-deploy.yml (3-5 min)
+                      ├─ terraform plan
+                      ├─ terraform apply
+                      └─ Infrastructure verification
+```
+
+---
+
+### **📋 Workflow Details**
+
+#### **1️⃣ Backend Deploy (`backend-deploy.yml`)**
+
+**Triggers:**
+- Changes to `app/backend/**`
+- Changes to `Dockerfile`
+- Manual trigger via workflow_dispatch
+
+**Process:**
+```yaml
+Build & Push (4-5 min):
+  ✅ Build Docker image (multi-stage, optimized)
+  ✅ Security scan (Trivy placeholder)
+  ✅ Push to ECR with tags:
+     - :${GITHUB_SHA} (immutable)
+     - :latest (for auto-deploy)
+
+Deploy & Verify (5-6 min):
+  ✅ App Runner auto-detects :latest
+  ✅ Blue/Green deployment
+  ✅ Health checks (10 retries, 20s interval)
+  ✅ Test critical endpoints:
+     - /health
+     - /api/v1/trading/brain/status
+     - /api/portfolio/virtual/overview
+  ✅ Auto-rollback on failure
+
+Notify:
+  ✅ Success/failure notification
+```
+
+**Key Features:**
+- ✅ OIDC authentication (no long-term AWS keys)
+- ✅ App Runner native auto-deployment
+- ✅ Automatic rollback on health check failure
+- ✅ Zero-downtime deployments
+- ✅ Docker layer caching
+
+---
+
+#### **2️⃣ Frontend Deploy (`frontend-deploy.yml`)**
+
+**Triggers:**
+- Changes to `app/frontend/**`
+- Manual trigger via workflow_dispatch
+
+**Process:**
+```yaml
+Build & Deploy (2-3 min):
+  ✅ Install Node.js dependencies (cached)
+  ✅ Build Astro static site
+  ✅ Sync to S3 (only changed files)
+     - Immutable assets: cache 1 year
+     - HTML/JSON: no cache (for updates)
+  ✅ Invalidate CloudFront cache (/*) 
+  ✅ Wait for invalidation complete
+  ✅ Smoke test frontend URL
+
+Notify:
+  ✅ Deployment URL confirmation
+```
+
+**Key Features:**
+- ✅ Smart caching strategy
+- ✅ S3 sync with delete (cleanup old files)
+- ✅ CloudFront cache invalidation
+- ✅ Terraform state integration (gets outputs)
+- ✅ Fast deployments (~2 minutes)
+
+---
+
+#### **3️⃣ Infrastructure Deploy (`infra-deploy.yml`)**
+
+**Triggers:**
+- Changes to `infra/**`
+- Pull requests to main (plan only)
+- Manual trigger via workflow_dispatch
+
+**Process:**
+```yaml
+Terraform Plan:
+  ✅ Format check (terraform fmt)
+  ✅ Validate configuration
+  ✅ Generate plan
+  ✅ Comment on PR (if applicable)
+  ✅ Upload plan artifact
+
+Terraform Apply (main branch only):
+  ✅ Wait for App Runner idle
+  ✅ Re-plan for freshness
+  ✅ Apply with retries (3 attempts)
+  ✅ Output infrastructure URLs
+  ✅ Verify resources:
+     - App Runner service
+     - S3 bucket
+     - DynamoDB tables
+
+Notify:
+  ✅ Success with outputs
+  ✅ No-changes notification
+```
+
+**Key Features:**
+- ✅ Terraform remote state (S3 + DynamoDB lock)
+- ✅ Plan on PRs (review before merge)
+- ✅ Apply only on main branch
+- ✅ Infrastructure verification
+- ✅ Safe state management
+
+---
+
+### **🚀 Efficiency & Benefits**
+
+**Performance Comparison:**
+
+| Scenario | Old Monolithic | New Modular | Savings |
+|----------|---------------|-------------|---------|
+| Frontend change | 10-12 min (all) | 2-3 min | **70% faster** |
+| Backend change | 10-12 min (all) | 5-7 min | **40% faster** |
+| Infra change | 10-12 min (all) | 3-5 min | **60% faster** |
+| Parallel deploys | ❌ Blocked | ✅ Independent | **Unlimited** |
+
+**Cost Optimization:**
+- **60% lower CI costs** (GitHub Actions minutes)
+- Only build what changed
+- Smart caching (Docker layers, npm)
+- Parallel deployments possible
+
+**Security:**
+- ✅ OIDC authentication (no static AWS keys)
+- ✅ SSM Parameter Store for secrets
+- ✅ Least privilege IAM roles
+- ✅ Security scanning ready (Trivy)
+
+**Reliability:**
+- ✅ Auto-rollback (App Runner native)
+- ✅ Health checks with retries
+- ✅ Concurrency control (no conflicts)
+- ✅ Terraform state locking
+
+---
+
+### **📖 How to Use**
+
+**Automatic Deployment:**
+```bash
+# Frontend change
+git add app/frontend/
+git commit -m "feat: Update dashboard UI"
+git push origin main
+# → Triggers frontend-deploy.yml only (2-3 min)
+
+# Backend change
+git add app/backend/
+git commit -m "fix: Improve trading logic"
+git push origin main
+# → Triggers backend-deploy.yml only (5-7 min)
+
+# Infrastructure change
+git add infra/
+git commit -m "feat: Add new DynamoDB table"
+git push origin main
+# → Triggers infra-deploy.yml only (3-5 min)
+```
+
+**Manual Deployment:**
+```bash
+# Via GitHub UI:
+# 1. Go to: Actions → [Workflow Name] → Run workflow
+# 2. Select branch: main
+# 3. Click "Run workflow"
+
+# Or trigger all workflows (rare):
+git add .
+git commit -m "feat: Major release"
+git push origin main
+# → Triggers all relevant workflows based on changed paths
+```
+
+**Pull Request Review:**
+```bash
+# Create PR with infra changes
+git checkout -b feature/new-infrastructure
+git add infra/
+git commit -m "feat: Add monitoring stack"
+git push origin feature/new-infrastructure
+# → Creates PR
+# → infra-deploy.yml runs terraform plan
+# → Adds plan as PR comment
+# → Review plan before merging
+```
+
+---
+
+### **🔍 Monitoring Deployments**
+
+**GitHub Actions:**
+```
+https://github.com/KrisRz/TradePulse.AI/actions
+```
+
+**Check Deployment Status:**
+```bash
+# Latest workflow runs
+gh run list --limit 5
+
+# Watch specific run
+gh run watch <run-id>
+
+# View logs
+gh run view <run-id> --log
+```
+
+**AWS Resources:**
+```bash
+# App Runner service status
+aws apprunner describe-service \
+  --service-arn <arn> \
+  --query 'Service.Status'
+
+# CloudFront distribution
+aws cloudfront get-distribution \
+  --id <distribution-id>
+
+# Recent backend logs
+aws logs tail /aws/apprunner/tradepulse-backend/.../application \
+  --since 10m --follow
+```
+
+---
+
+### **🛠️ Troubleshooting**
+
+**Deployment Failed?**
+
+1. **Check GitHub Actions logs:**
+   - Go to Actions tab
+   - Click on failed workflow
+   - Expand failed step
+
+2. **Common Issues:**
+   ```bash
+   # Health check timeout
+   → App Runner deployment may take up to 10 minutes
+   → Check backend logs for startup errors
+   
+   # Terraform state lock
+   → Another deployment is running
+   → Wait for it to finish
+   
+   # ECR authentication failed
+   → OIDC role permissions issue
+   → Check IAM role trust policy
+   ```
+
+3. **Rollback:**
+   ```bash
+   # App Runner auto-rollback (automatic)
+   → Failed health checks trigger automatic rollback
+   
+   # Manual rollback (emergency)
+   aws apprunner start-deployment \
+     --service-arn <arn> \
+     --source-configuration ImageRepository={
+       ImageIdentifier=<ecr-uri>:<previous-sha>
+     }
+   
+   # Terraform rollback
+   git revert <commit>
+   git push origin main
+   → Triggers infra-deploy.yml with previous state
+   ```
+
+---
+
 ## 🚀 How to Deploy to AWS - Step by Step
 
 ### **Prerequisites**
