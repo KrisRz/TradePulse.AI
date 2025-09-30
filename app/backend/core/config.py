@@ -19,12 +19,19 @@ logger = structlog.get_logger()
 # ---------------------------------------------------------------------------
 try:
     project_root = Path(__file__).resolve().parents[3]
+    environment = os.getenv("ENVIRONMENT", "development")
+    
+    # Select env file based on ENVIRONMENT
     candidate_env_files = [
         project_root / ".env",  # root .env (Professional Mode keys live here)
-        project_root / "app/backend/config/development.env",
-        project_root / "app/backend/config/production.env",
-        project_root / "app/backend/config/.env",
     ]
+    
+    if environment == "production":
+        candidate_env_files.append(project_root / "app/backend/config/production.env")
+    else:
+        candidate_env_files.append(project_root / "app/backend/config/development.env")
+    
+    candidate_env_files.append(project_root / "app/backend/config/.env")
 
     loaded_any = False
     for env_path in candidate_env_files:
