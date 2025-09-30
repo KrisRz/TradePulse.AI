@@ -22,9 +22,12 @@ try:
     environment = os.getenv("ENVIRONMENT", "development")
     
     # Select env file based on ENVIRONMENT
-    candidate_env_files = [
-        project_root / ".env",  # root .env (Professional Mode keys live here)
-    ]
+    candidate_env_files = []
+    
+    # In production, SKIP root .env (contains Docker dummy AWS credentials)
+    # In development, load root .env for Binance keys
+    if environment != "production":
+        candidate_env_files.append(project_root / ".env")
     
     if environment == "production":
         candidate_env_files.append(project_root / "app/backend/config/production.env")
