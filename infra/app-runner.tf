@@ -34,7 +34,7 @@ resource "aws_apprunner_service" "backend" {
           DYNAMODB_REGION       = var.region
           DYNAMODB_TABLE_PREFIX = "${var.project_name}_"
           PROFESSIONAL_MODE     = "true"
-          STRICT_LIVE_STREAM    = "true"
+          STRICT_LIVE_STREAM    = "false" # Allow REST API fallback while WebSocket initializes
           TRADING_SYMBOL        = "BTCUSDT"
           TRADING_MODE          = "DAY_TRADING"
           LOG_LEVEL             = "INFO"
