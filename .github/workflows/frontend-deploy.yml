@@ -90,12 +90,14 @@ jobs:
           npm ci
           echo "✅ Dependencies installed"
 
-      - name: Build Astro frontend
+      - name: Build Astro frontend (PRODUCTION MODE)
         working-directory: app/frontend
+        env:
+          NODE_ENV: production
         run: |
-          echo "🔨 Building Astro static site..."
-          npm run build
-          echo "✅ Build complete"
+          echo "🔨 Building Astro static site for PRODUCTION..."
+          npm run build:prod
+          echo "✅ Build complete (production mode - import.meta.env.PROD=true)"
           
           # Show build output
           echo "📊 Build output:"
