@@ -53,7 +53,7 @@ resource "aws_apprunner_service" "backend" {
         # Sensitive environment variables from SSM
         runtime_environment_secrets = {
           BINANCE_API_KEY    = aws_ssm_parameter.binance_api_key.arn
-          BINANCE_API_SECRET = aws_ssm_parameter.binance_api_secret.arn
+          BINANCE_SECRET_KEY = aws_ssm_parameter.binance_api_secret.arn
         }
 
         # Start command override
