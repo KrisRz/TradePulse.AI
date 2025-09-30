@@ -195,7 +195,7 @@ resource "aws_iam_policy" "app_runner_instance_policy" {
           "ssm:GetParametersByPath"
         ]
         Resource = [
-          "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.environment}/*"
+          "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/*"
         ]
       },
       {
@@ -218,7 +218,9 @@ resource "aws_iam_policy" "app_runner_instance_policy" {
         ]
         Resource = [
           "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.project_name}_*",
-          "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.project_name}_*/index/*"
+          "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.project_name}_*/index/*",
+          "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/*",
+          "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/*/index/*"
         ]
       },
       {
