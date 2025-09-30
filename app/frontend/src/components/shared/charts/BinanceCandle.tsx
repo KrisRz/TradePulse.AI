@@ -78,25 +78,64 @@ export default function BinanceCandle({
     };
 
     const load = async () => {
-      const r = await fetch(`https://api.tradepulseai.co.uk/api/v1/market/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
-      const { candles } = await r.json();
+      try {
+        console.log(`📊 [BinanceCandle] Fetching klines for ${symbol} ${interval}...`);
+        const url = `https://api.tradepulseai.co.uk/api/v1/market/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+        console.log(`📡 [BinanceCandle] URL: ${url}`);
+        
+        const r = await fetch(url);
+        console.log(`📥 [BinanceCandle] Response status: ${r.status}`);
+        
+        if (!r.ok) {
+          throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+        }
+        
+        const data = await r.json();
+        console.log(`📦 [BinanceCandle] Data received:`, data);
+        console.log(`📦 [BinanceCandle] Klines count: ${data.klines?.length || 0}`);
+        
+        // Backend returns "klines" not "candles"!
+        const { klines } = data;
+        
+        if (!klines || !Array.isArray(klines) || klines.length === 0) {
+          console.error(`❌ [BinanceCandle] No klines data received:`, data);
+          return;
+        }
+        
+        console.log(`✅ [BinanceCandle] Processing ${klines.length} candles...`);
 
-      C = candles.map((d: any) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close }));
-      V = candles.map((d: any) => ({
-        time: d.time, value: d.volume, color: d.close >= d.open ? '#22c55e88' : '#ef444488'
-      }));
+        C = klines.map((d: any) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close }));
+        V = klines.map((d: any) => ({
+          time: d.time, value: d.volume, color: d.close >= d.open ? '#22c55e88' : '#ef444488'
+        }));
 
-      candlesSeries.setData(C);
-      volumeSeries.setData(V);
-      recomputeMA();
-      priceLine.applyOptions({ price: Number(C[C.length - 1].close) });
-      chart.timeScale().fitContent();
+        console.log(`📈 [BinanceCandle] Candlestick data:`, C.slice(0, 2));
+        console.log(`📊 [BinanceCandle] Volume data:`, V.slice(0, 2));
+
+        candlesSeries.setData(C);
+        volumeSeries.setData(V);
+        recomputeMA();
+        priceLine.applyOptions({ price: Number(C[C.length - 1].close) });
+        chart.timeScale().fitContent();
+        
+        console.log(`✅ [BinanceCandle] Chart rendered successfully!`);
+      } catch (error: any) {
+        console.error(`❌ [BinanceCandle] Failed to load chart data:`, error);
+        console.error(`❌ [BinanceCandle] Error details:`, {
+          message: error?.message || 'Unknown error',
+          stack: error?.stack || 'No stack trace'
+        });
+      }
     };
 
     load();
 
     // LIVE: Binance WebSocket
+    console.log(`🔌 [BinanceCandle] Opening WebSocket for live updates...`);
     const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_${interval}`);
+    ws.onopen = () => console.log(`✅ [BinanceCandle] WebSocket connected`);
+    ws.onerror = (err) => console.error(`❌ [BinanceCandle] WebSocket error:`, err);
+    ws.onclose = () => console.log(`🔌 [BinanceCandle] WebSocket closed`);
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
       const k = msg?.k; if (!k) return;
