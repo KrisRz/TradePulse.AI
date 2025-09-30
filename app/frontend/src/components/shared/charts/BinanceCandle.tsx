@@ -80,7 +80,8 @@ export default function BinanceCandle({
     const load = async () => {
       try {
         console.log(`📊 [BinanceCandle] Fetching klines for ${symbol} ${interval}...`);
-        const url = `https://api.tradepulseai.co.uk/api/v1/market/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+        // Use relative URL to work with Nginx reverse proxy (/api -> backend)
+        const url = `/api/v1/market/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
         console.log(`📡 [BinanceCandle] URL: ${url}`);
         
         const r = await fetch(url);
