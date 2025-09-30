@@ -122,13 +122,23 @@ class SingletonTradingApp:
             # Step 1: Load ML models
             await self._load_models()
             
-            # Step 2: Check DynamoDB connectivity (non-fatal)
+            # Step 2: Start LiveMarketDataService WebSocket streams for real-time data
+            try:
+                logger.info("🔌 Starting LiveMarketDataService WebSocket streams...")
+                from app.backend.services.live_market_data import get_live_market_data_service
+                market_service = await get_live_market_data_service()
+                logger.info(f"✅ LiveMarketDataService started: {market_service.is_running}")
+            except Exception as ws_err:
+                logger.error(f"❌ Failed to start WebSocket service: {ws_err}")
+                # Non-fatal - continue startup
+            
+            # Step 3: Check DynamoDB connectivity (non-fatal)
             await self._check_database_connectivity()
             # If DB not yet reachable, start background reconnect loop
             if not self.ddb_connected and self._ddb_task is None:
                 self._ddb_task = asyncio.create_task(self._ddb_reconnect_loop())
             
-            # Step 3: Try to acquire trading brain lease
+            # Step 4: Try to acquire trading brain lease
             lease_acquired = await self.lease_guard.try_acquire_lease()
             
             if lease_acquired:
