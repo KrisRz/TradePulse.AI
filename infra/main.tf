@@ -406,7 +406,7 @@ output "github_role_arn" {
 resource "aws_ssm_parameter" "deployment_trigger" {
   name  = "/tradepulse/deployment/trigger"
   type  = "String"
-  value = "2025-09-30-21-06-UTC-force-iam-and-tables"
+  value = "2025-09-30-21-14-UTC-FORCE-APPLY-v3"
 
   description = "Deployment trigger to force Terraform apply - update value to trigger changes"
 
