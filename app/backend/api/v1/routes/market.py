@@ -14,6 +14,7 @@ from app.backend.core.config import get_settings
 from app.backend.core.logging import get_logger
 from app.backend.utils.dependencies import get_current_user, User
 from app.backend.services.live_market_data import get_live_bitcoin_price
+from app.backend.services.binance_hybrid_client import get_hybrid_client
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -195,4 +196,43 @@ async def get_symbol_price(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get price: {str(e)}"
+        )
+
+
+@router.get("/klines")
+async def get_market_klines(
+    symbol: str = "BTCUSDT",
+    interval: str = "5m",
+    limit: int = 500
+) -> Dict[str, Any]:
+    """
+    Get candlestick/klines data for charting
+    
+    Args:
+        symbol: Trading symbol (e.g., BTCUSDT)
+        interval: Kline interval (1m, 5m, 15m, 1h, 4h, 1d)
+        limit: Number of klines to return (max 1000)
+        
+    Returns:
+        Candlestick data for chart rendering
+    """
+    try:
+        # Get hybrid client for reliable data fetching
+        client = await get_hybrid_client()
+        klines = await client.get_klines(symbol=symbol, interval=interval, limit=min(limit, 1000))
+        
+        return {
+            "symbol": symbol.upper(),
+            "interval": interval,
+            "klines": klines,
+            "count": len(klines),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "binance_hybrid_client"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get klines for {symbol}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get klines: {str(e)}"
         )
