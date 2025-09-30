@@ -26,9 +26,10 @@ resource "aws_ssm_parameter" "binance_api_secret" {
 
 # Additional configuration parameters
 resource "aws_ssm_parameter" "environment" {
-  name  = "/${var.project_name}/${var.environment}/ENVIRONMENT"
-  type  = "String"
-  value = var.environment
+  name      = "/${var.project_name}/${var.environment}/ENVIRONMENT"
+  type      = "String"
+  value     = var.environment
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-environment"
@@ -37,9 +38,10 @@ resource "aws_ssm_parameter" "environment" {
 }
 
 resource "aws_ssm_parameter" "aws_region" {
-  name  = "/${var.project_name}/${var.environment}/AWS_REGION"
-  type  = "String"
-  value = var.region
+  name      = "/${var.project_name}/${var.environment}/AWS_REGION"
+  type      = "String"
+  value     = var.region
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-aws-region"
@@ -48,9 +50,10 @@ resource "aws_ssm_parameter" "aws_region" {
 }
 
 resource "aws_ssm_parameter" "dynamodb_table_prefix" {
-  name  = "/${var.project_name}/${var.environment}/DYNAMODB_TABLE_PREFIX"
-  type  = "String"
-  value = "${var.project_name}_"
+  name      = "/${var.project_name}/${var.environment}/DYNAMODB_TABLE_PREFIX"
+  type      = "String"
+  value     = "${var.project_name}_"
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-dynamodb-prefix"
@@ -60,9 +63,10 @@ resource "aws_ssm_parameter" "dynamodb_table_prefix" {
 
 # Professional mode and feature flags
 resource "aws_ssm_parameter" "professional_mode" {
-  name  = "/${var.project_name}/${var.environment}/PROFESSIONAL_MODE"
-  type  = "String"
-  value = "true"
+  name      = "/${var.project_name}/${var.environment}/PROFESSIONAL_MODE"
+  type      = "String"
+  value     = "true"
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-professional-mode"
@@ -71,9 +75,10 @@ resource "aws_ssm_parameter" "professional_mode" {
 }
 
 resource "aws_ssm_parameter" "strict_live_stream" {
-  name  = "/${var.project_name}/${var.environment}/STRICT_LIVE_STREAM"
-  type  = "String"
-  value = "true"
+  name      = "/${var.project_name}/${var.environment}/STRICT_LIVE_STREAM"
+  type      = "String"
+  value     = "true"
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-strict-live-stream"
@@ -83,9 +88,10 @@ resource "aws_ssm_parameter" "strict_live_stream" {
 
 # Trading configuration
 resource "aws_ssm_parameter" "trading_symbol" {
-  name  = "/${var.project_name}/${var.environment}/TRADING_SYMBOL"
-  type  = "String"
-  value = "BTCUSDT"
+  name      = "/${var.project_name}/${var.environment}/TRADING_SYMBOL"
+  type      = "String"
+  value     = "BTCUSDT"
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-trading-symbol"
@@ -94,9 +100,10 @@ resource "aws_ssm_parameter" "trading_symbol" {
 }
 
 resource "aws_ssm_parameter" "trading_mode" {
-  name  = "/${var.project_name}/${var.environment}/TRADING_MODE"
-  type  = "String"
-  value = "DAY_TRADING"
+  name      = "/${var.project_name}/${var.environment}/TRADING_MODE"
+  type      = "String"
+  value     = "DAY_TRADING"
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-trading-mode"
@@ -106,9 +113,10 @@ resource "aws_ssm_parameter" "trading_mode" {
 
 # Database configuration
 resource "aws_ssm_parameter" "dynamodb_endpoint" {
-  name  = "/${var.project_name}/${var.environment}/DYNAMODB_ENDPOINT"
-  type  = "String"
-  value = "https://dynamodb.${var.region}.amazonaws.com"
+  name      = "/${var.project_name}/${var.environment}/DYNAMODB_ENDPOINT"
+  type      = "String"
+  value     = "https://dynamodb.${var.region}.amazonaws.com"
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-dynamodb-endpoint"
@@ -118,9 +126,10 @@ resource "aws_ssm_parameter" "dynamodb_endpoint" {
 
 # Logging configuration
 resource "aws_ssm_parameter" "log_level" {
-  name  = "/${var.project_name}/${var.environment}/LOG_LEVEL"
-  type  = "String"
-  value = "INFO"
+  name      = "/${var.project_name}/${var.environment}/LOG_LEVEL"
+  type      = "String"
+  value     = "INFO"
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-log-level"
@@ -129,9 +138,10 @@ resource "aws_ssm_parameter" "log_level" {
 }
 
 resource "aws_ssm_parameter" "log_format" {
-  name  = "/${var.project_name}/${var.environment}/LOG_FORMAT"
-  type  = "String"
-  value = "json"
+  name      = "/${var.project_name}/${var.environment}/LOG_FORMAT"
+  type      = "String"
+  value     = "json"
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-log-format"
@@ -141,9 +151,10 @@ resource "aws_ssm_parameter" "log_format" {
 
 # Health check configuration
 resource "aws_ssm_parameter" "health_check_interval" {
-  name  = "/${var.project_name}/${var.environment}/HEALTH_CHECK_INTERVAL"
-  type  = "String"
-  value = "30"
+  name      = "/${var.project_name}/${var.environment}/HEALTH_CHECK_INTERVAL"
+  type      = "String"
+  value     = "30"
+  overwrite = true
 
   tags = {
     Name        = "${var.project_name}-health-check-interval"
