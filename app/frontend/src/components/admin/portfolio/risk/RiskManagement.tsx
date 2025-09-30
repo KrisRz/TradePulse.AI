@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Shield, AlertTriangle, BarChart3, TrendingDown, Target } from 'lucide-preact';
 import type { PortfolioOverviewResponse } from '../../../../types';
+import { apiClient } from '@/lib/api-client';
 
 interface RiskData {
   metrics: {
@@ -46,28 +47,20 @@ export default function RiskManagement({ portfolioData }: RiskManagementProps) {
   const availableBalance = portfolioData?.cash_balance || 0;
   const activePositions = portfolioData?.active_positions || 0;
 
-  // Fetch real risk data from backend
+  // Fetch real risk data from backend using API client
   useEffect(() => {
     const fetchRiskData = async () => {
       try {
-        const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-        const response = await fetch(`/api/portfolio/virtual/risk-metrics?timeframe=${riskTimeframe}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const response = await apiClient.get(`/api/portfolio/virtual/risk-metrics?timeframe=${riskTimeframe}`);
 
-        if (response.ok) {
-          const data = await response.json();
-          setRiskData(data);
-          console.log('✅ Real risk data loaded:', data);
-          console.log('✅ Risk metrics:', data.metrics);
-          console.log('✅ Position risks:', data.position_risks);
-          console.log('✅ Scenarios:', data.scenarios);
+        if (response.success && response.data) {
+          setRiskData(response.data);
+          console.log('✅ Real risk data loaded:', response.data);
+          console.log('✅ Risk metrics:', response.data.metrics);
+          console.log('✅ Position risks:', response.data.position_risks);
+          console.log('✅ Scenarios:', response.data.scenarios);
         } else {
-          console.error('❌ Failed to fetch risk data. Status:', response.status);
-          console.error('❌ Response:', await response.text());
+          console.error('❌ Failed to fetch risk data:', response.error?.message);
           setRiskData(null);
         }
       } catch (error) {

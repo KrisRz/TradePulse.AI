@@ -2,6 +2,7 @@ import { useState, useEffect } from 'preact/hooks';
 import { TrendingUp, TrendingDown, Activity, BarChart3, Globe, Zap } from 'lucide-preact';
 import type { PortfolioOverviewResponse } from '../../../../types';
 import { TradingViewChart } from '../../../shared/charts';
+import { apiClient } from '@/lib/api-client';
 
 interface MarketData {
   market_overview: {
@@ -64,14 +65,14 @@ export default function MarketIntelligence({ }: MarketIntelligenceProps) {
   useEffect(() => {
     const fetchMarketData = async () => {
       try {
-        // Fetch comprehensive market intelligence data
-        const response = await fetch('/api/signals/market-intelligence');
-        if (response.ok) {
-          const data = await response.json();
-          setMarketData(data);
-          console.log('✅ Real market intelligence data loaded:', data);
+        // Fetch comprehensive market intelligence data using API client
+        const response = await apiClient.get('/api/signals/market-intelligence');
+        
+        if (response.success && response.data) {
+          setMarketData(response.data);
+          console.log('✅ Real market intelligence data loaded:', response.data);
         } else {
-          console.error('Failed to fetch market intelligence:', response.status);
+          console.error('Failed to fetch market intelligence:', response.error?.message);
           setMarketData(null);
         }
       } catch (error) {

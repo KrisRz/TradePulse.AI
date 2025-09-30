@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Brain, TrendingUp, Clock, ArrowRight, Zap, Target, Eye } from 'lucide-preact';
 import type { PortfolioOverviewResponse, TradingSignalsResponse, Position } from '../../../../types';
+import { apiClient } from '@/lib/api-client';
 
 interface SignalData {
   signals: any[];
@@ -30,46 +31,36 @@ export default function TradingIntelligence({ portfolioData }: TradingIntelligen
   useEffect(() => {
     const fetchTradingData = async () => {
       try {
-        const token = localStorage.getItem('auth_token') || '';
-        // Fetch positions (open + closed stream key)
-        const resp = await fetch('/api/portfolio/virtual/positions', {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : { 'Authorization': 'Bearer enterprise_admin_token' })
-          }
-        });
-        if (resp.ok) {
-          const data = await resp.json();
+        // Fetch positions using API client
+        const positionsResponse = await apiClient.get('/api/portfolio/virtual/positions');
+        
+        if (positionsResponse.success && positionsResponse.data) {
+          const data = positionsResponse.data;
           const opens = Array.isArray(data?.positions) ? data.positions : [];
           const closed = Array.isArray(data?.closed_positions) ? data.closed_positions : [];
           setActivePositions(opens);
           setClosedPositions(closed);
           console.log('✅ Loaded positions:', { open: opens.length, closed: closed.length });
         } else {
-          console.warn('Failed to fetch positions, using empty arrays');
+          console.warn('Failed to fetch positions:', positionsResponse.error?.message);
           setActivePositions([]);
           setClosedPositions([]);
         }
 
-        // Fetch real AI signals with layer analysis
+        // Fetch real AI signals with layer analysis using API client
         try {
-          const signalResp = await fetch('/api/trading/signals/latest', {
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { 'Authorization': `Bearer ${token}` } : { 'Authorization': 'Bearer enterprise_admin_token' })
-            }
-          });
-          if (signalResp.ok) {
-            const signalData = await signalResp.json();
-            setSignalData(signalData);
-            console.log('✅ Loaded real AI signal data:', signalData);
+          const signalResponse = await apiClient.get('/api/trading/signals/latest');
+          
+          if (signalResponse.success && signalResponse.data) {
+            setSignalData(signalResponse.data);
+            console.log('✅ Loaded real AI signal data:', signalResponse.data);
           } else {
-            console.warn('Failed to fetch signals, using empty data');
-            setSignalData({ signals: [] });
+            console.warn('Failed to fetch signals:', signalResponse.error?.message);
+            setSignalData({ signals: [], last_updated: new Date().toISOString() });
           }
         } catch (error) {
           console.error('Error fetching signal data:', error);
-          setSignalData({ signals: [] });
+          setSignalData({ signals: [], last_updated: new Date().toISOString() });
         }
       } catch (error) {
         console.error('Error fetching trading data:', error);

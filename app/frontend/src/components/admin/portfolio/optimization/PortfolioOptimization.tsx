@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Settings, TrendingUp, BarChart3, RefreshCw, CheckCircle, AlertTriangle, Target, Zap } from 'lucide-preact';
 import type { PortfolioOverviewResponse } from '../../../../types';
+import { apiClient } from '@/lib/api-client';
 
 interface OptimizationData {
   current_metrics: {
@@ -45,24 +46,17 @@ export default function PortfolioOptimization({ }: PortfolioOptimizationProps) {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationData, setOptimizationData] = useState<OptimizationData | null>(null);
 
-  // Fetch real optimization data from backend
+  // Fetch real optimization data from backend using API client
   useEffect(() => {
     const fetchOptimizationData = async () => {
       try {
-        const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-        const response = await fetch(`/api/portfolio/virtual/optimization-analysis?mode=${optimizationMode}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const response = await apiClient.get(`/api/portfolio/virtual/optimization-analysis?mode=${optimizationMode}`);
 
-        if (response.ok) {
-          const data = await response.json();
-          setOptimizationData(data);
-          console.log('✅ Real optimization data loaded:', data);
+        if (response.success && response.data) {
+          setOptimizationData(response.data);
+          console.log('✅ Real optimization data loaded:', response.data);
         } else {
-          console.error('Failed to fetch optimization data:', response.status);
+          console.error('Failed to fetch optimization data:', response.error?.message);
           setOptimizationData(null);
         }
       } catch (error) {
@@ -154,22 +148,15 @@ export default function PortfolioOptimization({ }: PortfolioOptimizationProps) {
   const handleOptimize = async () => {
     setIsOptimizing(true);
     try {
-      const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
-      const response = await fetch(`/api/portfolio/virtual/optimization-analysis?mode=${optimizationMode}`, {
-        method: 'POST', // Force re-optimization
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ force_recompute: true })
+      const response = await apiClient.post(`/api/portfolio/virtual/optimization-analysis?mode=${optimizationMode}`, {
+        force_recompute: true
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setOptimizationData(data);
-        console.log('✅ Portfolio optimization completed:', data);
+      if (response.success && response.data) {
+        setOptimizationData(response.data);
+        console.log('✅ Portfolio optimization completed:', response.data);
       } else {
-        console.error('Failed to optimize portfolio:', response.status);
+        console.error('Failed to optimize portfolio:', response.error?.message);
       }
     } catch (error) {
       console.error('Error during optimization:', error);
