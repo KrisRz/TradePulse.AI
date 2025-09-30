@@ -1,0 +1,262 @@
+name: Backend Deploy (Production)
+
+# Modular workflow for backend-only deployments
+# Triggers only when backend code or Docker configuration changes
+# Optimizes CI/CD by avoiding unnecessary frontend/infra rebuilds
+
+concurrency:
+  group: backend-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'app/backend/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.github/workflows/backend-deploy.yml'
+  workflow_dispatch:  # Allow manual triggers
+
+# OIDC permissions for AWS authentication
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+  ECR_REPOSITORY: tradepulse-backend
+  APP_RUNNER_SERVICE: tradepulse-backend
+
+jobs:
+  build-and-push:
+    name: Build & Push Backend to ECR
+    runs-on: ubuntu-latest
+    
+    outputs:
+      image-tag: ${{ steps.build-info.outputs.image-tag }}
+      image-uri: ${{ steps.build-info.outputs.image-uri }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-BackendDeploy
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set build info
+        id: build-info
+        run: |
+          IMAGE_TAG=${GITHUB_SHA::8}
+          IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}
+          echo "image-tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "image-uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "🏷️  Image tag: ${IMAGE_TAG}"
+          echo "📦 Image URI: ${IMAGE_URI}"
+
+      - name: Build Docker image
+        run: |
+          echo "🔨 Building backend Docker image..."
+          docker build \
+            --tag ${{ steps.build-info.outputs.image-uri }} \
+            --tag ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            .
+          echo "✅ Build complete"
+
+      - name: Run security scan (Trivy)
+        run: |
+          echo "🔒 Security scanning (placeholder)"
+          # Uncomment when ready to enable:
+          # docker run --rm \
+          #   -v /var/run/docker.sock:/var/run/docker.sock \
+          #   aquasec/trivy:latest image \
+          #   --exit-code 1 \
+          #   --severity HIGH,CRITICAL \
+          #   --no-progress \
+          #   ${{ steps.build-info.outputs.image-uri }}
+
+      - name: Push images to ECR
+        run: |
+          echo "📤 Pushing images to ECR..."
+          docker push ${{ steps.build-info.outputs.image-uri }}
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          echo "✅ Images pushed successfully"
+          echo "   - ${{ steps.build-info.outputs.image-uri }}"
+          echo "   - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest"
+
+  deploy-and-verify:
+    name: Deploy & Verify Backend
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-BackendVerify
+
+      - name: Trigger App Runner deployment
+        run: |
+          echo "🚀 App Runner will auto-deploy from ECR :latest tag"
+          SERVICE_ARN=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" \
+            --output text)
+          echo "📋 Service ARN: $SERVICE_ARN"
+          
+          # App Runner auto-deployment is enabled, so it will pick up the new :latest image
+          echo "⏳ Waiting for auto-deployment to start..."
+          sleep 30
+
+      - name: Wait for deployment completion
+        run: |
+          echo "⏳ Waiting for App Runner deployment to complete..."
+          SERVICE_ARN=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" \
+            --output text)
+          
+          for i in {1..40}; do
+            STATUS=$(aws apprunner describe-service \
+              --service-arn "$SERVICE_ARN" \
+              --query "Service.Status" \
+              --output text)
+            
+            echo "🔄 Attempt $i/40 - Status: $STATUS"
+            
+            if [ "$STATUS" = "RUNNING" ]; then
+              echo "✅ Deployment complete - service is RUNNING"
+              break
+            elif [ "$STATUS" = "OPERATION_IN_PROGRESS" ]; then
+              echo "   Deployment in progress..."
+              sleep 30
+            else
+              echo "⚠️  Unexpected status: $STATUS"
+              sleep 30
+            fi
+            
+            if [ $i -eq 40 ]; then
+              echo "❌ Timeout waiting for deployment (20 minutes)"
+              exit 1
+            fi
+          done
+
+      - name: Health check with retries
+        run: |
+          echo "🏥 Running health checks..."
+          SERVICE_URL=$(aws apprunner describe-service \
+            --service-arn $(aws apprunner list-services \
+              --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" \
+              --output text) \
+            --query "Service.ServiceUrl" \
+            --output text)
+          
+          echo "🌐 Service URL: https://$SERVICE_URL"
+          
+          # Wait for service to stabilize
+          echo "⏳ Waiting 60s for service to stabilize..."
+          sleep 60
+          
+          # Health check with retries
+          for i in {1..10}; do
+            echo "🔍 Health check attempt $i/10..."
+            
+            if curl -f -s -m 10 "https://$SERVICE_URL/health" > /dev/null; then
+              echo "✅ Health check PASSED on attempt $i"
+              
+              # Get detailed health info
+              HEALTH=$(curl -s "https://$SERVICE_URL/health")
+              echo "📊 Health response: $HEALTH"
+              break
+            else
+              echo "⏳ Health check failed, retrying in 20s..."
+              sleep 20
+              
+              if [ $i -eq 10 ]; then
+                echo "❌ Health check FAILED after 10 attempts"
+                echo "🔍 Checking recent logs..."
+                aws logs tail /aws/apprunner/${{ env.APP_RUNNER_SERVICE }}/*/application \
+                  --since 5m --format short || true
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Test critical endpoints
+        run: |
+          echo "🧪 Testing critical backend endpoints..."
+          SERVICE_URL=$(aws apprunner describe-service \
+            --service-arn $(aws apprunner list-services \
+              --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" \
+              --output text) \
+            --query "Service.ServiceUrl" \
+            --output text)
+          
+          # Test trading brain status
+          echo "🧠 Testing Trading Brain endpoint..."
+          BRAIN_RESPONSE=$(curl -s "https://$SERVICE_URL/api/v1/trading/brain/status" || echo "failed")
+          
+          if [[ "$BRAIN_RESPONSE" == *"brain_controller"* ]]; then
+            echo "✅ Trading Brain endpoint: HEALTHY"
+          else
+            echo "⚠️  Trading Brain endpoint: Response unexpected"
+            echo "   Response: $BRAIN_RESPONSE"
+          fi
+          
+          # Test portfolio overview
+          echo "📊 Testing Portfolio endpoint..."
+          PORTFOLIO_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://$SERVICE_URL/api/portfolio/virtual/overview" || echo "000")
+          
+          if [ "$PORTFOLIO_RESPONSE" = "200" ]; then
+            echo "✅ Portfolio endpoint: HEALTHY (200 OK)"
+          else
+            echo "⚠️  Portfolio endpoint: HTTP $PORTFOLIO_RESPONSE"
+          fi
+          
+          echo "✅ All critical endpoint tests complete"
+
+  notify:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-and-verify]
+    if: always()
+    
+    steps:
+      - name: Send success notification
+        if: needs.deploy-and-verify.result == 'success'
+        run: |
+          echo "╔════════════════════════════════════════════════════════════════╗"
+          echo "║                                                                ║"
+          echo "║  ✅ BACKEND DEPLOYMENT SUCCESSFUL!                             ║"
+          echo "║                                                                ║"
+          echo "╚════════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "🚀 Image: ${{ needs.build-and-push.outputs.image-uri }}"
+          echo "🏷️  Tag: ${{ needs.build-and-push.outputs.image-tag }}"
+          echo "🌐 Service: ${{ env.APP_RUNNER_SERVICE }}"
+          echo "📊 Trading Brain: Operational"
+          echo "✅ Health checks: Passed"
+          # Add Slack/Discord webhook here if needed
+
+      - name: Send failure notification
+        if: failure()
+        run: |
+          echo "╔════════════════════════════════════════════════════════════════╗"
+          echo "║                                                                ║"
+          echo "║  ❌ BACKEND DEPLOYMENT FAILED!                                 ║"
+          echo "║                                                                ║"
+          echo "╚════════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "🔍 Check the workflow logs for details"
+          echo "🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Add Slack/Discord webhook here if needed

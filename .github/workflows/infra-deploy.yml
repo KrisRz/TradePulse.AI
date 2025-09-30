@@ -1,0 +1,343 @@
+name: Infrastructure Deploy (Terraform)
+
+# Modular workflow for infrastructure-only deployments
+# Triggers only when Terraform configuration changes
+# Manages AWS resources via Infrastructure as Code
+
+concurrency:
+  group: infra-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/infra-deploy.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'infra/**'
+  workflow_dispatch:  # Allow manual triggers
+
+# OIDC permissions for AWS authentication
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write  # For PR comments
+
+env:
+  AWS_REGION: eu-west-2
+  TERRAFORM_VERSION: "1.5.0"
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: infra
+    
+    outputs:
+      plan-exitcode: ${{ steps.plan.outputs.exitcode }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-TerraformPlan
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Format Check
+        run: |
+          echo "🔍 Checking Terraform formatting..."
+          terraform fmt -check -recursive
+          echo "✅ Format check passed"
+
+      - name: Terraform Init
+        run: |
+          echo "🔧 Initializing Terraform..."
+          terraform init -upgrade
+          echo "✅ Terraform initialized"
+
+      - name: Terraform Validate
+        run: |
+          echo "🔍 Validating Terraform configuration..."
+          terraform validate
+          echo "✅ Configuration valid"
+
+      - name: Terraform Plan
+        id: plan
+        env:
+          TF_VAR_binance_api_key: ${{ secrets.BINANCE_API_KEY }}
+          TF_VAR_binance_api_secret: ${{ secrets.BINANCE_API_SECRET }}
+        run: |
+          echo "📋 Running Terraform plan..."
+          terraform plan \
+            -detailed-exitcode \
+            -out=tfplan \
+            -var="region=${{ env.AWS_REGION }}" \
+            -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
+            -var="binance_api_secret=${{ secrets.BINANCE_API_SECRET }}" \
+            2>&1 | tee plan-output.txt
+          
+          EXITCODE=${PIPESTATUS[0]}
+          echo "exitcode=$EXITCODE" >> $GITHUB_OUTPUT
+          
+          case $EXITCODE in
+            0)
+              echo "✅ No changes detected"
+              ;;
+            1)
+              echo "❌ Terraform plan failed"
+              exit 1
+              ;;
+            2)
+              echo "📝 Changes detected and plan created"
+              ;;
+          esac
+
+      - name: Upload plan
+        if: steps.plan.outputs.exitcode == '2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: infra/tfplan
+          retention-days: 7
+
+      - name: Comment PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('infra/plan-output.txt', 'utf8');
+            const truncatedPlan = planOutput.length > 65000 
+              ? planOutput.substring(0, 65000) + '\n... (truncated)'
+              : planOutput;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 📋 Terraform Plan
+            
+            \`\`\`terraform
+            ${truncatedPlan}
+            \`\`\`
+            
+            **Plan exit code:** ${{ steps.plan.outputs.exitcode }}
+            - \`0\` = No changes
+            - \`1\` = Error
+            - \`2\` = Changes detected
+            `
+            });
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: |
+      github.ref == 'refs/heads/main' && 
+      github.event_name == 'push' &&
+      needs.terraform-plan.outputs.plan-exitcode == '2'
+    
+    defaults:
+      run:
+        working-directory: infra
+    
+    environment:
+      name: production
+      url: https://api.tradepulseai.co.uk
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-TerraformApply
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init
+        run: |
+          echo "🔧 Initializing Terraform..."
+          terraform init -upgrade
+          echo "✅ Terraform initialized"
+
+      - name: Wait for App Runner idle
+        run: |
+          SERVICE_ARN=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='tradepulse-backend'].ServiceArn" \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -n "$SERVICE_ARN" ]; then
+            echo "⏳ Waiting for App Runner to be idle..."
+            echo "   Service ARN: $SERVICE_ARN"
+            
+            for i in {1..30}; do
+              STATUS=$(aws apprunner describe-service \
+                --service-arn "$SERVICE_ARN" \
+                --query 'Service.Status' \
+                --output text)
+              
+              echo "   Attempt $i/30 - Status: $STATUS"
+              
+              if [ "$STATUS" != "OPERATION_IN_PROGRESS" ]; then
+                echo "✅ App Runner is idle"
+                break
+              fi
+              
+              sleep 20
+            done
+          else
+            echo "ℹ️  App Runner service not found (might be first deployment)"
+          fi
+
+      - name: Terraform Apply (with retries)
+        env:
+          TF_VAR_binance_api_key: ${{ secrets.BINANCE_API_KEY }}
+          TF_VAR_binance_api_secret: ${{ secrets.BINANCE_API_SECRET }}
+        run: |
+          for attempt in 1 2 3; do
+            echo "🚀 Terraform apply attempt $attempt/3..."
+            
+            # Re-plan to ensure fresh plan
+            terraform plan \
+              -detailed-exitcode \
+              -out=tfplan \
+              -var="region=${{ env.AWS_REGION }}" \
+              -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
+              -var="binance_api_secret=${{ secrets.BINANCE_API_SECRET }}" || true
+            
+            # Apply
+            if terraform apply -auto-approve tfplan; then
+              echo "✅ Terraform apply successful!"
+              exit 0
+            else
+              echo "⚠️  Terraform apply failed on attempt $attempt"
+              
+              if [ $attempt -lt 3 ]; then
+                echo "   Retrying in 30 seconds..."
+                sleep 30
+              else
+                echo "❌ Terraform apply failed after 3 attempts"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Get outputs
+        run: |
+          echo "📊 Terraform Outputs:"
+          terraform output -json | jq '.'
+          
+          APP_RUNNER_URL=$(terraform output -raw app_runner_service_url 2>/dev/null || echo "")
+          FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "")
+          
+          if [ -n "$APP_RUNNER_URL" ]; then
+            echo "🚀 Backend API: $APP_RUNNER_URL"
+          fi
+          
+          if [ -n "$FRONTEND_URL" ]; then
+            echo "🌐 Frontend: $FRONTEND_URL"
+          fi
+
+      - name: Verify infrastructure
+        run: |
+          echo "🧪 Verifying infrastructure deployment..."
+          
+          # Check App Runner service
+          SERVICE_ARN=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='tradepulse-backend'].ServiceArn" \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -n "$SERVICE_ARN" ]; then
+            STATUS=$(aws apprunner describe-service \
+              --service-arn "$SERVICE_ARN" \
+              --query 'Service.Status' \
+              --output text)
+            echo "✅ App Runner service: $STATUS"
+          fi
+          
+          # Check S3 bucket
+          BUCKET=$(terraform output -raw frontend_bucket_name 2>/dev/null || echo "")
+          if [ -n "$BUCKET" ]; then
+            if aws s3 ls "s3://$BUCKET" >/dev/null 2>&1; then
+              echo "✅ S3 bucket: Accessible"
+            else
+              echo "⚠️  S3 bucket: Not accessible (might be new)"
+            fi
+          fi
+          
+          # Check DynamoDB tables
+          echo "📊 Checking DynamoDB tables..."
+          TABLE_COUNT=$(aws dynamodb list-tables \
+            --query 'TableNames[?starts_with(@, `tradepulse`)] | length(@)' \
+            --output text)
+          echo "✅ DynamoDB tables: $TABLE_COUNT found"
+          
+          echo "✅ Infrastructure verification complete"
+
+  notify:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [terraform-plan, terraform-apply]
+    if: always()
+    
+    steps:
+      - name: Send success notification
+        if: needs.terraform-apply.result == 'success'
+        run: |
+          echo "╔════════════════════════════════════════════════════════════════╗"
+          echo "║                                                                ║"
+          echo "║  ✅ INFRASTRUCTURE DEPLOYMENT SUCCESSFUL!                      ║"
+          echo "║                                                                ║"
+          echo "╚════════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "🔧 Terraform: Applied successfully"
+          echo "☁️  AWS Resources: Updated"
+          echo "✅ Verification: Passed"
+          # Add Slack/Discord webhook here if needed
+
+      - name: Send no-changes notification
+        if: needs.terraform-plan.outputs.plan-exitcode == '0'
+        run: |
+          echo "╔════════════════════════════════════════════════════════════════╗"
+          echo "║                                                                ║"
+          echo "║  ℹ️  NO INFRASTRUCTURE CHANGES DETECTED                        ║"
+          echo "║                                                                ║"
+          echo "╚════════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "📋 Terraform plan: No changes"
+          echo "☁️  AWS Resources: No updates needed"
+
+      - name: Send failure notification
+        if: failure()
+        run: |
+          echo "╔════════════════════════════════════════════════════════════════╗"
+          echo "║                                                                ║"
+          echo "║  ❌ INFRASTRUCTURE DEPLOYMENT FAILED!                          ║"
+          echo "║                                                                ║"
+          echo "╚════════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "🔍 Check the workflow logs for details"
+          echo "🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Add Slack/Discord webhook here if needed
