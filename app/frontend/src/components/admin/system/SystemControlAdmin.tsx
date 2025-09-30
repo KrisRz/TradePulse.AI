@@ -75,18 +75,14 @@ export default function SystemControlAdmin() {
       setLoading(true);
       
       try {
-        // Fetch real system status using API client
-        const statusResponse = await apiClient.get('/api/admin/system-status');
-        
-        // Also fetch health data for additional system metrics
-        const healthResponse = await apiClient.get('/api/health');
+        // Fetch real system status using API client (handles auth fallback)
+        const statusData = await apiClient.system.getAdminSystemStatus();
+        // Fetch health using unified getter which prefers root /health
+        const healthData = await apiClient.system.getHealth();
 
-        if (statusResponse.success && statusResponse.data) {
-          const statusData = statusResponse.data;
-          
+        if (statusData) {
           // Merge with health data if available
-          if (healthResponse.success && healthResponse.data) {
-            const healthData = healthResponse.data;
+          if (healthData) {
             const cpuCheck = healthData.checks?.find((c: any) => c.component === 'cpu');
             const memoryCheck = healthData.checks?.find((c: any) => c.component === 'memory');
             const diskCheck = healthData.checks?.find((c: any) => c.component === 'disk');
@@ -94,8 +90,8 @@ export default function SystemControlAdmin() {
             
             const enhancedStatusData = {
               ...statusData,
-              cpu_usage: cpuCheck?.details?.percent || 0,
-              disk_usage: diskCheck?.details?.percent || 0,
+              cpu_usage: cpuCheck?.details?.percent || statusData.cpu_usage || 0,
+              disk_usage: diskCheck?.details?.percent || statusData.disk_usage || 0,
               active_connections: connectionsCheck?.details?.count || statusData.total_users || 0,
               cache_size_mb: (memoryCheck?.details?.used_gb || 0) * 1024,
               background_jobs: healthData.summary?.healthy || 0,
@@ -108,7 +104,7 @@ export default function SystemControlAdmin() {
             console.log('✅ Real system status loaded:', statusData);
           }
         } else {
-          console.error('Failed to fetch system status:', statusResponse.error);
+          console.error('Failed to fetch system status');
         }
 
         // Fetch real system settings

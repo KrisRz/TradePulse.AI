@@ -288,6 +288,32 @@ export default function SystemStatusDashboard() {
     try {
       // Import API client dynamically for SSR compatibility
       const { apiClient } = await import('../../../lib/api-client');
+      
+      // Defensive: check if portfolio namespace exists (might not in older builds)
+      if (!apiClient.portfolio || typeof apiClient.portfolio.getOverview !== 'function') {
+        // Fallback to direct API call
+        const response = await apiClient.get('/api/admin/virtual-portfolio', {
+          headers: { Authorization: `Bearer ${apiClient.getAuthToken() || 'enterprise_admin_token'}` }
+        });
+        
+        if (!response.success) throw new Error('Portfolio API unavailable');
+        
+        const data = response.data;
+        const totalValue = data.total_value || 0;
+        const activePositions = data.active_positions || 0;
+        const cashBalance = data.cash_balance || 0;
+        
+        return {
+          name: 'Virtual Portfolio',
+          status: totalValue > 0 || cashBalance > 0 ? 'healthy' : 'warning',
+          message: activePositions > 0 
+            ? `${activePositions} active positions, $${totalValue.toLocaleString()} total`
+            : `Ready - $${cashBalance.toLocaleString()} available balance`,
+          lastCheck: new Date().toLocaleTimeString(),
+          details: data
+        };
+      }
+      
       const data = await apiClient.portfolio.getOverview();
       
       // Fix: Use correct API response structure - data.total_value not data.data.total_portfolio_value
