@@ -37,7 +37,7 @@ FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    ENV=production \
+    ENVIRONMENT=prod \
     HOST=0.0.0.0 \
     PORT=9002
 
