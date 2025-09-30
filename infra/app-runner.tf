@@ -26,8 +26,8 @@ resource "aws_apprunner_service" "backend" {
         port = "9002" # TradePulse.AI backend port
 
         # Environment variables (non-sensitive)
+        # Note: ENVIRONMENT is loaded from SSM /tradepulse/production/ENVIRONMENT
         runtime_environment_variables = {
-          ENVIRONMENT           = var.environment
           AWS_REGION            = var.region
           DYNAMODB_REGION       = var.region
           DYNAMODB_TABLE_PREFIX = "${var.project_name}_"
