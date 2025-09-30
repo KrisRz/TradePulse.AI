@@ -186,7 +186,7 @@ class ApiClient {
       'Content-Type': 'application/json',
     };
 
-    // Add auth token if available and not skipped
+    // Add auth token FIRST if available and not skipped (will be overridden by custom headers)
     if (!options.skipAuth && this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
