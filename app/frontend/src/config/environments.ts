@@ -150,13 +150,13 @@ const configurations: Record<Environment, EnvironmentConfig> = {
     debug: false,
     version: '1.0.0',
     api: {
-      base: 'https://p3c9ijdz44.eu-west-2.awsapprunner.com',
-      websocket: 'wss://p3c9ijdz44.eu-west-2.awsapprunner.com',
-      auth: 'https://p3c9ijdz44.eu-west-2.awsapprunner.com/api/auth',
-      trading: 'https://p3c9ijdz44.eu-west-2.awsapprunner.com/api/trading',
-      portfolio: 'https://p3c9ijdz44.eu-west-2.awsapprunner.com/api/portfolio',
-      admin: 'https://p3c9ijdz44.eu-west-2.awsapprunner.com/api/admin',
-      analytics: 'https://p3c9ijdz44.eu-west-2.awsapprunner.com/api/analytics'
+      base: 'https://mpmfdpmani.eu-west-2.awsapprunner.com',
+      websocket: 'wss://mpmfdpmani.eu-west-2.awsapprunner.com',
+      auth: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/auth',
+      trading: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/trading',
+      portfolio: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/portfolio',
+      admin: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/admin',
+      analytics: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/analytics'
     },
     security: {
       tokenStorageKey: 'tradepulse_token',
