@@ -104,9 +104,18 @@ export default function BinanceCandle({
         
         console.log(`✅ [BinanceCandle] Processing ${klines.length} candles...`);
 
-        C = klines.map((d: any) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close }));
+        // Backend returns open_time in milliseconds, lightweight-charts needs seconds
+        C = klines.map((d: any) => ({ 
+          time: Math.floor(d.open_time / 1000), 
+          open: Number(d.open), 
+          high: Number(d.high), 
+          low: Number(d.low), 
+          close: Number(d.close) 
+        }));
         V = klines.map((d: any) => ({
-          time: d.time, value: d.volume, color: d.close >= d.open ? '#22c55e88' : '#ef444488'
+          time: Math.floor(d.open_time / 1000), 
+          value: Number(d.volume), 
+          color: Number(d.close) >= Number(d.open) ? '#22c55e88' : '#ef444488'
         }));
 
         console.log(`📈 [BinanceCandle] Candlestick data:`, C.slice(0, 2));
