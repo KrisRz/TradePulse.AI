@@ -146,6 +146,19 @@ resource "aws_cloudfront_distribution" "frontend" {
     origin_access_control_id = aws_cloudfront_origin_access_control.oac[0].id
   }
 
+  # Backend API origin (App Runner) for routing /api/* from the frontend domain
+  origin {
+    domain_name = aws_apprunner_service.backend.service_url
+    origin_id   = "backend-apprunner"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD"]
     cached_methods         = ["GET", "HEAD"]
@@ -163,6 +176,26 @@ resource "aws_cloudfront_distribution" "frontend" {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.url_rewrite[0].arn
     }
+  }
+
+  # Route API requests to the backend App Runner service
+  ordered_cache_behavior {
+    path_pattern           = "/api/*"
+    target_origin_id       = "backend-apprunner"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods         = ["GET", "HEAD", "OPTIONS"]
+    compress               = true
+
+    forwarded_values {
+      query_string = true
+      headers      = ["Authorization", "Content-Type"]
+      cookies { forward = "none" }
+    }
+
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
   }
 
   # Custom error response only for 404 (client-side routing fallback)
@@ -366,4 +399,12 @@ output "dynamodb_tables" {
 output "github_role_arn" {
   description = "GitHub Actions IAM role ARN"
   value       = aws_iam_role.github_actions.arn
+}
+
+# Force deployment trigger - increment this to force Terraform apply
+# Last updated: 2025-09-30 20:57 UTC - IAM permissions fix
+variable "deployment_trigger" {
+  description = "Increment this to force Terraform to detect changes"
+  type        = number
+  default     = 1
 }
