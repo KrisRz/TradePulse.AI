@@ -148,7 +148,7 @@ export default function SystemStatusDashboard() {
       await apiClient.portfolio.getOverview();
       
       return {
-        name: 'DynamoDB Local',
+        name: 'DynamoDB AWS',
         status: 'healthy',
         message: 'Connected',
         lastCheck: new Date().toLocaleTimeString(),
@@ -158,7 +158,7 @@ export default function SystemStatusDashboard() {
       // Handle AbortError gracefully - this happens when component unmounts or request times out
       if ((error as any)?.name === 'AbortError' || (error as any)?.message?.includes('aborted')) {
         return {
-          name: 'DynamoDB Local',
+          name: 'DynamoDB AWS',
           status: 'warning',
           message: 'Request cancelled (component unmounting)',
           lastCheck: new Date().toLocaleTimeString(),
@@ -167,7 +167,7 @@ export default function SystemStatusDashboard() {
       }
       // Return cached status
       return {
-        name: 'DynamoDB Local',
+        name: 'DynamoDB AWS',
         status: 'healthy',
         message: 'Connected (cached status)',
         lastCheck: new Date().toLocaleTimeString(),
@@ -558,7 +558,7 @@ export default function SystemStatusDashboard() {
     switch (service) {
       case 'Backend API':
         return <Server className="w-5 h-5" />;
-      case 'DynamoDB Local':
+      case 'DynamoDB AWS':
         return <Database className="w-5 h-5" />;
       case 'Frontend (Astro)':
         return <Monitor className="w-5 h-5" />;
