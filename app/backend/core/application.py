@@ -405,13 +405,27 @@ class TradePulseApplication:
         """Configure all middleware in correct order"""
         logger.info("🔧 Configuring middleware")
         
-        # CORS middleware
+        # CORS middleware - Configure allowed origins based on environment
+        allowed_origins = [
+            "https://tradepulseai.co.uk",
+            "https://app.tradepulseai.co.uk",
+            "http://localhost:4321",
+            "http://localhost:3000",
+            "http://127.0.0.1:4321",
+            "http://127.0.0.1:3000",
+        ]
+        
+        # In development, allow all origins
+        if self.settings.ENVIRONMENT == "development":
+            allowed_origins = ["*"]
+        
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],  # Configure properly for production
+            allow_origins=allowed_origins,
             allow_credentials=True,
-            allow_methods=["*"],
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
             allow_headers=["*"],
+            expose_headers=["*"],
         )
         
         # Rate limiting middleware
