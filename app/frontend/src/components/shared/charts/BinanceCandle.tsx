@@ -9,6 +9,7 @@ import {
   type HistogramData,
   type LineData
 } from 'lightweight-charts';
+import { getConfig } from '../../config/environments';
 
 type Props = {
   symbol?: string;      // 'BTCUSDT'
@@ -80,8 +81,9 @@ export default function BinanceCandle({
     const load = async () => {
       try {
         console.log(`📊 [BinanceCandle] Fetching klines for ${symbol} ${interval}...`);
-        // Use relative URL to work with Nginx reverse proxy (/api -> backend)
-        const url = `/api/v1/market/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+        // Use API base URL from environment config to work in both local (Nginx proxy) and AWS (direct App Runner)
+        const config = getConfig();
+        const url = `${config.api.base}/api/v1/market/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
         console.log(`📡 [BinanceCandle] URL: ${url}`);
         
         const r = await fetch(url);
