@@ -2,7 +2,7 @@
 # These tables are created with local DynamoDB but missing from AWS
 # Generated to match app/backend/core/database.py TableSchemas
 
-# Live candles table for real-time market data
+# Live candles table for real-time market data (local/development)
 resource "aws_dynamodb_table" "live_candles" {
   name         = "live_candles"
   billing_mode = "PAY_PER_REQUEST"
@@ -26,6 +26,34 @@ resource "aws_dynamodb_table" "live_candles" {
 
   tags = {
     Name = "${var.project_name}-live-candles"
+  }
+}
+
+# Live candles table for production (separate table for env isolation)
+resource "aws_dynamodb_table" "live_candles_production" {
+  name         = "tradepulse-live_candles-production"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "symbol"
+  range_key    = "timestamp"
+
+  attribute {
+    name = "symbol"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "N"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-live-candles-production"
+    Environment = "production"
   }
 }
 

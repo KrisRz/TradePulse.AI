@@ -27,6 +27,10 @@ TABLE_KEY_SCHEMAS = {
         "symbol": "S",  # String
         "timestamp": "S"  # String (epoch as string)
     },
+    "tradepulse-live_candles-production": {
+        "symbol": "S",  # String
+        "timestamp": "S"  # String (epoch as string)
+    },
     "emergency_state": {
         "id": "S"  # String
     },
