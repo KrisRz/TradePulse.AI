@@ -148,7 +148,7 @@ const configurations: Record<Environment, EnvironmentConfig> = {
   [Environment.PRODUCTION]: {
     environment: Environment.PRODUCTION,
     debug: false,
-    version: '1.0.0',
+    version: '1.0.1', // Force rebuild for new App Runner URL
     api: {
       base: 'https://mpmfdpmani.eu-west-2.awsapprunner.com',
       websocket: 'wss://mpmfdpmani.eu-west-2.awsapprunner.com',
