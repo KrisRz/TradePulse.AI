@@ -9,7 +9,7 @@ import {
   type HistogramData,
   type LineData
 } from 'lightweight-charts';
-import { getConfig } from '../../config/environments';
+import { getConfig } from '../../../config/environments';
 
 type Props = {
   symbol?: string;      // 'BTCUSDT'
