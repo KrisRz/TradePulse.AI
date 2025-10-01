@@ -192,6 +192,11 @@ const configurations: Record<Environment, EnvironmentConfig> = {
 function detectEnvironment(): Environment {
   // Server-side rendering check
   if (typeof window === 'undefined') {
+    // Check NODE_ENV first (set by GitHub Actions), then Vite PROD flag
+    const nodeEnv = import.meta.env.NODE_ENV || process.env.NODE_ENV;
+    if (nodeEnv === 'production') {
+      return Environment.PRODUCTION;
+    }
     return import.meta.env.PROD ? Environment.PRODUCTION : Environment.DEVELOPMENT;
   }
 
