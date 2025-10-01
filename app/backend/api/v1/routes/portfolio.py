@@ -64,56 +64,29 @@ async def get_virtual_portfolio_overview():
         # Get accurate portfolio summary
         summary = await portfolio.get_portfolio_summary()
         
-        # Get all positions from database for counting
-        db_overview = await database_service.get_all_virtual_portfolios()
-        total_portfolios = len(db_overview) if isinstance(db_overview, list) else 1
+        # Get actual position counts from ProfessionalPortfolio (NOT from db_overview which returns portfolios)
+        active_positions_count = summary.get("open_positions", 0)  # From portfolio.positions
+        closed_positions_count = len(portfolio.closed_positions)
+        total_trades = summary["trading_stats"]["total_trades"]
         
-        # Calculate real portfolio metrics using ProfessionalPortfolio
-        if isinstance(db_overview, list) and db_overview:
-            # Filter positions for admin user
-            admin_positions = [pos for pos in db_overview if pos.get('user_id') == 'admin']
-            open_positions = [pos for pos in admin_positions if pos.get('status') == 'open']
-            closed_positions = [pos for pos in admin_positions if pos.get('status') == 'closed']
-            
-            return {
-                "DEBUG": "PROFESSIONAL_PORTFOLIO_DATA",
-                "total_portfolios": total_portfolios,
-                "total_value": float(summary["portfolio_value"]["total"]),
-                "initial_balance": float(portfolio.initial_balance),  # Use actual initial balance
-                "total_pnl": float(summary["performance"]["total_pnl"]),
-                "total_pnl_percentage": float(summary["performance"]["total_pnl_percentage"]),
-                "cash_balance": float(summary["portfolio_value"]["cash"]),
-                "active_positions": len(open_positions),
-                "closed_positions": len(closed_positions),
-                "daily_pnl": float(summary["performance"]["daily_pnl"]),
-                "daily_pnl_percentage": float(summary["performance"]["daily_pnl_percentage"]),
-                "win_rate_today": float(summary["trading_stats"]["win_rate"]),
-                "total_realized_pnl": float(summary["performance"]["total_pnl"]),  # Use total_pnl as realized P&L
-                "avg_portfolio_size": float(summary["portfolio_value"]["total"]) / float(max(total_portfolios, 1)),
-                "portfolios": [],
-                "last_updated": datetime.now().isoformat()
-            }
-        else:
-            # No positions found - return clean portfolio state with actual balance
-            portfolio_balance = float(portfolio.initial_balance)
-            return {
-                "DEBUG": "CLEAN_PORTFOLIO_STATE",
-                "total_portfolios": 1,
-                "total_value": portfolio_balance,
-                "initial_balance": portfolio_balance,
-                "total_pnl": 0.0,
-                "total_pnl_percentage": 0.0,
-                "cash_balance": portfolio_balance,
-                "active_positions": 0,
-                "closed_positions": 0,
-                "daily_pnl": 0.0,
-                "daily_pnl_percentage": 0.0,
-                "win_rate_today": 0.0,
-                "total_realized_pnl": 0.0,
-                "avg_portfolio_size": portfolio_balance,
-                "portfolios": [],
-                "last_updated": datetime.now().isoformat()
-            }
+        return {
+            "DEBUG": "PROFESSIONAL_PORTFOLIO_DATA",
+            "total_portfolios": 1,  # Single admin portfolio
+            "total_value": float(summary["portfolio_value"]["total"]),
+            "initial_balance": float(portfolio.initial_balance),
+            "total_pnl": float(summary["performance"]["total_pnl"]),
+            "total_pnl_percentage": float(summary["performance"]["total_pnl_percentage"]),
+            "cash_balance": float(summary["portfolio_value"]["cash"]),
+            "active_positions": active_positions_count,
+            "closed_positions": closed_positions_count,
+            "daily_pnl": float(summary["performance"]["daily_pnl"]),
+            "daily_pnl_percentage": float(summary["performance"]["daily_pnl_percentage"]),
+            "win_rate_today": float(summary["trading_stats"]["win_rate"]),
+            "total_realized_pnl": float(summary["performance"]["total_pnl"]),
+            "avg_portfolio_size": float(summary["portfolio_value"]["total"]),
+            "portfolios": [],
+            "last_updated": datetime.now().isoformat()
+        }
         
     except Exception as e:
         logger.error(f"❌ Error in virtual portfolio overview: {e}")
