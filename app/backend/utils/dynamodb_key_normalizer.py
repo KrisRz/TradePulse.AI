@@ -29,7 +29,7 @@ TABLE_KEY_SCHEMAS = {
     },
     "tradepulse-live_candles-production": {
         "symbol": "S",  # String
-        "timestamp": "S"  # String (epoch as string)
+        "timestamp": "N"  # Number (to match Terraform table definition)
     },
     "emergency_state": {
         "id": "S"  # String
