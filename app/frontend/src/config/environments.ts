@@ -148,15 +148,15 @@ const configurations: Record<Environment, EnvironmentConfig> = {
   [Environment.PRODUCTION]: {
     environment: Environment.PRODUCTION,
     debug: false,
-    version: '1.0.1', // Force rebuild for new App Runner URL
+    version: '1.0.2', // Use CloudFront domain for API requests
     api: {
-      base: 'https://mpmfdpmani.eu-west-2.awsapprunner.com',
-      websocket: 'wss://mpmfdpmani.eu-west-2.awsapprunner.com',
-      auth: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/auth',
-      trading: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/trading',
-      portfolio: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/portfolio',
-      admin: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/admin',
-      analytics: 'https://mpmfdpmani.eu-west-2.awsapprunner.com/api/analytics'
+      base: 'https://tradepulseai.co.uk',
+      websocket: 'wss://tradepulseai.co.uk',
+      auth: 'https://tradepulseai.co.uk/api/auth',
+      trading: 'https://tradepulseai.co.uk/api/trading',
+      portfolio: 'https://tradepulseai.co.uk/api/portfolio',
+      admin: 'https://tradepulseai.co.uk/api/admin',
+      analytics: 'https://tradepulseai.co.uk/api/analytics'
     },
     security: {
       tokenStorageKey: 'tradepulse_token',
