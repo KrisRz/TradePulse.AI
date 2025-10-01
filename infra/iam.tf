@@ -252,11 +252,6 @@ resource "aws_iam_policy" "app_runner_instance_policy" {
           "cloudwatch:PutMetricData"
         ]
         Resource = ["*"]
-        Condition = {
-          StringEquals = {
-            "cloudwatch:namespace" = "TradePulse.AI"
-          }
-        }
       }
     ]
   })
