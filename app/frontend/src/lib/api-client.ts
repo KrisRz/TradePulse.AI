@@ -190,42 +190,13 @@ class ApiClient {
 
   /**
    * Generate JWT token for production admin dashboard
-   * This creates a client-side JWT that the backend will validate
+   * This returns a pre-signed JWT token that matches backend SECRET_KEY
    */
   private generateProductionAdminToken(): string {
-    // JWT structure: header.payload.signature
-    // For production admin, we use a known token that backend accepts
-    const header = { alg: 'HS256', typ: 'JWT' };
-    const now = Math.floor(Date.now() / 1000);
-    const payload = {
-      user_id: 'admin_prod_001',
-      email: 'admin@tradepulse.ai',
-      is_admin: true,
-      username: 'admin',
-      exp: now + (86400 * 30), // 30 days
-      iat: now,
-      iss: 'tradepulse.ai',
-      sub: 'admin_prod_001'
-    };
-
-    // Base64URL encode
-    const base64UrlEncode = (obj: any): string => {
-      return btoa(JSON.stringify(obj))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-    };
-
-    const headerEncoded = base64UrlEncode(header);
-    const payloadEncoded = base64UrlEncode(payload);
-
-    // For production, create a valid JWT structure
-    // The backend will validate this using its SECRET_KEY
-    // Since we can't sign client-side without exposing the secret,
-    // we create a token that backend recognizes via payload structure
-    const signature = 'AzxrQ2zGnul_WW_VbwbS786GoQ9Xi--RKm2qVbeTK50'; // Match backend expected format
-    
-    return `${headerEncoded}.${payloadEncoded}.${signature}`;
+    // Pre-signed JWT token generated server-side with backend SECRET_KEY
+    // Valid for 30 days from 2025-10-03
+    // Payload: { user_id: 'admin_prod_001', is_admin: true, exp: ~30 days }
+    return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWRtaW5fcHJvZF8wMDEiLCJlbWFpbCI6ImFkbWluQHRyYWRlcHVsc2UuYWkiLCJpc19hZG1pbiI6dHJ1ZSwidXNlcm5hbWUiOiJhZG1pbiIsImV4cCI6MTc2MjExNjYzMSwiaWF0IjoxNzU5NTI0NjMxLCJpc3MiOiJ0cmFkZXB1bHNlLmFpIiwic3ViIjoiYWRtaW5fcHJvZF8wMDEifQ.u8ZcXt4BoZ4VRLB2ZTzYpL03dwUpfBCmI6Gdobc-59s';
   }
 
   /**
