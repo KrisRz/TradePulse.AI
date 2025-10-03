@@ -178,7 +178,7 @@ class EnvironmentSettings(BaseSettings):
     """Main environment settings"""
     
     # Environment
-    environment: Environment = Field(default=Environment.DEVELOPMENT, env="ENVIRONMENT")
+    environment: Environment = Field(default=Environment.DEVELOPMENT)
     debug: bool = Field(default=False, env="DEBUG")
     log_level: LogLevel = Field(default=LogLevel.INFO, env="LOG_LEVEL")
     
@@ -203,8 +203,9 @@ class EnvironmentSettings(BaseSettings):
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
-        "case_sensitive": True,
-        "extra": "ignore"  # Ignore extra fields
+        "case_sensitive": False,  # Allow case-insensitive env var matching
+        "extra": "ignore",  # Ignore extra fields
+        "env_prefix": ""  # No prefix for env vars
     }
 
 

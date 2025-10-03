@@ -66,6 +66,9 @@ RUN mkdir -p /app/logs /app/data && \
 # Switch to non-root user
 USER tradepulse
 
+# Set production environment (can be overridden by App Runner)
+ENV ENVIRONMENT=production
+
 # Health check endpoint for App Runner
 # Increased start-period for model loading (2 min grace period)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
