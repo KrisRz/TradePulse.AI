@@ -66,7 +66,7 @@ async def get_current_user(
     
     token = credentials.credentials
     
-    # Enterprise admin token
+    # Enterprise admin token (literal string for dev)
     if token == "enterprise_admin_token":
         return User(
             id="enterprise_admin",
@@ -75,6 +75,28 @@ async def get_current_user(
             role="admin",
             is_admin=True
         )
+    
+    # Try to decode JWT token for production
+    if token.startswith("eyJ"):  # JWT tokens start with eyJ
+        try:
+            import jwt
+            JWT_SECRET_KEY = settings.SECRET_KEY or "tradepulse_production_secret_2025_change_in_aws"
+            payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+            return User(
+                id=payload.get("user_id", "jwt_user"),
+                email=payload.get("email", "user@tradepulse.ai"),
+                username=payload.get("username", "jwt_user"),
+                role="admin" if payload.get("is_admin") else "user",
+                is_admin=payload.get("is_admin", False)
+            )
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token expired"
+            )
+        except jwt.InvalidTokenError:
+            # Invalid JWT, fall through to demo user
+            pass
     
     # Regular user validation would go here
     # For now, return demo user
