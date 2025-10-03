@@ -97,8 +97,10 @@ class ApiClient {
         return res.data;
       },
       getAdminSystemStatus: async (): Promise<any> => {
+        const token = this.authToken || 'enterprise_admin_token';
+        console.log(`[api.system.getAdminSystemStatus] Using token: ${token}`);
         const res = await this.get<any>('/api/admin/system-status', {
-          headers: { Authorization: `Bearer ${this.authToken || 'enterprise_admin_token'}` },
+          headers: { Authorization: `Bearer ${token}` },
         });
         console.debug('[api.system.getAdminSystemStatus] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'admin system status failed');
@@ -129,8 +131,10 @@ class ApiClient {
 
     this.portfolio = {
       getOverview: async (): Promise<any> => {
+        const token = this.authToken || 'enterprise_admin_token';
+        console.log(`[api.portfolio.getOverview] Using token: ${token}`);
         const res = await this.get<any>('/api/admin/virtual-portfolio', {
-          headers: { Authorization: `Bearer ${this.authToken || 'enterprise_admin_token'}` },
+          headers: { Authorization: `Bearer ${token}` },
         });
         console.debug('[api.portfolio.getOverview] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'portfolio failed');
