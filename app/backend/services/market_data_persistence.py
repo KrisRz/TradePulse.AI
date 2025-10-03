@@ -204,7 +204,12 @@ async def write_decisions(entry_decision, exit_decision, risk_assessment, signal
         # Ensure proper key types for DynamoDB
         timestamp_now = datetime.now(timezone.utc)
         
+        # Generate unique decision_id (required partition key for trading_decisions)
+        import uuid
+        decision_id = f"decision_{timestamp_now.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        
         decision_item = {
+            "decision_id": decision_id,  # Primary key
             "day": str(today),  # Ensure string type
             "timestamp": timestamp_now.isoformat(),  # Keep as string to match schema
             "symbol": "BTCUSDT",
