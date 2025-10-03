@@ -130,7 +130,10 @@ class LeaseGuard:
                     TableName=self.table_name,
                     Key=self.lease_key,
                     ConditionExpression="lease_owner = :me",
-                    UpdateExpression="SET lease_until = :until, ttl = :ttl, renewed_at = :renewed",
+                    UpdateExpression="SET lease_until = :until, #ttl = :ttl, renewed_at = :renewed",
+                    ExpressionAttributeNames={
+                        "#ttl": "ttl"
+                    },
                     ExpressionAttributeValues={
                         ":me": {"S": self.instance_id},
                         ":until": {"N": str(now + self.lease_seconds)},
@@ -203,7 +206,10 @@ class LeaseGuard:
                 TableName=self.table_name,
                 Key=self.lease_key,
                 ConditionExpression="lease_owner = :me",
-                UpdateExpression="SET heartbeat_ts = :heartbeat, ttl = :ttl",
+                UpdateExpression="SET heartbeat_ts = :heartbeat, #ttl = :ttl",
+                ExpressionAttributeNames={
+                    "#ttl": "ttl"
+                },
                 ExpressionAttributeValues={
                     ":me": {"S": self.instance_id},
                     ":heartbeat": {"N": str(now)},
