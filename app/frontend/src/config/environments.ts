@@ -148,15 +148,15 @@ const configurations: Record<Environment, EnvironmentConfig> = {
   [Environment.PRODUCTION]: {
     environment: Environment.PRODUCTION,
     debug: false,
-    version: '1.0.2', // Use CloudFront domain for API requests
+    version: '1.0.3', // Using custom domain via Route53
     api: {
-      base: 'https://tradepulseai.co.uk',
-      websocket: 'wss://tradepulseai.co.uk',
-      auth: 'https://tradepulseai.co.uk/api/auth',
-      trading: 'https://tradepulseai.co.uk/api/trading',
-      portfolio: 'https://tradepulseai.co.uk/api/portfolio',
-      admin: 'https://tradepulseai.co.uk/api/admin',
-      analytics: 'https://tradepulseai.co.uk/api/analytics'
+      base: 'https://api.tradepulseai.co.uk',
+      websocket: 'wss://api.tradepulseai.co.uk',
+      auth: 'https://api.tradepulseai.co.uk/api/auth',
+      trading: 'https://api.tradepulseai.co.uk/api/trading',
+      portfolio: 'https://api.tradepulseai.co.uk/api/portfolio',
+      admin: 'https://api.tradepulseai.co.uk/api/admin',
+      analytics: 'https://api.tradepulseai.co.uk/api/analytics'
     },
     security: {
       tokenStorageKey: 'tradepulse_token',
