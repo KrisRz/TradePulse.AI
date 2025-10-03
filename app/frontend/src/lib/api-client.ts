@@ -77,10 +77,11 @@ class ApiClient {
     this.system = {
       getHealth: async (): Promise<any> => {
         const t0 = performance.now();
-        // Prefer root /health (always available) with fallback to /api/health
-        let res = await this.get<any>('/health', { skipAuth: true });
+        // Prefer backend health via API path to avoid S3 403 on root
+        let res = await this.get<any>('/api/health', { skipAuth: true });
         if (!res.success) {
-          res = await this.get<any>('/api/health', { skipAuth: true });
+          // Fallback to root only if needed
+          res = await this.get<any>('/health', { skipAuth: true });
         }
         console.debug('[api.system.getHealth] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'health failed');
@@ -104,9 +105,14 @@ class ApiClient {
         return res.data;
       },
       getBitcoinPrice: async (): Promise<any> => {
-        const res = await this.get<any>('/api/real_trading/live/bitcoin-price', {
+        // Primary (admin-protected)
+        let res = await this.get<any>('/api/real_trading/live/bitcoin-price', {
           headers: { Authorization: `Bearer ${this.authToken || 'enterprise_admin_token'}` },
         });
+        // Fallback to public signals price if 401/403
+        if (!res.success && (res.error?.code === 'HTTP_401' || res.error?.code === 'HTTP_403')) {
+          res = await this.get<any>('/api/signals/live/bitcoin-price', { skipAuth: true });
+        }
         console.debug('[api.system.getBitcoinPrice] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'price failed');
         return res.data;
