@@ -130,6 +130,8 @@ async def get_ai_models_status():
             ],
             "total_models": 1,
             "operational_models": 1,
+            "initialized": True,  # Models are loaded and operational
+            "model_count": 1,  # For frontend compatibility
             "timestamp": datetime.now().isoformat()
         }
         
