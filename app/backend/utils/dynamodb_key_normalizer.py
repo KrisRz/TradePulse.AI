@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 # Table key schemas - defines expected types for each table's keys
 TABLE_KEY_SCHEMAS = {
     "trading_decisions": {
-        "day": "S",  # String
-        "timestamp": "S"  # String (ISO format)
+        "decision_id": "S",  # String (primary key: decision_YYYYMMDD_HHMMSS_uuid)
+        "day": "S"  # String (partition key: YYYY-MM-DD)
     },
     "live_candles": {
         "symbol": "S",  # String
