@@ -124,12 +124,16 @@ class HistoricalMarketContextService:
         logger.info("🚀 Initializing Historical Market Context Service...")
         
         try:
-            # Check if pre-calculated data exists and is up to date
-            if await self._is_cache_valid():
+            # DAY TRADING: Try DynamoDB first (90-day fresh data)
+            if await self._load_from_dynamodb():
+                logger.info("✅ Loaded fresh 90-day data from DynamoDB")
+            # Fallback: Check local cache
+            elif await self._is_cache_valid():
                 logger.info("✅ Loading pre-calculated historical data from cache...")
                 await self._load_from_cache()
+            # Last resort: Pre-calculate from parquet (if available)
             else:
-                logger.info("🔄 Pre-calculating historical data from 3.97M records...")
+                logger.info("🔄 Pre-calculating historical data from parquet files...")
                 await self._pre_calculate_historical_data()
                 await self._save_to_cache()
             
@@ -143,6 +147,69 @@ class HistoricalMarketContextService:
             self.is_loading = False
             logger.error(f"❌ Failed to initialize historical context service: {e}")
             raise
+    
+    async def _load_from_dynamodb(self) -> bool:
+        """Load pre-calculated metrics from DynamoDB (90-day fresh data)"""
+        try:
+            from app.backend.core.database import DynamoDBClient
+            from app.backend.core.config import get_settings
+            
+            settings = get_settings()
+            client = DynamoDBClient(local_development=settings.is_development)
+            
+            # Get cached metrics
+            table_name = "market_context_cache"
+            cache_item = client.get_item(table_name, {"cache_key": "market_context_90d"})
+            
+            if not cache_item:
+                logger.info("   No data in DynamoDB yet")
+                return False
+            
+            # Check freshness (< 24 hours for day trading)
+            last_updated = cache_item.get("last_updated", 0)
+            age_hours = (datetime.now(timezone.utc).timestamp() - last_updated) / 3600
+            
+            if age_hours > 24:
+                logger.warning(f"   DynamoDB data is {age_hours:.1f} hours old, refreshing needed")
+                return False
+            
+            # Load price ranges
+            for period, data in cache_item.get("price_ranges", {}).items():
+                self.price_ranges[period] = PriceRange(
+                    period=period,
+                    high=float(data["high"]),
+                    low=float(data["low"]),
+                    current_position=float(data.get("current_position", 0.5))
+                )
+            
+            # Load support/resistance
+            self.support_resistance_levels["30D"] = {
+                "support": [float(s) for s in cache_item.get("support_levels", [])],
+                "resistance": [float(r) for r in cache_item.get("resistance_levels", [])]
+            }
+            
+            # Load pattern success rates
+            for pattern_key, data in cache_item.get("pattern_success_rates", {}).items():
+                self.pattern_success_rates[pattern_key] = PatternSuccessRate(
+                    pattern_name=data.get("description", pattern_key),
+                    success_rate=float(data.get("success_rate", 0.5)),
+                    total_occurrences=int(data.get("total_signals", 0)),
+                    avg_profit=0.0,  # Not calculated in new format
+                    avg_loss=0.0,
+                    risk_reward_ratio=0.0,
+                    market_regime=MarketRegime.SIDEWAYS,
+                    price_range_position="mid"
+                )
+            
+            logger.info(f"   Loaded {len(self.price_ranges)} price ranges")
+            logger.info(f"   Loaded {len(self.pattern_success_rates)} pattern success rates")
+            logger.info(f"   Data age: {age_hours:.1f} hours")
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"   Failed to load from DynamoDB: {e}")
+            return False
     
     async def _is_cache_valid(self) -> bool:
         """Check if cached data exists and is up to date"""
