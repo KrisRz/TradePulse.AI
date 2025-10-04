@@ -116,7 +116,7 @@ export default function SignalAnalytics({
       // Fetch real signal metrics from backend
       const response = await fetch('/api/analytics/signals/metrics', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token') || 'enterprise_admin_token'}`,
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });
@@ -130,7 +130,7 @@ export default function SignalAnalytics({
       // Fetch real strategy data (using existing endpoint for now)
       const strategyResponse = await fetch('/api/analytics/strategies/win-rates', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token') || 'enterprise_admin_token'}`,
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });

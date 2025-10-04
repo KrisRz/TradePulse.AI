@@ -124,7 +124,7 @@ import RegisterForm from '../../components/shared/auth/RegisterForm';
   // Handle client-side routing for SPA-like behavior
   document.addEventListener('DOMContentLoaded', function() {
     // Check if user is already logged in
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
     if (token) {
       // User is already logged in, redirect to dashboard
       window.location.href = '/dashboard';

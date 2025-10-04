@@ -76,7 +76,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
     if (success.success) {
       console.log('🔐 LoginForm: Login successful, calling onSuccess callback');
       console.log('🔐 LoginForm: Current localStorage before callback:', {
-        token: localStorage.getItem('auth_token'),
+        token: localStorage.getItem('token'),
         userData: localStorage.getItem('user_data')
       });
       
@@ -93,7 +93,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
         // Handle redirect internally with detailed logging
         setTimeout(() => {
           const userData = localStorage.getItem('user_data');
-          const authToken = localStorage.getItem('auth_token');
+          const authToken = localStorage.getItem('token');
           
           console.log('🔐 LoginForm: Internal redirect - Auth token exists:', !!authToken);
           console.log('🔐 LoginForm: Internal redirect - User data exists:', !!userData);

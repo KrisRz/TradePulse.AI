@@ -63,7 +63,7 @@ import LoginForm from '../../components/shared/auth/LoginForm';
     const autoCheck = urlParams.get('auto_check');
     
     // Check if user is already logged in with a valid token (only if autoCheck is enabled)
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
     if (token && autoCheck === 'true') {
       try {
         // Validate token by making a test API call
@@ -94,20 +94,20 @@ import LoginForm from '../../components/shared/auth/LoginForm';
         } else {
           // Token is invalid, remove it and show login form
           console.log('Invalid token found, removing and showing login form');
-          localStorage.removeItem('auth_token');
+          localStorage.removeItem('token');
           localStorage.removeItem('user_data');
         }
       } catch (error) {
         // Network error or API unavailable, remove token and show login form
         console.log('Error validating token, removing and showing login form:', error);
-        localStorage.removeItem('auth_token');
+        localStorage.removeItem('token');
         localStorage.removeItem('user_data');
       }
     }
     
     // Add logout functionality for debugging
     if (urlParams.get('logout') === 'true') {
-      localStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
       localStorage.removeItem('user_data');
       console.log('Logged out, localStorage cleared');
     }

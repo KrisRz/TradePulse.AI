@@ -105,7 +105,7 @@ export default function LiveSignalStatus({
       // PRODUCTION: Fetch real signal status from professional backend
       const response = await fetch('/api/signals/brain/status', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });

@@ -84,7 +84,7 @@ export default function PositionsList({
 
       const response = await fetch('/api/portfolio/virtual/positions', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });

@@ -34,7 +34,7 @@ export default function UserDashboardOverview() {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('No authentication token available');
       }

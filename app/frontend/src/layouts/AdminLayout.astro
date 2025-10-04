@@ -325,8 +325,8 @@ const { title } = Astro.props;
     logout() {
       if (confirm('Are you sure you want to logout?')) {
         // Clear auth token
-        localStorage.removeItem('auth-token');
-        sessionStorage.removeItem('auth-token');
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         
         // Redirect to login
         window.location.href = '/auth/login';

@@ -19,7 +19,7 @@ interface AuthState {
 // Initial state
 const initialState: AuthState = {
   user: null,
-  token: typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null,
+  token: typeof window !== 'undefined' ? localStorage.getItem('token') : null,
   isAuthenticated: false,
   loading: false,
   error: null
@@ -63,7 +63,7 @@ export const authActions = {
         if (typeof window !== 'undefined') {
           console.log('🔐 Auth Store: Setting localStorage - token:', token);
           console.log('🔐 Auth Store: Setting localStorage - user:', user);
-          localStorage.setItem('auth_token', token);
+          localStorage.setItem('token', token);
           localStorage.setItem('user_data', JSON.stringify(user));
           console.log('🔐 Auth Store: ✅ localStorage updated successfully');
         }
@@ -169,7 +169,7 @@ export const authActions = {
     api.auth.logout();
     
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
       localStorage.removeItem('user_data');
     }
     
@@ -199,7 +199,7 @@ export const authActions = {
       return;
     }
     
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
     if (!token) {
       return;
     }
@@ -245,7 +245,7 @@ export const authActions = {
         api.auth.logout();
         
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('auth_token');
+          localStorage.removeItem('token');
           localStorage.removeItem('user_data');
         }
         

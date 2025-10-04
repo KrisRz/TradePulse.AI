@@ -53,7 +53,7 @@ export default function WalletManagement() {
   const fetchWithdrawalLimits = async () => {
     try {
       setLimitsLoading(true);
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem('token');
 
       if (!token) {
         console.error('❌ No auth token for withdrawal limits');

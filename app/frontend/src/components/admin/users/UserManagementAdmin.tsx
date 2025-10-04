@@ -119,7 +119,7 @@ export default function UserManagementAdmin() {
   // REAL API: Load invitations from professional backend
   const loadInvitations = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem('token');
       if (!token) return;
 
       const params = new URLSearchParams();

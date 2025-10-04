@@ -77,7 +77,7 @@ export default function TradingHeatmap({
       // Fetch real heatmap data from backend
       const response = await fetch('/api/analytics/trading/heatmap', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token') || 'enterprise_admin_token'}`,
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });

@@ -55,7 +55,7 @@ export default function MetricsGrid({
       // PRODUCTION: Fetch real metrics from professional backend
       const response = await fetch(`/api/analytics/metrics?timeRange=${timeRange}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });

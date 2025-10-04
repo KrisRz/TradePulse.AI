@@ -84,7 +84,7 @@ export default function PerformanceComparison({
       setError(null);
       
       // PRODUCTION: Fetch real performance comparison data from professional backend
-      const token = localStorage.getItem('auth_token') || 'enterprise_admin_token';
+      const token = localStorage.getItem('token') || '';
       const response = await fetch(`/api/analytics/performance-comparison?timeRange=${timeRange}`, {
         headers: {
           'Authorization': `Bearer ${token}`,

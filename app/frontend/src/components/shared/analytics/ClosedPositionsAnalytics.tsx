@@ -124,7 +124,7 @@ export default function ClosedPositionsAnalytics() {
       // PRODUCTION: Fetch real closed positions from professional backend
       const response = await fetch('/api/portfolio/virtual/history', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });
