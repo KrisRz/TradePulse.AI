@@ -80,7 +80,8 @@ async def get_current_user(
     if token.startswith("eyJ"):  # JWT tokens start with eyJ
         try:
             import jwt
-            JWT_SECRET_KEY = settings.SECRET_KEY or "tradepulse_production_secret_2025_change_in_aws"
+            # Use settings.SECRET_KEY directly (default: "dev-secret-key-change-in-production")
+            JWT_SECRET_KEY = settings.SECRET_KEY
             payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
             return User(
                 id=payload.get("user_id", "jwt_user"),
