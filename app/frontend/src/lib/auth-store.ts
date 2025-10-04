@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals';
 import { api } from './api';
+import { getEnvironmentConfig } from '@/config/environments';
 
 interface User {
   id: string;
@@ -16,10 +17,16 @@ interface AuthState {
   error: string | null;
 }
 
+// Get environment-aware token key
+const getTokenKey = () => {
+  const envConfig = getEnvironmentConfig();
+  return envConfig.security.tokenStorageKey;
+};
+
 // Initial state
 const initialState: AuthState = {
   user: null,
-  token: typeof window !== 'undefined' ? localStorage.getItem('token') : null,
+  token: typeof window !== 'undefined' ? localStorage.getItem(getTokenKey()) : null,
   isAuthenticated: false,
   loading: false,
   error: null
@@ -61,9 +68,11 @@ export const authActions = {
         console.log('🔐 Auth Store: Created user object:', user);
 
         if (typeof window !== 'undefined') {
+          const tokenKey = getTokenKey();
           console.log('🔐 Auth Store: Setting localStorage - token:', token);
           console.log('🔐 Auth Store: Setting localStorage - user:', user);
-          localStorage.setItem('token', token);
+          console.log('🔐 Auth Store: Using tokenKey:', tokenKey);
+          localStorage.setItem(tokenKey, token);
           localStorage.setItem('user_data', JSON.stringify(user));
           console.log('🔐 Auth Store: ✅ localStorage updated successfully');
         }
@@ -169,7 +178,8 @@ export const authActions = {
     api.auth.logout();
     
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('token');
+      const tokenKey = getTokenKey();
+      localStorage.removeItem(tokenKey);
       localStorage.removeItem('user_data');
     }
     
@@ -199,7 +209,8 @@ export const authActions = {
       return;
     }
     
-    const token = localStorage.getItem('token');
+    const tokenKey = getTokenKey();
+    const token = localStorage.getItem(tokenKey);
     if (!token) {
       return;
     }
@@ -245,7 +256,8 @@ export const authActions = {
         api.auth.logout();
         
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
+          const tokenKey = getTokenKey();
+          localStorage.removeItem(tokenKey);
           localStorage.removeItem('user_data');
         }
         

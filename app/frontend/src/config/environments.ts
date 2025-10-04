@@ -79,8 +79,8 @@ const configurations: Record<Environment, EnvironmentConfig> = {
       analytics: 'http://localhost:9002/api/analytics'
     },
     security: {
-      tokenStorageKey: 'tradepulse_token',
-      refreshTokenKey: 'tradepulse_refresh',
+      tokenStorageKey: 'token',
+      refreshTokenKey: 'refresh_token',
       sessionTimeoutMinutes: 60,
       maxRetryAttempts: 3,
       csrfProtection: false
@@ -119,8 +119,8 @@ const configurations: Record<Environment, EnvironmentConfig> = {
       analytics: 'https://staging-api.tradepulse.ai/api/analytics'
     },
     security: {
-      tokenStorageKey: 'tradepulse_token',
-      refreshTokenKey: 'tradepulse_refresh',
+      tokenStorageKey: 'token',
+      refreshTokenKey: 'refresh_token',
       sessionTimeoutMinutes: 30,
       maxRetryAttempts: 3,
       csrfProtection: true
@@ -159,8 +159,8 @@ const configurations: Record<Environment, EnvironmentConfig> = {
       analytics: 'https://tradepulseai.co.uk/api/analytics'
     },
     security: {
-      tokenStorageKey: 'tradepulse_token',
-      refreshTokenKey: 'tradepulse_refresh',
+      tokenStorageKey: 'token',
+      refreshTokenKey: 'refresh_token',
       sessionTimeoutMinutes: 15,
       maxRetryAttempts: 5,
       csrfProtection: true

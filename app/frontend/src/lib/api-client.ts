@@ -68,17 +68,17 @@ class ApiClient {
       retryDelay: 1000,
     };
 
-    // Load auth token from localStorage on init
+    // Load auth token from localStorage on init (environment-aware key)
     if (typeof window !== 'undefined') {
-      let token = localStorage.getItem('token');
+      const tokenKey = envConfig.security.tokenStorageKey;
+      let token = localStorage.getItem(tokenKey);
       
       // Auto-generate JWT token for production admin dashboard if missing
       if (!token) {
-        const envConfig = getEnvironmentConfig();
         if (envConfig.environment === 'PRODUCTION') {
           // Generate JWT token for production admin access
           token = this.generateProductionAdminToken();
-          localStorage.setItem('token', token);
+          localStorage.setItem(tokenKey, token);
           console.log('🔑 Auto-generated production admin JWT token');
         }
       }
@@ -103,15 +103,15 @@ class ApiClient {
       },
       getConnectionStatus: async (): Promise<any> => {
         const res = await this.get<any>('/api/real_trading/status/connections', {
-          headers: { Authorization: `Bearer ${this.authToken || 'enterprise_admin_token'}` },
+          headers: { Authorization: `Bearer ${this.authToken || ''}` },
         });
         console.debug('[api.system.getConnectionStatus] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'connections failed');
         return res.data;
       },
       getAdminSystemStatus: async (): Promise<any> => {
-        const token = this.authToken || 'enterprise_admin_token';
-        console.log(`[api.system.getAdminSystemStatus] Using token: ${token}`);
+        const token = this.authToken || '';
+        console.log(`[api.system.getAdminSystemStatus] Using token: ${token ? token.substring(0, 20) + '...' : 'MISSING'}`);
         const res = await this.get<any>('/api/admin/system-status', {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -122,7 +122,7 @@ class ApiClient {
       getBitcoinPrice: async (): Promise<any> => {
         // Primary (admin-protected)
         let res = await this.get<any>('/api/real_trading/live/bitcoin-price', {
-          headers: { Authorization: `Bearer ${this.authToken || 'enterprise_admin_token'}` },
+          headers: { Authorization: `Bearer ${this.authToken || ''}` },
         });
         // Fallback to public signals price if 401/403
         if (!res.success && (res.error?.code === 'HTTP_401' || res.error?.code === 'HTTP_403')) {
@@ -134,7 +134,7 @@ class ApiClient {
       },
       getModelStatus: async (): Promise<any> => {
         const res = await this.get<any>('/api/signals/admin/ai-models', {
-          headers: { Authorization: `Bearer ${this.authToken || 'enterprise_admin_token'}` },
+          headers: { Authorization: `Bearer ${this.authToken || ''}` },
         });
         console.debug('[api.system.getModelStatus] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'models status failed');
@@ -144,8 +144,8 @@ class ApiClient {
 
     this.portfolio = {
       getOverview: async (): Promise<any> => {
-        const token = this.authToken || 'enterprise_admin_token';
-        console.log(`[api.portfolio.getOverview] Using token: ${token}`);
+        const token = this.authToken || '';
+        console.log(`[api.portfolio.getOverview] Using token: ${token ? token.substring(0, 20) + '...' : 'MISSING'}`);
         const res = await this.get<any>('/api/admin/virtual-portfolio', {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -158,7 +158,7 @@ class ApiClient {
     this.trading = {
       getModeStatus: async (): Promise<any> => {
         const res = await this.get<any>('/api/trading/modes/status', {
-          headers: { Authorization: `Bearer ${this.authToken || 'enterprise_admin_token'}` },
+          headers: { Authorization: `Bearer ${this.authToken || ''}` },
         });
         console.debug('[api.trading.getModeStatus] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'mode status failed');
@@ -173,10 +173,12 @@ class ApiClient {
   setAuthToken(token: string | null): void {
     this.authToken = token;
     if (typeof window !== 'undefined') {
+      const envConfig = getEnvironmentConfig();
+      const tokenKey = envConfig.security.tokenStorageKey;
       if (token) {
-        localStorage.setItem('token', token);
+        localStorage.setItem(tokenKey, token);
       } else {
-        localStorage.removeItem('token');
+        localStorage.removeItem(tokenKey);
       }
     }
   }
