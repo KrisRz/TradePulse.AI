@@ -194,9 +194,10 @@ class ApiClient {
    */
   private generateProductionAdminToken(): string {
     // Pre-signed JWT token generated server-side with backend SECRET_KEY
-    // Valid for 30 days from 2025-10-03
-    // Payload: { user_id: 'admin_prod_001', is_admin: true, exp: ~30 days }
-    return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWRtaW5fcHJvZF8wMDEiLCJlbWFpbCI6ImFkbWluQHRyYWRlcHVsc2UuYWkiLCJpc19hZG1pbiI6dHJ1ZSwidXNlcm5hbWUiOiJhZG1pbiIsImV4cCI6MTc2MjExNjYzMSwiaWF0IjoxNzU5NTI0NjMxLCJpc3MiOiJ0cmFkZXB1bHNlLmFpIiwic3ViIjoiYWRtaW5fcHJvZF8wMDEifQ.u8ZcXt4BoZ4VRLB2ZTzYpL03dwUpfBCmI6Gdobc-59s';
+    // Valid for 30 days from 2025-10-04 
+    // SECRET_KEY: "dev-secret-key-change-in-production" (backend default from config.py)
+    // Payload: { user_id: 'admin_prod_001', is_admin: true, exp: 2025-11-03 }
+    return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWRtaW5fcHJvZF8wMDEiLCJlbWFpbCI6ImFkbWluQHRyYWRlcHVsc2UuYWkiLCJpc19hZG1pbiI6dHJ1ZSwidXNlcm5hbWUiOiJhZG1pbiIsImV4cCI6MTc2MjE2MjQ1MSwiaWF0IjoxNzU5NTY2ODUxLCJpc3MiOiJ0cmFkZXB1bHNlLmFpIiwic3ViIjoiYWRtaW5fcHJvZF8wMDEifQ.ZujENt8ZT0iaj-8i23x_NANZ3UQ7Gct6seYJ6xKUONw';
   }
 
   /**
