@@ -1938,14 +1938,27 @@ async def get_virtual_portfolio(
     Get virtual portfolio information including balance, positions, and performance
     """
     try:
-        # Get portfolio summary - fix method call (no await, no portfolio_id parameter)
-        portfolio_summary = portfolio_service.get_portfolio_summary()
+        # Get professional portfolio for REAL DATA
+        from app.backend.services.professional_portfolio import get_professional_portfolio
+        portfolio = await get_professional_portfolio("admin")
         
-        # Get active positions
-        active_positions = await portfolio_service.get_active_positions(portfolio_id)
+        # Update with live data
+        await portfolio.update_positions_with_live_data()
         
-        # Get recent trades
-        recent_trades = await portfolio_service.get_recent_trades(portfolio_id, limit=10)
+        # Get summary
+        summary = await portfolio.get_portfolio_summary()
+        
+        # Extract data
+        portfolio_summary = {
+            "balance": summary.get("cash_balance", 0),
+            "total_value": summary.get("total_value", 0),
+            "total_pnl": summary.get("total_pnl", 0),
+            "win_rate": summary.get("win_rate", 0),
+            "total_trades": summary.get("closed_positions", 0)
+        }
+        
+        active_positions = summary.get("positions", [])
+        recent_trades = []  # Placeholder for recent trades
         
         return {
             "status": "success",
