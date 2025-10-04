@@ -209,9 +209,10 @@ async def write_decisions(entry_decision, exit_decision, risk_assessment, signal
         decision_id = f"decision_{timestamp_now.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
         
         decision_item = {
-            "decision_id": decision_id,  # Primary key
-            "day": str(today),  # Ensure string type
-            "timestamp": timestamp_now.isoformat(),  # Keep as string to match schema
+            "decision_id": decision_id,  # Primary key (HASH)
+            "timestamp": int(timestamp_now.timestamp()),  # Sort key (RANGE) - must be Number (epoch)
+            "day": str(today),  # Partition for queries
+            "timestamp_iso": timestamp_now.isoformat(),  # Human-readable timestamp
             "symbol": "BTCUSDT",
             "signal_action": signal.action if signal else "none",
             "signal_confidence": Decimal(str(signal.confidence)) if signal else Decimal('0.0'),
