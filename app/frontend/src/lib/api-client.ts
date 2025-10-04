@@ -102,9 +102,7 @@ class ApiClient {
         return res.data;
       },
       getConnectionStatus: async (): Promise<any> => {
-        const res = await this.get<any>('/api/real_trading/status/connections', {
-          headers: { Authorization: `Bearer ${this.authToken || ''}` },
-        });
+        const res = await this.get<any>('/api/real_trading/status/connections');
         console.debug('[api.system.getConnectionStatus] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'connections failed');
         return res.data;
@@ -112,18 +110,14 @@ class ApiClient {
       getAdminSystemStatus: async (): Promise<any> => {
         const token = this.authToken || '';
         console.log(`[api.system.getAdminSystemStatus] Using token: ${token ? token.substring(0, 20) + '...' : 'MISSING'}`);
-        const res = await this.get<any>('/api/admin/system-status', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await this.get<any>('/api/admin/system-status');
         console.debug('[api.system.getAdminSystemStatus] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'admin system status failed');
         return res.data;
       },
       getBitcoinPrice: async (): Promise<any> => {
         // Primary (admin-protected)
-        let res = await this.get<any>('/api/real_trading/live/bitcoin-price', {
-          headers: { Authorization: `Bearer ${this.authToken || ''}` },
-        });
+        let res = await this.get<any>('/api/real_trading/live/bitcoin-price');
         // Fallback to public signals price if 401/403
         if (!res.success && (res.error?.code === 'HTTP_401' || res.error?.code === 'HTTP_403')) {
           res = await this.get<any>('/api/signals/live/bitcoin-price', { skipAuth: true });
@@ -133,9 +127,7 @@ class ApiClient {
         return res.data;
       },
       getModelStatus: async (): Promise<any> => {
-        const res = await this.get<any>('/api/signals/admin/ai-models', {
-          headers: { Authorization: `Bearer ${this.authToken || ''}` },
-        });
+        const res = await this.get<any>('/api/signals/admin/ai-models');
         console.debug('[api.system.getModelStatus] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'models status failed');
         return res.data;
@@ -146,9 +138,7 @@ class ApiClient {
       getOverview: async (): Promise<any> => {
         const token = this.authToken || '';
         console.log(`[api.portfolio.getOverview] Using token: ${token ? token.substring(0, 20) + '...' : 'MISSING'}`);
-        const res = await this.get<any>('/api/admin/virtual-portfolio', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await this.get<any>('/api/admin/virtual-portfolio');
         console.debug('[api.portfolio.getOverview] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'portfolio failed');
         return res.data;
@@ -157,9 +147,7 @@ class ApiClient {
 
     this.trading = {
       getModeStatus: async (): Promise<any> => {
-        const res = await this.get<any>('/api/trading/modes/status', {
-          headers: { Authorization: `Bearer ${this.authToken || ''}` },
-        });
+        const res = await this.get<any>('/api/trading/modes/status');
         console.debug('[api.trading.getModeStatus] resp', res);
         if (!res.success) throw new Error(res.error?.message || 'mode status failed');
         return res.data;
