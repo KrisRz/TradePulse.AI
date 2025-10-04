@@ -1084,12 +1084,16 @@ class EnterpriseTradingEngine:
                     if snapshot_obj is None:
                         raise NameError("snapshot_object_missing")
                     X = build_l5_vector_from_snapshot(snapshot_obj)
-                    if hasattr(model, 'predict_proba'):
-                        proba = model.predict_proba(X)[0]
-                        confidence = float(proba[1]) if len(proba) > 1 else float(proba[0])
-                    else:
-                        pred = model.predict(X)[0]
-                        confidence = float(pred)
+                    # Suppress LightGBM warnings about num_leaves
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        if hasattr(model, 'predict_proba'):
+                            proba = model.predict_proba(X)[0]
+                            confidence = float(proba[1]) if len(proba) > 1 else float(proba[0])
+                        else:
+                            pred = model.predict(X)[0]
+                            confidence = float(pred)
                     inc_l5_vector_source("snapshot")
                 except Exception as e:
                     # Fallback to legacy feature dict path
@@ -1185,7 +1189,11 @@ class EnterpriseTradingEngine:
                 )
                 
                 # Use the feature_array directly - _build_feature_array handles DataFrame vs numpy array based on model training
-                raw_timing_score = float(self.models["timing"].predict(feature_array)[0])
+                # Suppress LightGBM warnings about num_leaves
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    raw_timing_score = float(self.models["timing"].predict(feature_array)[0])
                 # CRITICAL FIX: Proper timing score normalization
                 # Raw model output needs professional scaling for trading decisions
                 timing_score = self._normalize_timing_score(raw_timing_score, features)
