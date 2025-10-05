@@ -1948,17 +1948,17 @@ async def get_virtual_portfolio(
         # Get summary
         summary = await portfolio.get_portfolio_summary()
         
-        # Extract data
+        # Extract data from correct structure
         portfolio_summary = {
-            "balance": summary.get("cash_balance", 0),
-            "total_value": summary.get("total_value", 0),
-            "total_pnl": summary.get("total_pnl", 0),
-            "win_rate": summary.get("win_rate", 0),
-            "total_trades": summary.get("closed_positions", 0)
+            "balance": summary.get("portfolio_value", {}).get("cash", 0),
+            "total_value": summary.get("portfolio_value", {}).get("total", 0),
+            "total_pnl": summary.get("performance", {}).get("total_pnl", 0),
+            "win_rate": summary.get("trading_stats", {}).get("win_rate", 0),
+            "total_trades": summary.get("trading_stats", {}).get("total_trades", 0)
         }
         
-        active_positions = summary.get("positions", [])
-        recent_trades = []  # Placeholder for recent trades
+        active_positions = []  # TODO: Get from portfolio.positions
+        recent_trades = []  # TODO: Get from portfolio.closed_positions
         
         return {
             "status": "success",
