@@ -166,7 +166,7 @@ class HistoricalMarketContextService:
                 return False
             
             # Check freshness (< 24 hours for day trading)
-            last_updated = cache_item.get("last_updated", 0)
+            last_updated = float(cache_item.get("last_updated", 0))  # Convert Decimal to float
             age_hours = (datetime.now(timezone.utc).timestamp() - last_updated) / 3600
             
             if age_hours > 24:
