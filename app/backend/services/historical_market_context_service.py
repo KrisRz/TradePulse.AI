@@ -512,48 +512,92 @@ class HistoricalMarketContextService:
                 logger.warning(f"Failed to calculate {period_name} range: {e}")
     
     def _find_support_levels(self, df: pd.DataFrame) -> List[float]:
-        """Find significant support levels from historical data"""
-        lows = df['low'].rolling(window=20).min()
+        """Find significant support levels - DAY TRADING OPTIMIZED"""
         support_candidates = []
         
-        # Find local minima that held multiple times
+        # METHOD 1: STRONG LEVELS (historical touch points - strict)
+        lows = df['low'].rolling(window=20).min()
         for i in range(20, len(lows) - 20):
             if lows.iloc[i] == lows.iloc[i-10:i+10].min():
                 price_level = float(lows.iloc[i])
                 
-                # Count how many times this level held
+                # Count touches (relaxed: 1+ instead of 2+)
                 touches = 0
-                for j in range(i+1, min(i+100, len(df))):
-                    if abs(df['low'].iloc[j] - price_level) / price_level < 0.02:  # Within 2%
+                for j in range(i+1, min(i+50, len(df))):  # Reduced from 100 to 50
+                    if abs(df['low'].iloc[j] - price_level) / price_level < 0.03:  # 3% tolerance (day trading)
                         touches += 1
                 
-                if touches >= 2:  # Level held at least 2 more times
+                if touches >= 1:  # At least 1 touch (relaxed from 2)
                     support_candidates.append(price_level)
         
-        # Return top 5 most significant support levels
-        return sorted(list(set(support_candidates)))[-5:]
+        # METHOD 2: RECENT SWING LOWS (last 48h - micro levels for day trading)
+        recent_data = df.tail(min(len(df), 2880))  # Last 48h (2880 = 48*60 for 1m data)
+        swing_lows = []
+        for i in range(5, len(recent_data) - 5):
+            low = recent_data['low'].iloc[i]
+            # Is this a local minimum? (5-candle window)
+            if low == recent_data['low'].iloc[i-5:i+5].min():
+                swing_lows.append(float(low))
+        
+        # Add recent swing lows (deduplicate if too close)
+        for swing_low in swing_lows:
+            # Only add if not too close to existing candidates (0.5% apart)
+            if not any(abs(swing_low - c) / c < 0.005 for c in support_candidates):
+                support_candidates.append(swing_low)
+        
+        # METHOD 3: BOLLINGER BAND LOWER (statistical support)
+        if 'bb_lower' in df.columns and len(df) > 0:
+            bb_lower = float(df['bb_lower'].iloc[-1])
+            if bb_lower > 0:
+                support_candidates.append(bb_lower)
+        
+        # Deduplicate, sort, return TOP 15 (was 5)
+        unique_supports = sorted(list(set(support_candidates)))
+        return unique_supports[-15:] if len(unique_supports) > 15 else unique_supports
     
     def _find_resistance_levels(self, df: pd.DataFrame) -> List[float]:
-        """Find significant resistance levels from historical data"""
-        highs = df['high'].rolling(window=20).max()
+        """Find significant resistance levels - DAY TRADING OPTIMIZED"""
         resistance_candidates = []
         
-        # Find local maxima that rejected price multiple times
+        # METHOD 1: STRONG LEVELS (historical rejection points - strict)
+        highs = df['high'].rolling(window=20).max()
         for i in range(20, len(highs) - 20):
             if highs.iloc[i] == highs.iloc[i-10:i+10].max():
                 price_level = float(highs.iloc[i])
                 
-                # Count how many times this level rejected price
+                # Count rejections (relaxed: 1+ instead of 2+)
                 touches = 0
-                for j in range(i+1, min(i+100, len(df))):
-                    if abs(df['high'].iloc[j] - price_level) / price_level < 0.02:  # Within 2%
+                for j in range(i+1, min(i+50, len(df))):  # Reduced from 100 to 50
+                    if abs(df['high'].iloc[j] - price_level) / price_level < 0.03:  # 3% tolerance (day trading)
                         touches += 1
                 
-                if touches >= 2:  # Level rejected at least 2 more times
+                if touches >= 1:  # At least 1 rejection (relaxed from 2)
                     resistance_candidates.append(price_level)
         
-        # Return top 5 most significant resistance levels
-        return sorted(list(set(resistance_candidates)))[-5:]
+        # METHOD 2: RECENT SWING HIGHS (last 48h - micro levels for day trading)
+        recent_data = df.tail(min(len(df), 2880))  # Last 48h (2880 = 48*60 for 1m data)
+        swing_highs = []
+        for i in range(5, len(recent_data) - 5):
+            high = recent_data['high'].iloc[i]
+            # Is this a local maximum? (5-candle window)
+            if high == recent_data['high'].iloc[i-5:i+5].max():
+                swing_highs.append(float(high))
+        
+        # Add recent swing highs (deduplicate if too close)
+        for swing_high in swing_highs:
+            # Only add if not too close to existing candidates (0.5% apart)
+            if not any(abs(swing_high - c) / c < 0.005 for c in resistance_candidates):
+                resistance_candidates.append(swing_high)
+        
+        # METHOD 3: BOLLINGER BAND UPPER (statistical resistance)
+        if 'bb_upper' in df.columns and len(df) > 0:
+            bb_upper = float(df['bb_upper'].iloc[-1])
+            if bb_upper > 0:
+                resistance_candidates.append(bb_upper)
+        
+        # Deduplicate, sort, return TOP 15 (was 5)
+        unique_resistances = sorted(list(set(resistance_candidates)))
+        return unique_resistances[-15:] if len(unique_resistances) > 15 else unique_resistances
     
     async def _calculate_support_resistance_levels(self, df: pd.DataFrame):
         """Calculate comprehensive support and resistance levels"""
