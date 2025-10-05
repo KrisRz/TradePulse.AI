@@ -115,22 +115,38 @@ class UnifiedDayTradingEngine:
         current_file = Path(__file__).parent.parent
         self.model_path = current_file / "models" / "enterprise"
         
-        # 🎯 BITCOIN SCALPING THRESHOLDS - AGGRESSIVE FOR VOLATILE MARKET
-        self.confidence_threshold = 0.45      # 45% minimum confidence (was 65% - too high!)
-        self.consensus_threshold = 0.50       # 50% layer consensus required (was 70% - too high!)
-        self.risk_threshold = 0.80            # DAY TRADING: 80% max reversal risk (reversals = opportunities!)
-        self.volatility_threshold = 0.12      # 12% max volatility for Bitcoin trading (was 8%)
+        # 🎯 ADAPTIVE TRADING PARAMETERS - NO HARDCODED VALUES!
+        # These are initial defaults - will be replaced by Continuous Learning
+        self._default_params = {
+            'confidence_threshold': 0.45,
+            'consensus_threshold': 0.50,
+            'risk_threshold': 0.80,
+            'volatility_threshold': 0.12,
+            'max_position_size_pct': 0.030,
+            'max_positions': 5,
+            'min_position_size': 500.0,
+            'analysis_interval': 12,
+            'position_duration_target': 900,
+            'stop_loss_pct': 0.006,
+            'take_profit_pct': 0.004
+        }
         
-        # 💰 DAY TRADING OPTIMIZED FOR $500 PROFIT TARGETS
-        self.max_position_size_pct = 0.030    # DAY TRADING: 3.0% per position (~$6,000)
-        self.max_positions = 5                # DAY TRADING: 5 positions for better opportunity capture
-        self.min_position_size = 500.0        # $500 minimum position
+        # ADAPTIVE: Will be loaded from Continuous Learning
+        self.confidence_threshold = self._default_params['confidence_threshold']
+        self.consensus_threshold = self._default_params['consensus_threshold']
+        self.risk_threshold = self._default_params['risk_threshold']
+        self.volatility_threshold = self._default_params['volatility_threshold']
+        self.max_position_size_pct = self._default_params['max_position_size_pct']
+        self.max_positions = self._default_params['max_positions']
+        self.min_position_size = self._default_params['min_position_size']
+        self.analysis_interval = self._default_params['analysis_interval']
+        self.position_duration_target = self._default_params['position_duration_target']
+        self.stop_loss_pct = self._default_params['stop_loss_pct']
+        self.take_profit_pct = self._default_params['take_profit_pct']
         
-        # 📊 DAY TRADING PARAMETERS - AGGRESSIVE SCALPING FOR MORE TRADES
-        self.analysis_interval = 12           # 12 seconds between analysis (faster)
-        self.position_duration_target = 900   # 15 minutes average hold (shorter)
-        self.stop_loss_pct = 0.006            # DAY TRADING: 0.6% stop loss (tighter)
-        self.take_profit_pct = 0.004          # DAY TRADING: 0.4% = $240-300 profit (smaller, more frequent)
+        # Parameter refresh tracking
+        self._last_param_refresh = datetime.min
+        self._param_refresh_interval = 3600  # Refresh every 1 hour
         
         # 🔥 WARM-UP AND SAFETY
         self.warm_up_required = True
@@ -145,24 +161,36 @@ class UnifiedDayTradingEngine:
         self.successful_trades = 0
         self.layer_health = {}
         
-        # 🧠 LAYER CONFIGURATION (from Enterprise + Entry engines)
-        self.layers = {
-            1: {"name": "Market Regime Analysis", "weight": 0.20},
-            2: {"name": "LSTM Prediction Models", "weight": 0.25}, 
-            3: {"name": "Pattern Recognition", "weight": 0.20},
-            4: {"name": "Technical Indicators", "weight": 0.15},
-            5: {"name": "Momentum Analysis", "weight": 0.10},
-            6: {"name": "Entry Timing", "weight": 0.10}
+        # 🧠 ADAPTIVE LAYER CONFIGURATION - Weights learned from performance!
+        self._default_layer_weights = {
+            1: 0.20,  # Market Regime Analysis
+            2: 0.25,  # LSTM Prediction Models
+            3: 0.20,  # Pattern Recognition
+            4: 0.15,  # Technical Indicators
+            5: 0.10,  # Momentum Analysis
+            6: 0.10   # Entry Timing
         }
         
-        logger.info("🚀 Unified Day Trading Engine initialized with professional parameters")
+        self.layers = {
+            1: {"name": "Market Regime Analysis", "weight": self._default_layer_weights[1]},
+            2: {"name": "LSTM Prediction Models", "weight": self._default_layer_weights[2]}, 
+            3: {"name": "Pattern Recognition", "weight": self._default_layer_weights[3]},
+            4: {"name": "Technical Indicators", "weight": self._default_layer_weights[4]},
+            5: {"name": "Momentum Analysis", "weight": self._default_layer_weights[5]},
+            6: {"name": "Entry Timing", "weight": self._default_layer_weights[6]}
+        }
+        
+        # Continuous Learning Engine reference (will be set during initialization)
+        self.continuous_learning = None
+        
+        logger.info("🚀 ADAPTIVE Unified Day Trading Engine initialized (no hardcoded values)")
     
     async def initialize(self):
         """Initialize unified engine with all models and safety checks"""
         if self.is_initialized:
             return
             
-        logger.info("🧠 Initializing Unified Day Trading Engine...")
+        logger.info("🧠 Initializing ADAPTIVE Unified Day Trading Engine...")
         
         try:
             # Load AI models (6-layer system)
@@ -171,11 +199,28 @@ class UnifiedDayTradingEngine:
             # Initialize market data service
             self.market_service = await get_live_market_data_service()
             
+            # PROFESSIONAL: Connect to Continuous Learning Engine
+            try:
+                from app.backend.services.continuous_learning_engine import get_continuous_learning_engine
+                self.continuous_learning = await get_continuous_learning_engine()
+                logger.info("✅ Connected to Continuous Learning Engine")
+                
+                # Load adaptive parameters from learning
+                await self._load_adaptive_parameters()
+                
+                # Start periodic parameter refresh
+                asyncio.create_task(self._periodic_parameter_refresh())
+                logger.info("✅ Adaptive parameter loading enabled")
+                
+            except Exception as cl_error:
+                logger.warning(f"⚠️ Continuous Learning not available: {cl_error} - using defaults")
+                self.continuous_learning = None
+            
             # Validate minimum data requirements
             await self._validate_data_requirements()
             
             self.is_initialized = True
-            logger.info("✅ Unified Day Trading Engine initialized successfully")
+            logger.info("✅ ADAPTIVE Unified Day Trading Engine initialized successfully")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize unified engine: {e}")
@@ -257,6 +302,86 @@ class UnifiedDayTradingEngine:
         except Exception as e:
             logger.error(f"❌ Data validation failed: {e}")
             raise
+    
+    async def _load_adaptive_parameters(self):
+        """
+        Load adaptive parameters from Continuous Learning Engine
+        PROFESSIONAL: No hardcoded values - learns from real trading data!
+        """
+        if not self.continuous_learning:
+            logger.info("⚠️ Continuous Learning not available - using defaults")
+            return
+        
+        try:
+            # Fetch learned parameters
+            learned_params = await self.continuous_learning.get_optimal_trading_parameters()
+            
+            if not learned_params:
+                logger.info("📊 No learned parameters yet - using intelligent defaults")
+                return
+            
+            # Update thresholds with learned values
+            if 'confidence_threshold' in learned_params:
+                old_val = self.confidence_threshold
+                self.confidence_threshold = learned_params['confidence_threshold']
+                logger.info(f"✅ ADAPTIVE confidence_threshold: {old_val:.3f} → {self.confidence_threshold:.3f}")
+            
+            if 'consensus_threshold' in learned_params:
+                old_val = self.consensus_threshold
+                self.consensus_threshold = learned_params['consensus_threshold']
+                logger.info(f"✅ ADAPTIVE consensus_threshold: {old_val:.3f} → {self.consensus_threshold:.3f}")
+            
+            # Update position sizing with learned values
+            if 'optimal_position_size_pct' in learned_params:
+                old_val = self.max_position_size_pct
+                self.max_position_size_pct = learned_params['optimal_position_size_pct']
+                logger.info(f"✅ ADAPTIVE position_size: {old_val:.3f} → {self.max_position_size_pct:.3f}")
+            
+            # Update stop loss/take profit with learned values
+            if 'optimal_stop_loss_pct' in learned_params:
+                old_val = self.stop_loss_pct
+                self.stop_loss_pct = learned_params['optimal_stop_loss_pct']
+                logger.info(f"✅ ADAPTIVE stop_loss: {old_val:.4f} → {self.stop_loss_pct:.4f}")
+            
+            if 'optimal_take_profit_pct' in learned_params:
+                old_val = self.take_profit_pct
+                self.take_profit_pct = learned_params['optimal_take_profit_pct']
+                logger.info(f"✅ ADAPTIVE take_profit: {old_val:.4f} → {self.take_profit_pct:.4f}")
+            
+            # Update layer weights with learned values
+            if 'optimal_layer_weights' in learned_params:
+                weights = learned_params['optimal_layer_weights']
+                for layer_id, weight in weights.items():
+                    if layer_id in self.layers:
+                        old_weight = self.layers[layer_id]['weight']
+                        self.layers[layer_id]['weight'] = weight
+                        logger.info(f"✅ ADAPTIVE layer_{layer_id}_weight: {old_weight:.2f} → {weight:.2f}")
+            
+            self._last_param_refresh = datetime.now(timezone.utc)
+            logger.info("🎯 ADAPTIVE parameters loaded from Continuous Learning!")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load adaptive parameters: {e} - using defaults")
+    
+    async def _periodic_parameter_refresh(self):
+        """
+        Periodically refresh parameters from Continuous Learning
+        Runs every 1 hour to pick up latest optimizations
+        """
+        try:
+            while True:
+                await asyncio.sleep(self._param_refresh_interval)
+                
+                # Check if refresh is needed
+                time_since_refresh = (datetime.now(timezone.utc) - self._last_param_refresh).total_seconds()
+                if time_since_refresh >= self._param_refresh_interval:
+                    logger.info("🔄 Refreshing adaptive parameters from Continuous Learning...")
+                    await self._load_adaptive_parameters()
+                    
+        except asyncio.CancelledError:
+            logger.info("🛑 Parameter refresh loop cancelled")
+        except Exception as e:
+            logger.error(f"❌ Parameter refresh loop error: {e}")
     
     async def start_warm_up(self) -> Dict[str, Any]:
         """Start professional warm-up period"""

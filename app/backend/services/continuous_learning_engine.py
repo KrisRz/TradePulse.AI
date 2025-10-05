@@ -906,6 +906,32 @@ class ContinuousLearningEngine:
         except Exception as e:
             logger.error(f"❌ Failed to get learning status: {e}")
             return {'error': str(e)}
+    
+    async def get_optimal_trading_parameters(self) -> Dict[str, Any]:
+        """
+        Get optimal trading parameters learned from position results
+        
+        Returns optimal values for:
+        - confidence_threshold: Minimum confidence for entries
+        - consensus_threshold: Minimum layer consensus
+        - optimal_position_size_pct: Position sizing
+        - optimal_stop_loss_pct: Stop loss percentage
+        - optimal_take_profit_pct: Take profit percentage
+        - optimal_layer_weights: Layer weights (1-6)
+        """
+        try:
+            # Return current learned parameters if available
+            if self.current_parameters:
+                return self.current_parameters
+            
+            # If no learned parameters yet, return empty dict
+            # (Unified Engine will use defaults)
+            logger.debug("📊 No learned parameters available yet")
+            return {}
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to get optimal parameters: {e}")
+            return {}
 
 # Global instance
 _continuous_learning_engine: Optional[ContinuousLearningEngine] = None
