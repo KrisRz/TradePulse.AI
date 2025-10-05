@@ -386,10 +386,13 @@ class DayTradingValidator:
                     elif signal.action == "SELL" and prediction < signal.price:
                         agreement += 1
                 elif layer_name == "layer_3_reversal":
-                    # Reversal: Low reversal probability = safe to enter
+                    # DAY TRADING LOGIC: Reversal = OPPORTUNITY (not risk!)
                     reversal_prob = layer_data.get("reversal_probability", 0.5)
-                    if reversal_prob < 0.4:  # Low reversal risk
-                        agreement += 1
+                    # For day trading: HIGH reversal probability = good entry opportunity
+                    # Low reversal = also OK (trending)
+                    # Middle zone (0.4-0.6) = uncertain, don't count
+                    if reversal_prob < 0.4 or reversal_prob > 0.70:
+                        agreement += 1  # Either safe trend OR reversal opportunity!
                 else:
                     # Other layers: Check confidence or score
                     confidence = layer_data.get("confidence", 0.0)

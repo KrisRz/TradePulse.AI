@@ -837,6 +837,45 @@ class IntelligentEntryEngine:
                     support_levels = support_levels if support_levels is not None else []
                     resistance_levels = resistance_levels if resistance_levels is not None else []
                     
+                    # FALLBACK: If no S/R levels found, calculate from Bollinger Bands + recent swing points
+                    if len(support_levels) == 0 or len(resistance_levels) == 0:
+                        try:
+                            # Get recent candles for swing point calculation
+                            candles = self.market_service.get_recent_candles("1h", 48)  # Last 48 hours
+                            if len(candles) >= 20:
+                                prices = [float(c.get("close", 0)) for c in candles]
+                                highs = [float(c.get("high", 0)) for c in candles]
+                                lows = [float(c.get("low", 0)) for c in candles]
+                                
+                                # Bollinger Bands as S/R
+                                sma_20 = np.mean(prices[-20:])
+                                std_20 = np.std(prices[-20:])
+                                bb_upper = sma_20 + (2 * std_20)
+                                bb_lower = sma_20 - (2 * std_20)
+                                
+                                # Swing highs/lows (local maxima/minima)
+                                swing_highs = [highs[i] for i in range(1, len(highs)-1) 
+                                              if highs[i] > highs[i-1] and highs[i] > highs[i+1]]
+                                swing_lows = [lows[i] for i in range(1, len(lows)-1) 
+                                             if lows[i] < lows[i-1] and lows[i] < lows[i+1]]
+                                
+                                # Combine BB + swing points
+                                if len(support_levels) == 0:
+                                    support_levels = [bb_lower] + swing_lows[-3:]  # BB lower + last 3 swing lows
+                                    support_levels = sorted(set(support_levels))  # Remove duplicates
+                                
+                                if len(resistance_levels) == 0:
+                                    resistance_levels = [bb_upper] + swing_highs[-3:]  # BB upper + last 3 swing highs
+                                    resistance_levels = sorted(set(resistance_levels))
+                                
+                                logger.info(f"📊 FALLBACK S/R: Calculated {len(support_levels)} support, {len(resistance_levels)} resistance from BB + swing points")
+                        except Exception as sr_error:
+                            logger.warning(f"⚠️ Fallback S/R calculation failed: {sr_error}")
+                            # Ultra-fallback: use simple price percentages
+                            support_levels = [current_price * 0.98, current_price * 0.96]
+                            resistance_levels = [current_price * 1.02, current_price * 1.04]
+                            logger.info("📊 ULTRA-FALLBACK S/R: Using 2%/4% price levels")
+                    
                     # Add to market data for layer analysis
                     market_data["price_position_30d"] = price_position_30d
                     market_data["price_position_7d"] = price_position_7d
@@ -1938,13 +1977,14 @@ class IntelligentEntryEngine:
         consensus_scores = []
         
         # UPGRADED layer weights for predictive analysis
+        # DAY TRADING OPTIMIZED WEIGHTS (adapted from performance analysis)
         layer_weights = {
             "layer_1_regime": 0.15,
-            "layer_2_predictive": 0.30,  # Highest weight for predictive analysis
-            "layer_3_patterns": 0.20,
+            "layer_2_predictive": 0.25,  # Reduced (LSTM slower for day trading, was 0.30)
+            "layer_3_patterns": 0.15,  # REDUCED! (Too conservative, blocks signals, was 0.20)
             "layer_4_technical": 0.15,
-            "layer_5_price_direction": 0.15,  # High weight for price confirmation
-            "layer_6_timing": 0.05
+            "layer_5_price_direction": 0.15,
+            "layer_6_timing": 0.15  # INCREASED! (Important for day trading, was 0.05)
         }
         
         logger.info("🎯 UPGRADED CONSENSUS CALCULATION:")
