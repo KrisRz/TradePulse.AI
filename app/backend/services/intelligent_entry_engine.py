@@ -120,11 +120,22 @@ class IntelligentEntryEngine:
         current_file = Path(__file__).parent.parent  # Go up from services/ to backend/
         self.model_path = current_file / "models" / "enterprise"
         
-        # DAY TRADING SMART: Balanced thresholds for quality frequent trading
-        self.confidence_threshold = 0.60  # SMART: 60% minimum confidence (professional + active)
-        self.consensus_threshold = 0.60   # SMART: 60% consensus required (4 out of 6 layers)
-        self.high_confidence_threshold = 0.75  # SMART: 75% for high confidence
-        self.historical_validation_threshold = 0.55  # SMART: 55% historical success (proven patterns)
+        # 🎯 ADAPTIVE ENTRY THRESHOLDS - Initial defaults (will be replaced by Continuous Learning)
+        self._default_thresholds = {
+            'confidence_threshold': 0.60,  # 60% minimum confidence
+            'consensus_threshold': 0.60,   # 60% consensus (4/6 layers)
+            'high_confidence_threshold': 0.75,  # 75% high confidence
+            'historical_validation_threshold': 0.55  # 55% historical success
+        }
+        self.confidence_threshold = self._default_thresholds['confidence_threshold']
+        self.consensus_threshold = self._default_thresholds['consensus_threshold']
+        self.high_confidence_threshold = self._default_thresholds['high_confidence_threshold']
+        self.historical_validation_threshold = self._default_thresholds['historical_validation_threshold']
+        
+        # Continuous Learning connection (initialized during initialize())
+        self.continuous_learning = None
+        self._last_threshold_refresh = None
+        self._threshold_refresh_interval = 3600  # 1 hour
         
         # PRICE MOMENTUM CONFIRMATION: Wait for price movement in trade direction
         self.price_confirmation_threshold = 0.002  # 0.2% price movement required
@@ -346,6 +357,23 @@ class IntelligentEntryEngine:
             logger.info("✅ Historical context service ready")
             logger.info("✅ PIPELINE DEBUG: Entry Engine - Historical context service connected")
             
+            # PROFESSIONAL: Connect to Continuous Learning Engine for adaptive thresholds
+            try:
+                from app.backend.services.continuous_learning_engine import get_continuous_learning_engine
+                self.continuous_learning = await get_continuous_learning_engine()
+                logger.info("✅ Entry Engine connected to Continuous Learning")
+                
+                # Load adaptive thresholds from learning
+                await self._load_adaptive_thresholds()
+                
+                # Start periodic threshold refresh (every hour)
+                asyncio.create_task(self._periodic_threshold_refresh())
+                logger.info("✅ Adaptive threshold loading enabled")
+                
+            except Exception as cl_error:
+                logger.warning(f"⚠️ Continuous Learning not available: {cl_error} - using defaults")
+                self.continuous_learning = None
+            
             # Initialize health monitoring
             logger.info("🏥 PIPELINE DEBUG: Entry Engine - Initializing health monitoring...")
             self._initialize_health_monitoring()
@@ -405,6 +433,50 @@ class IntelligentEntryEngine:
             except Exception as e:
                 logger.debug(f"price poll failed: {e}")
             await asyncio.sleep(interval_sec)
+    
+    async def _load_adaptive_thresholds(self):
+        """Load learned entry thresholds from Continuous Learning Engine"""
+        if not self.continuous_learning:
+            return
+        
+        try:
+            # Get optimal trading parameters from Continuous Learning
+            params = await self.continuous_learning.get_optimal_trading_parameters()
+            
+            if not params:
+                logger.debug("📊 No learned entry thresholds yet, using defaults")
+                return
+            
+            # Update thresholds with learned values (with defaults as fallback)
+            self.confidence_threshold = params.get('confidence_threshold', self._default_thresholds['confidence_threshold'])
+            self.consensus_threshold = params.get('consensus_threshold', self._default_thresholds['consensus_threshold'])
+            
+            # High confidence threshold = confidence + 15% margin
+            self.high_confidence_threshold = min(0.95, self.confidence_threshold + 0.15)
+            
+            self._last_threshold_refresh = datetime.now(timezone.utc)
+            
+            logger.info(f"✅ Loaded adaptive entry thresholds:")
+            logger.info(f"   Confidence: {self.confidence_threshold:.2f} (learned)")
+            logger.info(f"   Consensus: {self.consensus_threshold:.2f} (learned)")
+            logger.info(f"   High confidence: {self.high_confidence_threshold:.2f} (calculated)")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load adaptive thresholds: {e} - using defaults")
+    
+    async def _periodic_threshold_refresh(self):
+        """Periodically refresh entry thresholds from Continuous Learning (every hour)"""
+        while True:
+            try:
+                await asyncio.sleep(self._threshold_refresh_interval)  # 1 hour
+                await self._load_adaptive_thresholds()
+                logger.info("🔄 Entry thresholds refreshed from Continuous Learning")
+                
+            except asyncio.CancelledError:
+                logger.info("⏹️ Threshold refresh task cancelled")
+                break
+            except Exception as e:
+                logger.error(f"❌ Threshold refresh failed: {e}")
     
     async def _start_warmup_period(self):
         """Start OPTIMIZED 3-minute phase-based warmup period for day trading"""
