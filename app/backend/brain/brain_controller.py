@@ -887,6 +887,33 @@ class BrainController:
             # Publish position closed event
             publish_position_event(closed_position, EventType.POSITION_CLOSED)
             
+            # DAY TRADING LEARNING: Record failed trades for pattern avoidance
+            if float(pnl) < 0:  # Loss
+                try:
+                    from app.backend.services.day_trading_validator import get_day_trading_validator
+                    validator = get_day_trading_validator()
+                    
+                    # Get market data from position entry
+                    entry_conditions = {
+                        "volatility": tick_data.get("volatility", 0.02),
+                        "volume_ratio": tick_data.get("volume_ratio", 1.0),
+                        "spread": tick_data.get("spread", 0.0),
+                        "confidence": float(position.ai_confidence) if position.ai_confidence else 0.5
+                    }
+                    
+                    await validator.record_failed_trade(
+                        symbol=position.symbol,
+                        entry_price=float(position.entry_price),
+                        entry_conditions=entry_conditions,
+                        exit_reason=exit_analysis.exit_reason,
+                        loss_pct=float(exit_analysis.pnl_percent)
+                    )
+                    
+                    logger.info(f"📚 LEARNING: Recorded failed trade pattern (loss: {float(exit_analysis.pnl_percent):+.2f}%)")
+                    
+                except Exception as learn_error:
+                    logger.warning(f"Failed to record learning pattern: {learn_error}")
+            
         except Exception as e:
             logger.error(f"Position exit execution failed: {e}")
             

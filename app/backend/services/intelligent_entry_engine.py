@@ -52,6 +52,7 @@ from enum import Enum
 from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_market_data, get_live_orderbook_data
 from app.backend.utils.safe_formatting import safe_format_number, safe_format_price
 from app.backend.services.binance_hybrid_client import get_hybrid_client
+from app.backend.services.day_trading_validator import get_day_trading_validator
 
 logger = logging.getLogger(__name__)
 
@@ -118,11 +119,11 @@ class IntelligentEntryEngine:
         current_file = Path(__file__).parent.parent  # Go up from services/ to backend/
         self.model_path = current_file / "models" / "enterprise"
         
-        # ACTIVE DAY TRADING: Lower thresholds for frequent trading opportunities
-        self.confidence_threshold = 0.45  # ACTIVE: 45% minimum confidence (was 55%)
-        self.consensus_threshold = 0.50   # ACTIVE: 50% consensus required (was 60%)
-        self.high_confidence_threshold = 0.70  # ACTIVE: 70% for high confidence (was 75%)
-        self.historical_validation_threshold = 0.40  # ACTIVE: 40% historical success (was 50%)
+        # DAY TRADING SMART: Balanced thresholds for quality frequent trading
+        self.confidence_threshold = 0.60  # SMART: 60% minimum confidence (professional + active)
+        self.consensus_threshold = 0.60   # SMART: 60% consensus required (4 out of 6 layers)
+        self.high_confidence_threshold = 0.75  # SMART: 75% for high confidence
+        self.historical_validation_threshold = 0.55  # SMART: 55% historical success (proven patterns)
         
         # PRICE MOMENTUM CONFIRMATION: Wait for price movement in trade direction
         self.price_confirmation_threshold = 0.002  # 0.2% price movement required
@@ -969,11 +970,57 @@ class IntelligentEntryEngine:
             if entry_decision["should_enter"]:
                 self.entries_recommended += 1
             
+            # DAY TRADING VALIDATOR: Smart quality check before entry
+            validator_passed = True
+            validator_reason = "Entry approved"
+            validator_details = {}
+            
+            if entry_decision["should_enter"]:
+                try:
+                    logger.info("🎯 DAY TRADING VALIDATOR: Checking setup quality...")
+                    validator = get_day_trading_validator()
+                    
+                    # Create signal object for validation
+                    from dataclasses import dataclass as dc_class
+                    @dc_class
+                    class SignalForValidation:
+                        symbol: str
+                        action: str
+                        confidence: float
+                        price: float
+                        layer_analysis: Dict[str, Any]
+                    
+                    signal_for_validation = SignalForValidation(
+                        symbol=symbol,
+                        action=signal_data.get("action", "HOLD"),
+                        confidence=entry_decision["confidence"],
+                        price=current_price,
+                        layer_analysis=layer_results
+                    )
+                    
+                    validator_passed, validator_reason, validator_details = await validator.validate_day_trading_setup(
+                        signal_for_validation, market_data
+                    )
+                    
+                    if not validator_passed:
+                        logger.warning(f"❌ DAY TRADING VALIDATOR: Setup rejected - {validator_reason}")
+                        entry_decision["should_enter"] = False
+                        entry_decision["reason"] = "validator_rejected"
+                        entry_decision["confidence"] = 0.0
+                        entry_decision["validator_reason"] = validator_reason
+                    else:
+                        logger.info(f"✅ DAY TRADING VALIDATOR: Setup approved - {validator_reason}")
+                        
+                except Exception as validator_error:
+                    logger.warning(f"⚠️ DAY TRADING VALIDATOR: Check failed - {validator_error}")
+                    # Don't block entry on validator errors
+                    pass
+            
             # Create comprehensive result
             result = EntryAnalysisResult(
                 should_enter=entry_decision["should_enter"],
                 confidence=entry_decision["confidence"],
-                entry_reason=EntryReason(entry_decision["reason"]),
+                entry_reason=EntryReason(entry_decision.get("reason", "wait_for_confirmation")),
                 entry_quality=self._determine_entry_quality(entry_decision["confidence"]),
                 optimal_entry_price=optimal_entry_price,
                 position_size_recommendation=position_size,

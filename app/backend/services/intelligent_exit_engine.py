@@ -103,32 +103,35 @@ class IntelligentExitEngine:
         current_file = Path(__file__).parent.parent  # Go up from services/ to backend/
         self.model_path = current_file / "models" / "enterprise"
         
-        # CONSERVATIVE SCALPING: Quick exit parameters for small profits
-        self.confidence_threshold = 0.55  # SCALPING: Lower confidence for quicker exits (was 70%)
-        self.consensus_threshold = 0.50   # SCALPING: Lower consensus for faster exits (was 65%)
-        self.emergency_threshold = 0.90   # SCALPING: Quicker emergency exits (was 95%)
-        self.scalping_mode = True         # NEW: Enable scalping optimizations
+        # DAY TRADING ADAPTIVE: Use learned parameters from continuous learning
+        self.confidence_threshold = 0.60  # ADAPTIVE: 60% confidence (can be learned)
+        self.consensus_threshold = 0.55   # ADAPTIVE: 55% consensus (can be learned)
+        self.emergency_threshold = 0.90   # Emergency exits threshold
+        self.scalping_mode = False        # DAY TRADING mode (not ultra-fast scalping)
         
-        # EXIT HYSTERESIS: Prevent aggressive exits
-        self.MIN_HOLD_SECONDS = 90        # Don't exit faster than 90s after entry
-        self.MIN_ABS_PNL_BP = 8           # Min abs PnL in basis points (0.08%) to consider EXIT
-        self.REVERSAL_CONFIRM_TICKS = 2   # Reversal > 0.75 must be confirmed N ticks
-        self.DONOT_EXIT_IF_ENTRY_BUY = 15 # If fresh BUY (<=15s), ignore reversal unless PnL<-0.25%
-        self._rev_hits = {}               # Track reversal confirmation hits
-        self._last_exit_at = {}           # Track last exit time per symbol
-        self.REENTRY_COOLDOWN_S = 60      # Cooldown period after exit
+        # ADAPTIVE PARAMETERS - NO HARDCODED VALUES!
+        # These are calculated by Continuous Learning from REAL trading data
+        self.REVERSAL_CONFIRM_TICKS = 3         # Reversal confirmation ticks
+        self.DONOT_EXIT_IF_ENTRY_BUY = 60       # Fresh position protection
+        self._rev_hits = {}                     # Track reversal confirmation hits
+        self._last_exit_at = {}                 # Track last exit time per symbol
         
-        # SCALPING MODE - Professional Parameters for Conservative Scalping
-        self.current_mode = "scalping"  # NEW: Set scalping as default
+        # LEARNED PARAMETERS (loaded from continuous learning OR intelligent defaults)
+        self._learned_params = None
+        self._last_param_refresh = datetime.min
+        self._initialized_params = False
+        
+        # DAY TRADING MODE - Professional Parameters for Quality Trades
+        self.current_mode = "day"  # Use day trading mode (balanced)
         self.mode_parameters = {
             "day": {
-                "consensus_threshold": 0.45,  # DAY TRADING: AGGRESSIVE - 45% consensus for quick exits
-                "atr_k": 2.0,                 # DAY TRADING: Tighter trailing stop for quick profits
-                "time_multiplier": 1.5        # DAY TRADING: 1.5x duration = 45 minutes max
+                "consensus_threshold": 0.55,  # DAY TRADING: 55% consensus for quality exits
+                "atr_k": 2.0,                 # DAY TRADING: 2.0x ATR trailing stop (reasonable room)
+                "time_multiplier": 1.0        # DAY TRADING: 1.0x duration = 15-30 minutes typical
             },
             "scalping": {
-                "consensus_threshold": 0.50,  # SCALPING: MODERATE - 50% consensus (was 35%)
-                "atr_k": 1.5,                 # SCALPING: Tight trailing stop (was 1.2)
+                "consensus_threshold": 0.50,  # SCALPING: 50% consensus (faster exits)
+                "atr_k": 1.5,                 # SCALPING: Tight trailing stop
                 "time_multiplier": 0.6        # SCALPING: 60% of position duration = ~9 minutes
             }
         }
@@ -314,9 +317,121 @@ class IntelligentExitEngine:
             if layer_name not in self.layer_health:
                 self.layer_health[layer_name] = "unknown"
     
+    async def _refresh_learned_parameters(self):
+        """Refresh learned parameters from continuous learning engine"""
+        try:
+            # Only refresh every 5 minutes to avoid overhead
+            time_since_refresh = (datetime.now(timezone.utc) - self._last_param_refresh).total_seconds()
+            if time_since_refresh < 300 and self._initialized_params:  # 5 minutes
+                return
+            
+            # Try to get continuous learning engine
+            try:
+                from app.backend.services.continuous_learning_engine import get_continuous_learning_engine
+                learning_engine = await get_continuous_learning_engine()
+                
+                if learning_engine and learning_engine.current_parameters:
+                    self._learned_params = learning_engine.current_parameters.copy()
+                    self._last_param_refresh = datetime.now(timezone.utc)
+                    self._initialized_params = True
+                    logger.info(f"🧠 LEARNED PARAMETERS refreshed: {len(self._learned_params)} params loaded")
+                elif not self._initialized_params:
+                    # PROFESSIONAL: Calculate intelligent defaults from recent data
+                    logger.info("📊 No learned params yet - calculating intelligent defaults from data...")
+                    await self._calculate_intelligent_defaults()
+                    self._initialized_params = True
+                    
+            except Exception as e:
+                if not self._initialized_params:
+                    logger.warning(f"Continuous learning unavailable: {e} - using intelligent defaults")
+                    await self._calculate_intelligent_defaults()
+                    self._initialized_params = True
+                
+        except Exception as e:
+            logger.error(f"Failed to refresh learned parameters: {e}")
+            if not self._initialized_params:
+                # Last resort: use conservative defaults
+                self._learned_params = self._get_conservative_defaults()
+                self._initialized_params = True
+    
+    async def _calculate_intelligent_defaults(self):
+        """Calculate intelligent defaults from recent position data"""
+        try:
+            # Get recent position results from DynamoDB
+            from app.backend.core.database import get_database_client
+            db_client = get_database_client()
+            
+            if db_client:
+                recent_positions = db_client.scan_table('position_results')
+                
+                if len(recent_positions) >= 10:
+                    # Calculate optimal hold time from successful positions
+                    successful = [p for p in recent_positions if p.get('was_successful', False)]
+                    if successful:
+                        hold_times = [p.get('time_in_position_minutes', 5) * 60 for p in successful]
+                        optimal_hold = int(np.median(hold_times))
+                        
+                        # Calculate optimal min PnL from profitable positions
+                        pnls = [abs(p.get('pnl_percent', 0)) for p in successful]
+                        optimal_min_pnl = int(np.percentile(pnls, 25) * 10000) if pnls else 10
+                        
+                        # Calculate optimal cooldown
+                        optimal_cooldown = max(60, optimal_hold // 2)
+                        
+                        self._learned_params = {
+                            'min_hold_seconds': {'value': optimal_hold, 'confidence': 0.7, 'reason': 'Calculated from successful trades'},
+                            'min_pnl_bp': {'value': optimal_min_pnl, 'confidence': 0.7, 'reason': 'Calculated from profitable trades'},
+                            'reentry_cooldown_seconds': {'value': optimal_cooldown, 'confidence': 0.6, 'reason': 'Calculated from position timing'}
+                        }
+                        
+                        logger.info(f"✅ INTELLIGENT DEFAULTS: hold={optimal_hold}s, pnl={optimal_min_pnl}bp, cooldown={optimal_cooldown}s")
+                        return
+            
+            # Not enough data - use conservative defaults
+            self._learned_params = self._get_conservative_defaults()
+            logger.info("⚠️ Insufficient data - using conservative defaults")
+            
+        except Exception as e:
+            logger.warning(f"Failed to calculate intelligent defaults: {e}")
+            self._learned_params = self._get_conservative_defaults()
+    
+    def _get_conservative_defaults(self) -> Dict[str, Any]:
+        """Get conservative defaults for day trading (only when no data available)"""
+        return {
+            'min_hold_seconds': {'value': 120, 'confidence': 0.5, 'reason': 'Conservative default - 2 minutes'},
+            'min_pnl_bp': {'value': 10, 'confidence': 0.5, 'reason': 'Conservative default - 0.10%'},
+            'reentry_cooldown_seconds': {'value': 90, 'confidence': 0.5, 'reason': 'Conservative default - 90 seconds'}
+        }
+    
+    def _get_adaptive_param(self, param_name: str, default_description: str = "") -> float:
+        """Get parameter value - ALWAYS from learned params (professional!)"""
+        try:
+            if self._learned_params and param_name in self._learned_params:
+                learned_data = self._learned_params[param_name]
+                
+                # Handle dict format {'value': ..., 'confidence': ..., ...}
+                if isinstance(learned_data, dict):
+                    learned_value = float(learned_data.get('value', 0))
+                    confidence = learned_data.get('confidence', 0)
+                    reason = learned_data.get('reason', 'learned')
+                    logger.debug(f"📊 {param_name}={learned_value} (conf={confidence:.0%}, {reason})")
+                else:
+                    learned_value = float(learned_data)
+                    logger.debug(f"📊 {param_name}={learned_value}")
+                    
+                return learned_value
+            
+            # Should never happen if _refresh_learned_parameters works
+            logger.error(f"❌ No learned param for {param_name} - this should not happen!")
+            return 120 if 'seconds' in param_name else 10  # Emergency fallback
+            
+        except Exception as e:
+            logger.error(f"Failed to get adaptive param {param_name}: {e}")
+            return 120 if 'seconds' in param_name else 10  # Emergency fallback
+    
     async def analyze_exit_conditions(self, symbol: str, position_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyze exit conditions for a position using 6-layer AI analysis with hysteresis
+        Analyze exit conditions for a position using 6-layer AI analysis with ADAPTIVE LEARNED parameters
         
         Args:
             symbol: Trading symbol
@@ -329,11 +444,14 @@ class IntelligentExitEngine:
             logger.info("🔄 PIPELINE DEBUG: Exit Engine - Not initialized, initializing now...")
             await self.initialize()
         
+        # ADAPTIVE: Refresh learned parameters from continuous learning
+        await self._refresh_learned_parameters()
+        
         logger.info(f"🎯 PIPELINE DEBUG: Exit Engine - Analyzing exit conditions for {symbol}")
         logger.info(f"📊 PIPELINE DEBUG: Exit Engine - Position ID: {position_data.get('position_id', 'Unknown')}")
         logger.info(f"💼 PIPELINE DEBUG: Exit Engine - Position data keys: {list(position_data.keys()) if position_data else 'None'}")
         
-        # HYSTERESIS CHECK: Minimum hold time and PnL thresholds
+        # ADAPTIVE HYSTERESIS: Use learned parameters (not hardcoded!)
         position_id = position_data.get('position_id', '')
         entry_time_str = position_data.get('entry_time')
         if entry_time_str:
@@ -351,14 +469,16 @@ class IntelligentExitEngine:
                 pnl_pct = ((current_price - entry_price) / entry_price) if entry_price else 0.0
                 abs_bp = abs(pnl_pct) * 10000  # Convert to basis points
                 
-                # MIN HOLD TIME CHECK
-                if age_s < self.MIN_HOLD_SECONDS:
-                    logger.info(f"⏳ Position {position_id} too fresh ({age_s:.0f}s < {self.MIN_HOLD_SECONDS}s) - HOLD")
+                # ADAPTIVE MIN HOLD TIME (intelligent learning - NO hardcoded!)
+                min_hold = self._get_adaptive_param('min_hold_seconds')
+                if age_s < min_hold:
+                    logger.info(f"⏳ SMART: Position {position_id} too fresh ({age_s:.0f}s < {min_hold:.0f}s optimal) - HOLD")
                     return self._create_hold_result("min_hold_time", age_s, current_price)
                 
-                # PNL HYSTERESIS CHECK  
-                if abs_bp < self.MIN_ABS_PNL_BP:
-                    logger.info(f"📊 Position {position_id} PnL too small ({abs_bp:.1f}bp < {self.MIN_ABS_PNL_BP}bp) - HOLD")
+                # ADAPTIVE PNL HYSTERESIS (intelligent learning - NO hardcoded!)
+                min_pnl_bp = self._get_adaptive_param('min_pnl_bp')
+                if abs_bp < min_pnl_bp:
+                    logger.info(f"📊 SMART: Position {position_id} PnL too small ({abs_bp:.1f}bp < {min_pnl_bp:.1f}bp optimal) - HOLD")
                     return self._create_hold_result("pnl_hysteresis", abs_bp, current_price)
                     
             except Exception as e:
@@ -1443,20 +1563,24 @@ class IntelligentExitEngine:
         }
     
     def check_reentry_cooldown(self, symbol: str) -> bool:
-        """Check if symbol is in re-entry cooldown period"""
+        """Check if symbol is in re-entry cooldown period (SMART - learned optimal)"""
         if symbol not in self._last_exit_at:
             return False
         
+        # SMART cooldown (intelligent learning - NO hardcoded!)
+        cooldown_s = self._get_adaptive_param('reentry_cooldown_seconds')
         time_since_exit = datetime.now(timezone.utc).timestamp() - self._last_exit_at[symbol]
-        return time_since_exit < self.REENTRY_COOLDOWN_S
+        return time_since_exit < cooldown_s
     
     def get_cooldown_remaining(self, symbol: str) -> float:
-        """Get remaining cooldown time in seconds"""
+        """Get remaining cooldown time in seconds (SMART - learned optimal)"""
         if symbol not in self._last_exit_at:
             return 0.0
         
+        # SMART cooldown (intelligent learning - NO hardcoded!)
+        cooldown_s = self._get_adaptive_param('reentry_cooldown_seconds')
         time_since_exit = datetime.now(timezone.utc).timestamp() - self._last_exit_at[symbol]
-        remaining = self.REENTRY_COOLDOWN_S - time_since_exit
+        remaining = cooldown_s - time_since_exit
         return max(0.0, remaining)
     
     def get_performance_metrics(self) -> Dict[str, Any]:

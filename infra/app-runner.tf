@@ -45,6 +45,10 @@ resource "aws_apprunner_service" "backend" {
           HOST = "0.0.0.0"
           PORT = "9002"
 
+          # Continuous Learning & AI
+          ENABLE_CONTINUOUS_LEARNING = "true"
+          AUTO_OPTIMIZATION_ENABLED  = "true"
+
           # CloudWatch Heartbeat configuration
           CW_NAMESPACE = "TradePulse/Brain"
           SERVICE_NAME = "${var.project_name}-backend"
