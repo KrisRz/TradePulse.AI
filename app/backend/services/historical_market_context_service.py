@@ -179,7 +179,11 @@ class HistoricalMarketContextService:
                     period=period,
                     high=float(data["high"]),
                     low=float(data["low"]),
-                    current_position=float(data.get("current_position", 0.5))
+                    range_pct=float(data.get("range_pct", 0.0)),
+                    current_position=float(data.get("current_position", 0.5)),
+                    support_levels=[float(s) for s in data.get("support_levels", [])],
+                    resistance_levels=[float(r) for r in data.get("resistance_levels", [])],
+                    last_updated=datetime.fromtimestamp(int(data.get("last_updated", 0)), tz=timezone.utc)
                 )
             
             # Load support/resistance
