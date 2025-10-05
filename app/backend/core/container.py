@@ -293,17 +293,20 @@ class ServiceContainer:
                 logger.error(f"❌ Failed to create enterprise trading engine: {e}")
                 self.register_singleton("enterprise_trading_engine", lambda: None)
             
-            # Day Trading Engine (REAL DAY TRADING) - CREATE WITHOUT CIRCULAR DEPENDENCIES
+            # UNIFIED Day Trading Engine (ADAPTIVE PROFESSIONAL) - CREATE WITHOUT CIRCULAR DEPENDENCIES
             try:
-                logger.info("🔄 Creating Day Trading Engine without circular dependencies...")
-                from app.backend.services.day_trading_engine import DayTradingEngine
-                day_engine = DayTradingEngine()  # Don't call initialize yet
-                self.register_singleton("day_trading_engine", lambda: day_engine)
-                logger.info("✅ Day Trading Engine registered (will initialize after all services ready)")
+                logger.info("🔄 Creating ADAPTIVE Unified Day Trading Engine without circular dependencies...")
+                from app.backend.services.unified_day_trading_engine import UnifiedDayTradingEngine
+                unified_engine = UnifiedDayTradingEngine()  # Don't call initialize yet
+                self.register_singleton("unified_day_trading_engine", lambda: unified_engine)
+                # Also register as "day_trading_engine" for backward compatibility
+                self.register_singleton("day_trading_engine", lambda: unified_engine)
+                logger.info("✅ ADAPTIVE Unified Day Trading Engine registered (will initialize after all services ready)")
                     
             except Exception as e:
-                logger.warning(f"⚠️ Failed to create day trading engine: {e}")
+                logger.warning(f"⚠️ Failed to create unified day trading engine: {e}")
                 logger.info("📝 Registering Day Trading Engine as None (degraded mode)")
+                self.register_singleton("unified_day_trading_engine", lambda: None)
                 self.register_singleton("day_trading_engine", lambda: None)
             
             # Session-Aware Trading Engine (REAL SESSION ANALYSIS) - CREATE WITHOUT CIRCULAR DEPENDENCIES
@@ -370,15 +373,16 @@ class ServiceContainer:
             
             # Initialize day trading engine
             try:
-                day_engine = self.get("day_trading_engine")
-                if day_engine and not day_engine.is_initialized:
-                    logger.info("🔄 Initializing Day Trading Engine...")
-                    await day_engine.initialize()
-                    logger.info("🔄 Starting Day Trading Engine analysis loop...")
-                    await day_engine.start_analysis_loop()
-                    logger.info("✅ Day Trading Engine fully operational")
+                unified_engine = self.get("unified_day_trading_engine")
+                if unified_engine and not unified_engine.is_initialized:
+                    logger.info("🔄 Initializing ADAPTIVE Unified Day Trading Engine...")
+                    await unified_engine.initialize()
+                    logger.info("✅ ADAPTIVE Unified Day Trading Engine operational")
+                    logger.info("🎯 Parameters will be loaded from Continuous Learning (adaptive mode)")
+                else:
+                    logger.info("✅ Unified Day Trading Engine already initialized")
             except Exception as e:
-                logger.warning(f"⚠️ Day Trading Engine post-initialization failed: {e}")
+                logger.warning(f"⚠️ Unified Day Trading Engine post-initialization failed: {e}")
             
             # Initialize session-aware trading engine
             try:

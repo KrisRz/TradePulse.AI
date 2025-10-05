@@ -165,12 +165,17 @@ class BrainController:
             from app.backend.core.container import get_container
             container = get_container()
             
-            # Connect to existing Day Trading Engine
+            # Connect to UNIFIED Day Trading Engine (ADAPTIVE)
+            self.unified_engine = container.get("unified_day_trading_engine")
+            # Also get as day_trading_engine for backward compatibility
             self.day_trading_engine = container.get("day_trading_engine")
-            if self.day_trading_engine:
-                logger.info("✅ Connected to running Day Trading Engine")
+            
+            if self.unified_engine:
+                logger.info("✅ Connected to ADAPTIVE Unified Day Trading Engine")
+            elif self.day_trading_engine:
+                logger.info("✅ Connected to Day Trading Engine (fallback)")
             else:
-                logger.warning("⚠️ Day Trading Engine not found")
+                logger.warning("⚠️ No trading engine found")
                 
             # Connect to existing Enterprise Engine
             self.enterprise_engine = container.get("enterprise_trading_engine")
@@ -179,6 +184,7 @@ class BrainController:
                 
         except Exception as e:
             logger.error(f"❌ Engine connection failed: {e}")
+            self.unified_engine = None
             self.day_trading_engine = None
             self.enterprise_engine = None
         
@@ -495,18 +501,23 @@ class BrainController:
             # SIMPLIFIED BRAIN: Monitor Day Trading Engine operation
             logger.debug("🧠 BRAIN monitoring cycle - Day Trading Engine handles trading")
             
-            # (A) Check Day Trading Engine status
+            # (A) Check Unified Day Trading Engine status
             try:
                 from app.backend.core.container import get_container
                 container = get_container()
-                day_engine = container.get("day_trading_engine")
+                unified_engine = container.get("unified_day_trading_engine")
                 
-                if day_engine and hasattr(day_engine, 'is_running') and day_engine.is_running:
-                    logger.debug("✅ Day Trading Engine operational - Brain monitoring")
+                if unified_engine and hasattr(unified_engine, 'is_initialized') and unified_engine.is_initialized:
+                    logger.debug("✅ ADAPTIVE Unified Day Trading Engine operational - Brain monitoring")
                 else:
-                    logger.warning("⚠️ Day Trading Engine not running - Brain standby")
+                    # Try fallback to regular day_trading_engine
+                    day_engine = container.get("day_trading_engine")
+                    if day_engine and hasattr(day_engine, 'is_running') and day_engine.is_running:
+                        logger.debug("✅ Day Trading Engine operational - Brain monitoring")
+                    else:
+                        logger.warning("⚠️ No trading engine running - Brain standby")
             except Exception as e:
-                logger.debug(f"Day Trading Engine check failed: {e}")
+                logger.debug(f"Trading Engine check failed: {e}")
             
             # (B) Monitor portfolio status
             try:
