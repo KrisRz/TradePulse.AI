@@ -234,7 +234,7 @@ class HistoricalMarketContextService:
             
             # FORCE INVALIDATION: If cache was created with old logic, invalidate it
             cache_version = metadata.get("version", "0.0.0")
-            current_version = "2.0.0"  # Updated version for day trading optimization
+            current_version = "3.0.0"  # UPDATED: Multi-method S/R detection (BB + swing + historical)
             
             if cache_version != current_version:
                 logger.info(f"🔄 Cache version mismatch: {cache_version} vs {current_version}, invalidating")
@@ -531,13 +531,17 @@ class HistoricalMarketContextService:
                     support_candidates.append(price_level)
         
         # METHOD 2: RECENT SWING LOWS (last 48h - micro levels for day trading)
-        recent_data = df.tail(min(len(df), 2880))  # Last 48h (2880 = 48*60 for 1m data)
-        swing_lows = []
-        for i in range(5, len(recent_data) - 5):
-            low = recent_data['low'].iloc[i]
-            # Is this a local minimum? (5-candle window)
-            if low == recent_data['low'].iloc[i-5:i+5].min():
-                swing_lows.append(float(low))
+        recent_window = min(len(df), 2880)  # Last 48h (2880 = 48*60 for 1m data)
+        if recent_window >= 20:  # Need minimum data
+            recent_data = df.tail(recent_window)
+            swing_lows = []
+            for i in range(5, len(recent_data) - 5):
+                low = recent_data['low'].iloc[i]
+                # Is this a local minimum? (5-candle window)
+                if low == recent_data['low'].iloc[i-5:i+5].min():
+                    swing_lows.append(float(low))
+        else:
+            swing_lows = []
         
         # Add recent swing lows (deduplicate if too close)
         for swing_low in swing_lows:
@@ -575,13 +579,17 @@ class HistoricalMarketContextService:
                     resistance_candidates.append(price_level)
         
         # METHOD 2: RECENT SWING HIGHS (last 48h - micro levels for day trading)
-        recent_data = df.tail(min(len(df), 2880))  # Last 48h (2880 = 48*60 for 1m data)
-        swing_highs = []
-        for i in range(5, len(recent_data) - 5):
-            high = recent_data['high'].iloc[i]
-            # Is this a local maximum? (5-candle window)
-            if high == recent_data['high'].iloc[i-5:i+5].max():
-                swing_highs.append(float(high))
+        recent_window = min(len(df), 2880)  # Last 48h (2880 = 48*60 for 1m data)
+        if recent_window >= 20:  # Need minimum data
+            recent_data = df.tail(recent_window)
+            swing_highs = []
+            for i in range(5, len(recent_data) - 5):
+                high = recent_data['high'].iloc[i]
+                # Is this a local maximum? (5-candle window)
+                if high == recent_data['high'].iloc[i-5:i+5].max():
+                    swing_highs.append(float(high))
+        else:
+            swing_highs = []
         
         # Add recent swing highs (deduplicate if too close)
         for swing_high in swing_highs:
@@ -1029,9 +1037,10 @@ class HistoricalMarketContextService:
             "records_processed": len(self.price_ranges),
             "patterns_calculated": len(self.pattern_success_rates),
             "data_source": getattr(self, '_data_source', "unknown"),
-            "version": "2.0.0",  # Updated for day trading optimization
-            "optimization": "day_trading_3h_window",
-            "cutoff_hours": 72
+            "version": "3.0.0",  # UPDATED: Multi-method S/R (BB + swing + historical)
+            "optimization": "day_trading_multi_method_sr",
+            "cutoff_hours": 72,
+            "sr_methods": "historical+swing+bollinger"
         }
         
         metadata_file = self.cache_path / "cache_metadata.json"
