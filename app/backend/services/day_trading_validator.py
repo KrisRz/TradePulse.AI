@@ -93,14 +93,28 @@ class DayTradingValidator:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.failed_trades_file = self.data_dir / "failed_trades_patterns.json"
         
-        # Day trading parameters
-        self.MIN_RISK_REWARD_RATIO = 1.5      # Minimum 1.5:1 profit:loss
-        self.MAX_SPREAD_PCT = 0.05             # Max 0.05% spread (Bitcoin typical: 0.01-0.02%)
-        self.MIN_VOLUME_RATIO = 0.7            # Min 70% of average volume
-        self.MAX_VOLATILITY = 0.05             # Max 5% volatility (Bitcoin normal: 2-3%)
-        self.MIN_VOLATILITY = 0.015            # Min 1.5% volatility (need movement for profit)
-        self.MIN_RESISTANCE_DISTANCE = 0.005   # Min 0.5% to resistance (room for profit)
-        self.MAX_SUPPORT_DISTANCE = 0.02       # Max 2% to support (reasonable stop loss)
+        # ADAPTIVE Day Trading Parameters - NO HARDCODED VALUES!
+        # These adjust based on market conditions and signal confidence
+        self._base_params = {
+            'min_risk_reward_ratio': 1.5,
+            'max_spread_pct': 0.05,
+            'min_volume_ratio': 0.7,
+            'max_volatility': 0.08,  # Bitcoin: 8% (not 5%)
+            'min_volatility': 0.015,
+            'min_resistance_distance': 0.005,
+            'max_support_distance': 0.02
+        }
+        
+        # ADAPTIVE ADJUSTMENTS for different conditions
+        self._weekend_adjustments = {
+            'min_volume_ratio': 0.3,  # Weekend = lower volume OK
+            'max_volatility': 0.10    # Weekend = higher volatility OK
+        }
+        
+        self._high_confidence_adjustments = {
+            'min_risk_reward_ratio': 1.2,  # High confidence = relax RR
+            'min_volume_ratio': 0.5        # High confidence = lower volume OK
+        }
         
         # Learning system
         self.failed_trades: List[FailedTrade] = []
@@ -110,7 +124,7 @@ class DayTradingValidator:
         # Load failed patterns
         self._load_failed_patterns()
         
-        logger.info("🎯 Day Trading Validator initialized")
+        logger.info("🎯 ADAPTIVE Day Trading Validator initialized (no hardcoded thresholds)")
     
     def _load_failed_patterns(self):
         """Load historical failed trade patterns"""
@@ -155,13 +169,37 @@ class DayTradingValidator:
         except Exception as e:
             logger.error(f"Failed to save failed patterns: {e}")
     
+    def _get_adaptive_params(self, setup: TradeSetup) -> Dict[str, float]:
+        """
+        Get adaptive parameters based on market conditions and signal confidence
+        PROFESSIONAL: No hardcoded thresholds - adapts to market!
+        """
+        # Start with base params
+        params = self._base_params.copy()
+        
+        # Adjust for WEEKEND (Bitcoin 24/7 but lower volume)
+        now = datetime.now(timezone.utc)
+        is_weekend = now.weekday() >= 5  # Saturday=5, Sunday=6
+        
+        if is_weekend:
+            logger.info("🎯 WEEKEND MODE: Relaxing volume thresholds")
+            params.update(self._weekend_adjustments)
+        
+        # Adjust for HIGH CONFIDENCE signals (80%+)
+        if setup.confidence >= 0.80:
+            logger.info(f"🎯 HIGH CONFIDENCE MODE ({setup.confidence:.1%}): Relaxing thresholds")
+            params.update(self._high_confidence_adjustments)
+        
+        return params
+    
     async def validate_day_trading_setup(
         self,
         signal: Any,
         market_data: Dict[str, Any]
     ) -> Tuple[bool, str, Dict[str, Any]]:
         """
-        Comprehensive validation of day trading setup
+        ADAPTIVE validation of day trading setup
+        Adjusts thresholds based on market conditions and signal quality
         
         Args:
             signal: Trading signal from AI layers
@@ -187,15 +225,18 @@ class DayTradingValidator:
                 timestamp=datetime.now(timezone.utc)
             )
             
-            # Run validation checks
+            # Get ADAPTIVE parameters for current conditions
+            adaptive_params = self._get_adaptive_params(setup)
+            
+            # Run validation checks with adaptive thresholds
             checks = {
-                "spread_check": self._validate_spread(setup),
-                "volume_check": self._validate_volume(setup),
-                "volatility_check": self._validate_volatility(setup),
-                "risk_reward_check": self._validate_risk_reward(setup),
-                "support_resistance_check": self._validate_support_resistance(setup),
+                "spread_check": self._validate_spread(setup, adaptive_params),
+                "volume_check": self._validate_volume(setup, adaptive_params),
+                "volatility_check": self._validate_volatility(setup, adaptive_params),
+                "risk_reward_check": self._validate_risk_reward(setup, adaptive_params),
+                "support_resistance_check": self._validate_support_resistance(setup, adaptive_params),
                 "failed_pattern_check": self._check_failed_patterns(setup),
-                "layer_agreement_check": self._validate_layer_agreement(setup),
+                "layer_agreement_check": self._validate_layer_agreement(setup, adaptive_params),
             }
             
             # Aggregate results
@@ -214,28 +255,32 @@ class DayTradingValidator:
             logger.error(f"Validation error: {e}")
             return False, f"Validation error: {e}", {}
     
-    def _validate_spread(self, setup: TradeSetup) -> Tuple[bool, str]:
+    def _validate_spread(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
         """Validate spread is acceptable for day trading"""
-        if setup.spread > self.MAX_SPREAD_PCT:
-            return False, f"Spread too high ({setup.spread:.3f}% > {self.MAX_SPREAD_PCT:.3f}%)"
+        max_spread = params['max_spread_pct']
+        if setup.spread > max_spread:
+            return False, f"Spread too high ({setup.spread:.3f}% > {max_spread:.3f}%)"
         return True, f"Spread OK ({setup.spread:.3f}%)"
     
-    def _validate_volume(self, setup: TradeSetup) -> Tuple[bool, str]:
-        """Validate volume is sufficient"""
-        if setup.volume_ratio < self.MIN_VOLUME_RATIO:
-            return False, f"Volume too low ({setup.volume_ratio:.1f}x < {self.MIN_VOLUME_RATIO:.1f}x avg)"
-        return True, f"Volume OK ({setup.volume_ratio:.1f}x avg)"
+    def _validate_volume(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
+        """Validate volume is sufficient (ADAPTIVE)"""
+        min_volume = params['min_volume_ratio']
+        if setup.volume_ratio < min_volume:
+            return False, f"Volume too low ({setup.volume_ratio:.1f}x < {min_volume:.1f}x avg)"
+        return True, f"Volume OK ({setup.volume_ratio:.1f}x avg, threshold: {min_volume:.1f}x)"
     
-    def _validate_volatility(self, setup: TradeSetup) -> Tuple[bool, str]:
-        """Validate volatility is in day trading range"""
-        if setup.volatility > self.MAX_VOLATILITY:
-            return False, f"Volatility too high ({setup.volatility:.1%} > {self.MAX_VOLATILITY:.1%})"
-        if setup.volatility < self.MIN_VOLATILITY:
-            return False, f"Volatility too low ({setup.volatility:.1%} < {self.MIN_VOLATILITY:.1%})"
-        return True, f"Volatility OK ({setup.volatility:.1%})"
+    def _validate_volatility(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
+        """Validate volatility is in day trading range (ADAPTIVE)"""
+        max_vol = params['max_volatility']
+        min_vol = params['min_volatility']
+        if setup.volatility > max_vol:
+            return False, f"Volatility too high ({setup.volatility:.1%} > {max_vol:.1%})"
+        if setup.volatility < min_vol:
+            return False, f"Volatility too low ({setup.volatility:.1%} < {min_vol:.1%})"
+        return True, f"Volatility OK ({setup.volatility:.1%}, range: {min_vol:.1%}-{max_vol:.1%})"
     
-    def _validate_risk_reward(self, setup: TradeSetup) -> Tuple[bool, str]:
-        """Validate risk-reward ratio for day trading"""
+    def _validate_risk_reward(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
+        """Validate risk-reward ratio for day trading (ADAPTIVE)"""
         try:
             # Calculate potential profit (to resistance)
             potential_profit = abs(setup.resistance - setup.current_price) / setup.current_price
@@ -249,27 +294,30 @@ class DayTradingValidator:
             # Calculate risk-reward ratio
             risk_reward = potential_profit / potential_loss
             
-            if risk_reward < self.MIN_RISK_REWARD_RATIO:
-                return False, f"Risk-reward too low ({risk_reward:.2f}:1 < {self.MIN_RISK_REWARD_RATIO:.2f}:1)"
+            min_rr = params['min_risk_reward_ratio']
+            if risk_reward < min_rr:
+                return False, f"Risk-reward too low ({risk_reward:.2f}:1 < {min_rr:.2f}:1)"
             
-            return True, f"Risk-reward OK ({risk_reward:.2f}:1, profit: {potential_profit:.2%}, loss: {potential_loss:.2%})"
+            return True, f"Risk-reward OK ({risk_reward:.2f}:1, threshold: {min_rr:.2f}:1, profit: {potential_profit:.2%}, loss: {potential_loss:.2%})"
             
         except Exception as e:
             logger.error(f"Risk-reward calculation failed: {e}")
             return False, "Risk-reward calculation error"
     
-    def _validate_support_resistance(self, setup: TradeSetup) -> Tuple[bool, str]:
-        """Validate support/resistance levels provide room"""
+    def _validate_support_resistance(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
+        """Validate support/resistance levels provide room (ADAPTIVE)"""
         try:
             # Distance to resistance
             resistance_dist = abs(setup.resistance - setup.current_price) / setup.current_price
-            if resistance_dist < self.MIN_RESISTANCE_DISTANCE:
-                return False, f"Too close to resistance ({resistance_dist:.2%} < {self.MIN_RESISTANCE_DISTANCE:.2%})"
+            min_res_dist = params['min_resistance_distance']
+            if resistance_dist < min_res_dist:
+                return False, f"Too close to resistance ({resistance_dist:.2%} < {min_res_dist:.2%})"
             
             # Distance to support
             support_dist = abs(setup.current_price - setup.support) / setup.current_price
-            if support_dist > self.MAX_SUPPORT_DISTANCE:
-                return False, f"Support too far ({support_dist:.2%} > {self.MAX_SUPPORT_DISTANCE:.2%})"
+            max_sup_dist = params['max_support_distance']
+            if support_dist > max_sup_dist:
+                return False, f"Support too far ({support_dist:.2%} > {max_sup_dist:.2%})"
             
             return True, f"Support/resistance OK (resistance: +{resistance_dist:.2%}, support: -{support_dist:.2%})"
             
@@ -297,19 +345,26 @@ class DayTradingValidator:
             logger.warning(f"Failed pattern check error: {e}")
             return True, "Pattern check skipped"  # Don't block on error
     
-    def _validate_layer_agreement(self, setup: TradeSetup) -> Tuple[bool, str]:
-        """Validate that enough layers agree"""
-        min_agreement = 4  # Need 4 out of 6 layers
+    def _validate_layer_agreement(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
+        """Validate that enough layers agree (ADAPTIVE based on confidence)"""
+        # ADAPTIVE: High confidence signals can have lower layer agreement
+        if setup.confidence >= 0.80:
+            min_agreement = 3  # High confidence: 3/6 OK
+            logger.info(f"🎯 HIGH CONFIDENCE ({setup.confidence:.1%}): Requiring only 3/6 layer agreement")
+        elif setup.confidence >= 0.70:
+            min_agreement = 3  # Good confidence: 3/6 OK
+        else:
+            min_agreement = 4  # Lower confidence: 4/6 required
         
         if setup.layer_agreement < min_agreement:
             return False, f"Insufficient layer agreement ({setup.layer_agreement}/6 < {min_agreement}/6)"
         
-        # Also check LSTM confirmation for LONG/SHORT signals
+        # RELAXED LSTM check: Don't require LSTM for high confidence signals
         if setup.action in ["BUY", "SELL"]:
-            if not setup.lstm_confirmation:
-                return False, "LSTM does not confirm direction"
+            if not setup.lstm_confirmation and setup.confidence < 0.75:
+                return False, "LSTM does not confirm direction (required for <75% confidence)"
         
-        return True, f"Layer agreement OK ({setup.layer_agreement}/6 layers, LSTM: {'✓' if setup.lstm_confirmation else '✗'})"
+        return True, f"Layer agreement OK ({setup.layer_agreement}/6 layers >= {min_agreement}/6, LSTM: {'✓' if setup.lstm_confirmation else '✗'})"
     
     def _count_layer_agreement(self, signal: Any) -> int:
         """Count how many layers agree with the signal"""

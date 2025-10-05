@@ -68,6 +68,7 @@ class EntryReason(str, Enum):
     INSUFFICIENT_CONFIDENCE = "insufficient_confidence"
     POOR_TIMING = "poor_timing"
     WEAK_SIGNAL = "weak_signal"  # Added for weak signal rejection
+    VALIDATOR_REJECTED = "validator_rejected"  # Day trading validator rejection
 
 class EntryQuality(str, Enum):
     """Entry quality classifications"""
