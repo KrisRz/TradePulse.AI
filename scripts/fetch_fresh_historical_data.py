@@ -24,9 +24,7 @@ async def fetch_90_day_candles_from_binance(symbol: str = "BTCUSDT", interval: s
     """
     logger.info(f"📥 Fetching 90-day candles for {symbol} ({interval})...")
     
-    from app.backend.services.binance_hybrid_client import get_hybrid_client
-    
-    client = await get_hybrid_client()
+    import aiohttp
     
     # Calculate start time (90 days ago)
     end_time = datetime.now(timezone.utc)
@@ -41,32 +39,42 @@ async def fetch_90_day_candles_from_binance(symbol: str = "BTCUSDT", interval: s
     current_end = int(end_time.timestamp() * 1000)
     chunk_size = 1000  # Max per request
     
-    while current_start < current_end:
-        try:
-            candles = await client.get_klines(
-                symbol=symbol,
-                interval=interval,
-                startTime=current_start,
-                limit=chunk_size
-            )
-            
-            if not candles:
+    base_url = "https://api.binance.com/api/v3/klines"
+    
+    async with aiohttp.ClientSession() as session:
+        while current_start < current_end:
+            try:
+                params = {
+                    "symbol": symbol,
+                    "interval": interval,
+                    "startTime": current_start,
+                    "limit": chunk_size
+                }
+                
+                async with session.get(base_url, params=params) as response:
+                    if response.status != 200:
+                        logger.error(f"   Binance API error: {response.status}")
+                        break
+                    
+                    candles = await response.json()
+                    
+                    if not candles:
+                        break
+                    
+                    all_candles.extend(candles)
+                    
+                    # Move to next chunk
+                    last_candle_time = candles[-1][0]  # timestamp
+                    current_start = last_candle_time + 60000  # +1 minute (ms)
+                    
+                    logger.info(f"   Fetched {len(candles)} candles (total: {len(all_candles)})")
+                    
+                    # Rate limiting
+                    await asyncio.sleep(0.1)
+                    
+            except Exception as e:
+                logger.error(f"   Error fetching chunk: {e}")
                 break
-            
-            all_candles.extend(candles)
-            
-            # Move to next chunk
-            last_candle_time = candles[-1][0]  # timestamp
-            current_start = last_candle_time + 60000  # +1 minute (ms)
-            
-            logger.info(f"   Fetched {len(candles)} candles (total: {len(all_candles)})")
-            
-            # Rate limiting
-            await asyncio.sleep(0.1)
-            
-        except Exception as e:
-            logger.error(f"   Error fetching chunk: {e}")
-            break
     
     # Convert to DataFrame
     df = pd.DataFrame(all_candles, columns=[
@@ -113,24 +121,31 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def calculate_price_ranges(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
-    """Calculate price ranges for 7D, 30D, 90D"""
+def calculate_price_ranges(df: pd.DataFrame, support: List[float], resistance: List[float]) -> Dict[str, Dict[str, float]]:
+    """Calculate price ranges for 7D, 30D, 90D with all required fields"""
     logger.info("📏 Calculating price ranges...")
     
     ranges = {}
     current_price = df['close'].iloc[-1]
+    current_time = datetime.now(timezone.utc)
     
     for period_name, days in [("7D", 7), ("30D", 30), ("90D", 90)]:
         period_data = df[df['timestamp'] >= df['timestamp'].max() - pd.Timedelta(days=days)]
         
         high = period_data['high'].max()
         low = period_data['low'].min()
+        range_pct = ((high - low) / low * 100) if low > 0 else 0
         position = (current_price - low) / (high - low) if (high - low) > 0 else 0.5
         
         ranges[period_name] = {
+            "period": period_name,
             "high": float(high),
             "low": float(low),
-            "current_position": float(position)
+            "range_pct": float(range_pct),
+            "current_position": float(position),
+            "support_levels": [float(s) for s in support[:5]],  # Top 5
+            "resistance_levels": [float(r) for r in resistance[:5]],  # Top 5
+            "last_updated": int(current_time.timestamp())
         }
         
         logger.info(f"   {period_name}: ${low:,.2f} - ${high:,.2f} (pos: {position:.1%})")
@@ -247,15 +262,26 @@ async def store_in_dynamodb(price_ranges: Dict, support: List, resistance: List,
     
     client = DynamoDBClient(local_development=False)  # AWS DynamoDB
     
-    # Single cache item with all metrics
+    # Helper to convert floats to Decimal
+    def convert_floats(obj):
+        if isinstance(obj, float):
+            return Decimal(str(obj))
+        elif isinstance(obj, dict):
+            return {k: convert_floats(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_floats(item) for item in obj]
+        return obj
+    
+    # Single cache item with all metrics (convert floats to Decimal)
     cache_item = {
         "cache_key": "market_context_90d",
         "symbol": "BTCUSDT",
+        "period": "90D",  # Add period for correct key schema
         "last_updated": int(datetime.now(timezone.utc).timestamp()),
-        "price_ranges": price_ranges,
-        "support_levels": [float(s) for s in support],
-        "resistance_levels": [float(r) for r in resistance],
-        "pattern_success_rates": patterns
+        "price_ranges": convert_floats(price_ranges),
+        "support_levels": [Decimal(str(s)) for s in support],
+        "resistance_levels": [Decimal(str(r)) for r in resistance],
+        "pattern_success_rates": convert_floats(patterns)
     }
     
     try:
@@ -300,8 +326,8 @@ async def main():
     df = calculate_technical_indicators(df)
     
     # 3. Calculate metrics
-    price_ranges = calculate_price_ranges(df)
     support, resistance = calculate_support_resistance(df)
+    price_ranges = calculate_price_ranges(df, support, resistance)
     patterns = await calculate_pattern_success_rates(df)
     
     # 4. Store in DynamoDB
