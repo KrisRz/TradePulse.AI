@@ -2,7 +2,6 @@
 # These tables are created with local DynamoDB but missing from AWS
 # Generated to match app/backend/core/database.py TableSchemas
 
-
 # Live candles table for real-time market data (local/development)
 resource "aws_dynamodb_table" "live_candles" {
   name         = "live_candles"
@@ -225,7 +224,7 @@ resource "aws_dynamodb_table" "users" {
 
 # Virtual portfolios table
 resource "aws_dynamodb_table" "virtual_portfolios" {
-  name         = "tradepulse-virtual-portfolios"
+  name         = "virtual_portfolios"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "user_id"
 
