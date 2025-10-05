@@ -66,9 +66,9 @@ jobs:
         run: |
           echo "🔨 Building backend Docker image..."
           docker build \
+            --no-cache \
             --tag ${{ steps.build-info.outputs.image-uri }} \
             --tag ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
             .
           echo "✅ Build complete"
 
