@@ -96,6 +96,8 @@ export default defineConfig({
           cleanupOutdatedCaches: true,
           skipWaiting: true,
           clientsClaim: true,
+          // Navigation fallback for SPA-like behavior
+          navigateFallback: null, // Disable navigation fallback to avoid index.html precache error
           // Don't cache extremely large images in service worker
           globIgnores: [
             '**/images/backgrounds/coin.png',
