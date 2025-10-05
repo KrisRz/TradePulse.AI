@@ -502,6 +502,28 @@ class LiveMarketDataService:
 							if interval not in self.candle_history:
 								self.candle_history[interval] = deque(maxlen=self.max_history)
 							self.candle_history[interval].append(candle_data)
+							
+							# PRODUCTION: Save to DynamoDB for 90-day rolling window
+							if interval == "1m":  # Only save 1m candles for day trading
+								try:
+									from app.backend.services.market_data_persistence_service import (
+										get_persistence_service, CandleData
+									)
+									persistence = await get_persistence_service()
+									candle_obj = CandleData(
+										symbol=candle_data["symbol"],
+										timestamp=int(candle_data["close_time"] / 1000),  # Convert ms to seconds
+										open=candle_data["open"],
+										high=candle_data["high"],
+										low=candle_data["low"],
+										close=candle_data["close"],
+										volume=candle_data["volume"],
+										quote_volume=0.0,  # Not available in WebSocket
+										trades=candle_data["trades"]
+									)
+									await persistence.save_candle(candle_obj)
+								except Exception as e:
+									logger.error(f"Failed to persist candle: {e}")
 						
 						# Notify callbacks
 						for callback in self.candle_callbacks:

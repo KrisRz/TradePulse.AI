@@ -52,6 +52,13 @@ class ServiceManager:
             logger.info("✅ Enhanced initialization started in background")
             print("✅ LIFESPAN: Enhanced initialization running...")
             
+            # Start daily recalculation service
+            from app.backend.services.market_context_recalculation_service import get_recalculation_service
+            logger.info("📅 Starting daily market context recalculation service...")
+            recalc_service = await get_recalculation_service()
+            await recalc_service.start()
+            logger.info("✅ Daily recalculation service started")
+            
         except Exception as enhanced_error:
             logger.warning(f"⚠️ Enhanced initialization failed, continuing with basic: {enhanced_error}")
             print(f"⚠️ LIFESPAN: Enhanced init failed: {enhanced_error}")

@@ -198,18 +198,8 @@ resource "aws_dynamodb_table" "brain_state" {
 resource "aws_dynamodb_table" "market_data" {
   name         = "${var.project_name}_market_data"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
+  hash_key     = "symbol"
+  range_key    = "timestamp"
 
   attribute {
     name = "symbol"
@@ -221,20 +211,15 @@ resource "aws_dynamodb_table" "market_data" {
     type = "N"
   }
 
-  global_secondary_index {
-    name            = "symbol-timestamp-index"
-    hash_key        = "symbol"
-    range_key       = "timestamp"
-    projection_type = "KEYS_ONLY"
-  }
-
   ttl {
     attribute_name = "ttl"
     enabled        = true
   }
 
   tags = {
-    Name = "${var.project_name}-market-data"
+    Name        = "${var.project_name}-market-data"
+    Environment = "production"
+    Purpose     = "90-day rolling window for day trading"
   }
 }
 

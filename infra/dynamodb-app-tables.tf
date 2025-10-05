@@ -2,6 +2,7 @@
 # These tables are created with local DynamoDB but missing from AWS
 # Generated to match app/backend/core/database.py TableSchemas
 
+
 # Live candles table for real-time market data (local/development)
 resource "aws_dynamodb_table" "live_candles" {
   name         = "live_candles"
