@@ -10,7 +10,7 @@
  * - Retry logic for transient failures
  */
 
-import { getEnvironmentConfig } from '@/config/environments';
+import { getEnvironmentConfig, Environment } from '@/config/environments';
 
 /**
  * API Response wrapper for consistent error handling
@@ -75,7 +75,7 @@ class ApiClient {
       
       // Auto-generate JWT token for production admin dashboard if missing
       if (!token) {
-        if (envConfig.environment === 'PRODUCTION') {
+        if (envConfig.environment === Environment.PRODUCTION) {
           // Generate JWT token for production admin access
           token = this.generateProductionAdminToken();
           localStorage.setItem(tokenKey, token);
