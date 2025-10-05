@@ -114,7 +114,30 @@ jobs:
             --output text)
           echo "📋 Service ARN: $SERVICE_ARN"
           
-          # Force deployment to ensure new image is pulled (auto-deploy may not trigger if digest unchanged)
+          # Wait for service to be in RUNNING state before starting deployment
+          echo "⏳ Waiting for service to be RUNNING..."
+          for i in {1..20}; do
+            STATUS=$(aws apprunner describe-service \
+              --service-arn "$SERVICE_ARN" \
+              --query "Service.Status" \
+              --output text)
+            echo "🔍 Attempt $i/20 - Current status: $STATUS"
+            
+            if [ "$STATUS" = "RUNNING" ]; then
+              echo "✅ Service is RUNNING, starting deployment..."
+              break
+            fi
+            
+            if [ $i -eq 20 ]; then
+              echo "❌ Timeout waiting for RUNNING state (current: $STATUS)"
+              echo "⚠️  Skipping forced deployment, relying on auto-deploy"
+              exit 0
+            fi
+            
+            sleep 15
+          done
+          
+          # Force deployment to ensure new image is pulled
           echo "🔄 Starting forced deployment..."
           OPERATION_ID=$(aws apprunner start-deployment \
             --service-arn "$SERVICE_ARN" \
