@@ -108,15 +108,20 @@ jobs:
 
       - name: Trigger App Runner deployment
         run: |
-          echo "🚀 App Runner will auto-deploy from ECR :latest tag"
+          echo "🚀 Forcing App Runner deployment with new image"
           SERVICE_ARN=$(aws apprunner list-services \
             --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" \
             --output text)
           echo "📋 Service ARN: $SERVICE_ARN"
           
-          # App Runner auto-deployment is enabled, so it will pick up the new :latest image
-          echo "⏳ Waiting for auto-deployment to start..."
-          sleep 30
+          # Force deployment to ensure new image is pulled (auto-deploy may not trigger if digest unchanged)
+          echo "🔄 Starting forced deployment..."
+          OPERATION_ID=$(aws apprunner start-deployment \
+            --service-arn "$SERVICE_ARN" \
+            --query 'OperationId' \
+            --output text)
+          echo "✅ Deployment started: $OPERATION_ID"
+          sleep 10
 
       - name: Wait for deployment completion
         run: |
