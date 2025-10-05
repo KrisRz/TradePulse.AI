@@ -159,7 +159,7 @@ class HistoricalMarketContextService:
             
             # Get cached metrics
             table_name = "market_context_cache"
-            cache_item = client.get_item(table_name, {"cache_key": "market_context_90d"})
+            cache_item = client.get_item(table_name, {"symbol": "BTCUSDT", "period": "90D"})
             
             if not cache_item:
                 logger.info("   No data in DynamoDB yet")
