@@ -10,7 +10,7 @@ Production: writes to 'tradepulse-live_candles-<ENV>' (AWS-style naming)
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Any, Dict
 
@@ -64,6 +64,9 @@ async def start_candle_persistence() -> None:
             interval = candle["interval"]
             timestamp_ms = int(candle["close_time"])
             
+            # Calculate TTL: 90 days from now (auto-delete old data)
+            ttl_timestamp = int((datetime.now(timezone.utc) + timedelta(days=90)).timestamp())
+            
             item: Dict[str, Any] = {
                 "pk": f"{symbol}#{interval}",  # Composite partition key
                 "ts": timestamp_ms,            # Sort key (timestamp)
@@ -79,6 +82,7 @@ async def start_candle_persistence() -> None:
                 "trades": trades,
                 "date_hour": datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d-%H"),
                 "created_at": datetime.now(timezone.utc).isoformat(),
+                "ttl": ttl_timestamp,  # AUTO-DELETE after 90 days
             }
             
             # Idempotent write - only insert if timestamp doesn't exist
