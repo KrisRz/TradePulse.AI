@@ -501,28 +501,49 @@ class BrainController:
             # SIMPLIFIED BRAIN: Monitor Day Trading Engine operation
             logger.info("🧠 BRAIN CYCLE: Monitoring trading engines status")
             
-            # (A) Check Unified Day Trading Engine status
+            # (A) Check Trading Engine status (with proper fallback)
             try:
                 from app.backend.core.container import get_container
                 container = get_container()
-                unified_engine = container.get("unified_day_trading_engine")
                 
-                if unified_engine and hasattr(unified_engine, 'is_initialized') and unified_engine.is_initialized:
-                    logger.info("✅ BRAIN: ADAPTIVE Unified Day Trading Engine operational")
-                    # Check if it has continuous learning connection
-                    if hasattr(unified_engine, 'continuous_learning') and unified_engine.continuous_learning:
-                        logger.info("✅ BRAIN: Unified Engine connected to Continuous Learning")
-                    else:
-                        logger.warning("⚠️ BRAIN: Unified Engine NOT connected to Continuous Learning!")
+                # Try unified engine first (adaptive parameters)
+                trading_engine = None
+                engine_name = None
+                
+                try:
+                    unified_engine = container.get("unified_day_trading_engine")
+                    if unified_engine and hasattr(unified_engine, 'is_initialized') and unified_engine.is_initialized:
+                        trading_engine = unified_engine
+                        engine_name = "Unified Day Trading Engine (ADAPTIVE)"
+                        
+                        # Check Continuous Learning connection
+                        if hasattr(unified_engine, 'continuous_learning') and unified_engine.continuous_learning:
+                            logger.info("✅ BRAIN: Continuous Learning connected to Unified Engine")
+                        else:
+                            logger.warning("⚠️ BRAIN: Continuous Learning NOT connected")
+                except KeyError:
+                    logger.debug("Unified engine not registered, trying day_trading_engine...")
+                
+                # Fallback to regular day_trading_engine
+                if not trading_engine:
+                    try:
+                        day_engine = container.get("day_trading_engine")
+                        if day_engine and hasattr(day_engine, 'is_running') and day_engine.is_running:
+                            trading_engine = day_engine
+                            engine_name = "Day Trading Engine (Standard)"
+                    except KeyError:
+                        logger.warning("⚠️ BRAIN: day_trading_engine not registered either!")
+                
+                # Report status
+                if trading_engine:
+                    logger.info(f"✅ BRAIN: {engine_name} operational")
                 else:
-                    # Try fallback to regular day_trading_engine
-                    day_engine = container.get("day_trading_engine")
-                    if day_engine and hasattr(day_engine, 'is_running') and day_engine.is_running:
-                        logger.info("✅ BRAIN: Day Trading Engine operational (fallback)")
-                    else:
-                        logger.warning("⚠️ BRAIN: No trading engine running - standby mode")
+                    logger.warning("⚠️ BRAIN: No trading engine available - standby mode")
+                    
             except Exception as e:
                 logger.error(f"❌ BRAIN: Trading Engine check failed: {e}")
+                import traceback
+                logger.debug(f"Full traceback: {traceback.format_exc()}")
             
             # (B) Monitor portfolio status
             try:
