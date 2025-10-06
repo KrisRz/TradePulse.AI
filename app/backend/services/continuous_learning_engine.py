@@ -153,18 +153,23 @@ class ContinuousLearningEngine:
     
     async def _periodic_optimization_loop(self):
         """Periodic optimization loop - runs every hour"""
+        logger.info("🔄 CONTINUOUS LEARNING: Optimization loop started (1h interval)")
         while self.is_running:
             try:
                 await asyncio.sleep(3600)  # Check every hour
                 
                 if self.auto_optimization_enabled:
+                    logger.info("🧠 CONTINUOUS LEARNING: Running periodic optimization check...")
                     await self._check_and_optimize()
+                    logger.info("✅ CONTINUOUS LEARNING: Optimization check completed")
+                else:
+                    logger.warning("⚠️ CONTINUOUS LEARNING: Auto-optimization DISABLED")
                     
             except asyncio.CancelledError:
-                logger.info("🛑 Continuous learning optimization loop cancelled")
+                logger.info("🛑 CONTINUOUS LEARNING: Optimization loop cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in continuous learning loop: {e}")
+                logger.error(f"❌ CONTINUOUS LEARNING: Loop error: {e}")
                 await asyncio.sleep(300)  # Wait 5 minutes on error
     
     async def _check_and_optimize(self):
@@ -922,15 +927,16 @@ class ContinuousLearningEngine:
         try:
             # Return current learned parameters if available
             if self.current_parameters:
+                logger.info(f"📊 CONTINUOUS LEARNING: Returning {len(self.current_parameters)} learned parameters")
                 return self.current_parameters
             
             # If no learned parameters yet, return empty dict
             # (Unified Engine will use defaults)
-            logger.debug("📊 No learned parameters available yet")
+            logger.warning("⚠️ CONTINUOUS LEARNING: No learned parameters yet - using defaults")
             return {}
             
         except Exception as e:
-            logger.error(f"❌ Failed to get optimal parameters: {e}")
+            logger.error(f"❌ CONTINUOUS LEARNING: Failed to get optimal parameters: {e}")
             return {}
 
 # Global instance

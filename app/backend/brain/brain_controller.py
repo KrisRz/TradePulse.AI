@@ -499,7 +499,7 @@ class BrainController:
         """Execute simplified monitoring cycle - Day Trading Engine handles actual trading"""
         try:
             # SIMPLIFIED BRAIN: Monitor Day Trading Engine operation
-            logger.debug("🧠 BRAIN monitoring cycle - Day Trading Engine handles trading")
+            logger.info("🧠 BRAIN CYCLE: Monitoring trading engines status")
             
             # (A) Check Unified Day Trading Engine status
             try:
@@ -508,16 +508,21 @@ class BrainController:
                 unified_engine = container.get("unified_day_trading_engine")
                 
                 if unified_engine and hasattr(unified_engine, 'is_initialized') and unified_engine.is_initialized:
-                    logger.debug("✅ ADAPTIVE Unified Day Trading Engine operational - Brain monitoring")
+                    logger.info("✅ BRAIN: ADAPTIVE Unified Day Trading Engine operational")
+                    # Check if it has continuous learning connection
+                    if hasattr(unified_engine, 'continuous_learning') and unified_engine.continuous_learning:
+                        logger.info("✅ BRAIN: Unified Engine connected to Continuous Learning")
+                    else:
+                        logger.warning("⚠️ BRAIN: Unified Engine NOT connected to Continuous Learning!")
                 else:
                     # Try fallback to regular day_trading_engine
                     day_engine = container.get("day_trading_engine")
                     if day_engine and hasattr(day_engine, 'is_running') and day_engine.is_running:
-                        logger.debug("✅ Day Trading Engine operational - Brain monitoring")
+                        logger.info("✅ BRAIN: Day Trading Engine operational (fallback)")
                     else:
-                        logger.warning("⚠️ No trading engine running - Brain standby")
+                        logger.warning("⚠️ BRAIN: No trading engine running - standby mode")
             except Exception as e:
-                logger.debug(f"Trading Engine check failed: {e}")
+                logger.error(f"❌ BRAIN: Trading Engine check failed: {e}")
             
             # (B) Monitor portfolio status
             try:

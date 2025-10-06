@@ -121,9 +121,11 @@ class IntelligentEntryEngine:
         self.model_path = current_file / "models" / "enterprise"
         
         # 🎯 ADAPTIVE ENTRY THRESHOLDS - Initial defaults (will be replaced by Continuous Learning)
+        # TEMPORARY FIX: Lowered from 0.60 to 0.58 while S/R detection is being fixed
+        # (Many 77-79% signals were rejected at 0.59 consensus/confidence - just 0.01 below threshold!)
         self._default_thresholds = {
-            'confidence_threshold': 0.60,  # 60% minimum confidence
-            'consensus_threshold': 0.60,   # 60% consensus (4/6 layers)
+            'confidence_threshold': 0.58,  # 58% minimum (was 0.60) - TEMPORARY FIX
+            'consensus_threshold': 0.58,   # 58% consensus (was 0.60) - TEMPORARY FIX
             'high_confidence_threshold': 0.75,  # 75% high confidence
             'historical_validation_threshold': 0.55  # 55% historical success
         }
