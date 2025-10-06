@@ -165,13 +165,18 @@ class HistoricalMarketContextService:
                 logger.info("   No data in DynamoDB yet")
                 return False
             
-            # Check freshness (< 24 hours for day trading)
+            # Check freshness (< 72 hours - increased for weekends when data can't refresh)
             last_updated = float(cache_item.get("last_updated", 0))  # Convert Decimal to float
             age_hours = (datetime.now(timezone.utc).timestamp() - last_updated) / 3600
             
-            if age_hours > 24:
-                logger.warning(f"   DynamoDB data is {age_hours:.1f} hours old, refreshing needed")
+            # RELAXED: 72h instead of 24h (weekends + holidays where refresh may fail)
+            if age_hours > 72:
+                logger.warning(f"   DynamoDB data is {age_hours:.1f} hours old (>72h), refreshing needed")
                 return False
+            elif age_hours > 24:
+                logger.info(f"   ℹ️ Using DynamoDB data ({age_hours:.1f}h old, acceptable for weekends)")
+            else:
+                logger.info(f"   ✅ Fresh DynamoDB data ({age_hours:.1f}h old)")
             
             # Load price ranges
             for period, data in cache_item.get("price_ranges", {}).items():
