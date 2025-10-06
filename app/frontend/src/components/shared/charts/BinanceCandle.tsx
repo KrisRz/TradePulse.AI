@@ -59,24 +59,25 @@ export default function BinanceCandle({
     });
     chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
 
-    const ma7  = chart.addSeries(LineSeries, { color: '#38bdf8', lineWidth: 2 });
-    const ma25 = chart.addSeries(LineSeries, { color: '#60a5fa', lineWidth: 2 });
-    const ma99 = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 2 });
-
-    const priceLine = candlesSeries.createPriceLine({ price: 0, color: '#93c5fd', lineWidth: 1 });
+    // REMOVED: MA lines and price line (only candlestick + volume)
+    // const ma7  = chart.addSeries(LineSeries, { color: '#38bdf8', lineWidth: 2 });
+    // const ma25 = chart.addSeries(LineSeries, { color: '#60a5fa', lineWidth: 2 });
+    // const ma99 = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 2 });
+    // const priceLine = candlesSeries.createPriceLine({ price: 0, color: '#93c5fd', lineWidth: 1 });
 
     let C: CandlestickData[] = [];
     let V: HistogramData[] = [];
 
-    const recomputeMA = () => {
-      const closes = C.map(c => Number(c.close));
-      const times  = C.map(c => c.time);
-      const toLine = (arr: number[]): LineData[] =>
-        arr.map((v, i) => ({ time: times[i], value: Number.isFinite(v) ? v : NaN }));
-      ma7.setData(toLine(sma(closes, 7)));
-      ma25.setData(toLine(sma(closes, 25)));
-      ma99.setData(toLine(sma(closes, 99)));
-    };
+    // REMOVED: MA calculation (only candlestick + volume)
+    // const recomputeMA = () => {
+    //   const closes = C.map(c => Number(c.close));
+    //   const times  = C.map(c => c.time);
+    //   const toLine = (arr: number[]): LineData[] =>
+    //     arr.map((v, i) => ({ time: times[i], value: Number.isFinite(v) ? v : NaN }));
+    //   ma7.setData(toLine(sma(closes, 7)));
+    //   ma25.setData(toLine(sma(closes, 25)));
+    //   ma99.setData(toLine(sma(closes, 99)));
+    // };
 
     const load = async () => {
       try {
@@ -126,8 +127,9 @@ export default function BinanceCandle({
 
         candlesSeries.setData(C);
         volumeSeries.setData(V);
-        recomputeMA();
-        priceLine.applyOptions({ price: Number(C[C.length - 1].close) });
+        // REMOVED: MA calculation and price line
+        // recomputeMA();
+        // priceLine.applyOptions({ price: Number(C[C.length - 1].close) });
         chart.timeScale().fitContent();
         
         console.log(`✅ [BinanceCandle] Chart rendered successfully!`);
@@ -164,8 +166,9 @@ export default function BinanceCandle({
         C.push(bar); V.push(vol);
         candlesSeries.update(bar); volumeSeries.update(vol);
       }
-      priceLine.applyOptions({ price: Number(bar.close) });
-      recomputeMA();
+      // REMOVED: MA calculation and price line updates
+      // priceLine.applyOptions({ price: Number(bar.close) });
+      // recomputeMA();
     };
 
     const ro = new ResizeObserver(() => chart.timeScale().fitContent());
