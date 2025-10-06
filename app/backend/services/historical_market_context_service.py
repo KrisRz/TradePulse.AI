@@ -513,10 +513,12 @@ class HistoricalMarketContextService:
     
     def _find_support_levels(self, df: pd.DataFrame) -> List[float]:
         """Find significant support levels - DAY TRADING OPTIMIZED"""
+        logger.info(f"📊 S/R DEBUG: Finding support levels from {len(df)} candles")
         support_candidates = []
         
         # METHOD 1: STRONG LEVELS (historical touch points - strict)
         lows = df['low'].rolling(window=20).min()
+        method1_count = 0
         for i in range(20, len(lows) - 20):
             if lows.iloc[i] == lows.iloc[i-10:i+10].min():
                 price_level = float(lows.iloc[i])
@@ -529,9 +531,13 @@ class HistoricalMarketContextService:
                 
                 if touches >= 1:  # At least 1 touch (relaxed from 2)
                     support_candidates.append(price_level)
+                    method1_count += 1
+        
+        logger.info(f"📊 S/R DEBUG: Method 1 (historical) found {method1_count} support levels")
         
         # METHOD 2: RECENT SWING LOWS (last 48h - micro levels for day trading)
         recent_window = min(len(df), 2880)  # Last 48h (2880 = 48*60 for 1m data)
+        method2_count = 0
         if recent_window >= 20:  # Need minimum data
             recent_data = df.tail(recent_window)
             swing_lows = []
@@ -540,24 +546,35 @@ class HistoricalMarketContextService:
                 # Is this a local minimum? (5-candle window)
                 if low == recent_data['low'].iloc[i-5:i+5].min():
                     swing_lows.append(float(low))
+                    method2_count += 1
+            logger.info(f"📊 S/R DEBUG: Method 2 (swing lows) found {method2_count} levels from {recent_window} candles")
         else:
             swing_lows = []
+            logger.warning(f"⚠️ S/R DEBUG: Method 2 skipped - insufficient data ({recent_window} < 20 candles)")
         
         # Add recent swing lows (deduplicate if too close)
+        method2_added = 0
         for swing_low in swing_lows:
             # Only add if not too close to existing candidates (0.5% apart)
             if not any(abs(swing_low - c) / c < 0.005 for c in support_candidates):
                 support_candidates.append(swing_low)
+                method2_added += 1
+        logger.info(f"📊 S/R DEBUG: Method 2 added {method2_added} unique levels (after dedup)")
         
         # METHOD 3: BOLLINGER BAND LOWER (statistical support)
+        method3_added = 0
         if 'bb_lower' in df.columns and len(df) > 0:
             bb_lower = float(df['bb_lower'].iloc[-1])
             if bb_lower > 0:
                 support_candidates.append(bb_lower)
+                method3_added = 1
+        logger.info(f"📊 S/R DEBUG: Method 3 (Bollinger) added {method3_added} levels")
         
         # Deduplicate, sort, return TOP 15 (was 5)
         unique_supports = sorted(list(set(support_candidates)))
-        return unique_supports[-15:] if len(unique_supports) > 15 else unique_supports
+        final_supports = unique_supports[-15:] if len(unique_supports) > 15 else unique_supports
+        logger.info(f"📊 S/R DEBUG: TOTAL SUPPORT LEVELS: {len(final_supports)} (from {len(support_candidates)} candidates)")
+        return final_supports
     
     def _find_resistance_levels(self, df: pd.DataFrame) -> List[float]:
         """Find significant resistance levels - DAY TRADING OPTIMIZED"""
@@ -580,6 +597,7 @@ class HistoricalMarketContextService:
         
         # METHOD 2: RECENT SWING HIGHS (last 48h - micro levels for day trading)
         recent_window = min(len(df), 2880)  # Last 48h (2880 = 48*60 for 1m data)
+        method2_count = 0
         if recent_window >= 20:  # Need minimum data
             recent_data = df.tail(recent_window)
             swing_highs = []
@@ -588,24 +606,35 @@ class HistoricalMarketContextService:
                 # Is this a local maximum? (5-candle window)
                 if high == recent_data['high'].iloc[i-5:i+5].max():
                     swing_highs.append(float(high))
+                    method2_count += 1
+            logger.info(f"📊 S/R DEBUG: Method 2 (swing highs) found {method2_count} levels from {recent_window} candles")
         else:
             swing_highs = []
+            logger.warning(f"⚠️ S/R DEBUG: Method 2 skipped - insufficient data ({recent_window} < 20 candles)")
         
         # Add recent swing highs (deduplicate if too close)
+        method2_added = 0
         for swing_high in swing_highs:
             # Only add if not too close to existing candidates (0.5% apart)
             if not any(abs(swing_high - c) / c < 0.005 for c in resistance_candidates):
                 resistance_candidates.append(swing_high)
+                method2_added += 1
+        logger.info(f"📊 S/R DEBUG: Method 2 added {method2_added} unique levels (after dedup)")
         
         # METHOD 3: BOLLINGER BAND UPPER (statistical resistance)
+        method3_added = 0
         if 'bb_upper' in df.columns and len(df) > 0:
             bb_upper = float(df['bb_upper'].iloc[-1])
             if bb_upper > 0:
                 resistance_candidates.append(bb_upper)
+                method3_added = 1
+        logger.info(f"📊 S/R DEBUG: Method 3 (Bollinger) added {method3_added} levels")
         
         # Deduplicate, sort, return TOP 15 (was 5)
         unique_resistances = sorted(list(set(resistance_candidates)))
-        return unique_resistances[-15:] if len(unique_resistances) > 15 else unique_resistances
+        final_resistances = unique_resistances[-15:] if len(unique_resistances) > 15 else unique_resistances
+        logger.info(f"📊 S/R DEBUG: TOTAL RESISTANCE LEVELS: {len(final_resistances)} (from {len(resistance_candidates)} candidates)")
+        return final_resistances
     
     async def _calculate_support_resistance_levels(self, df: pd.DataFrame):
         """Calculate comprehensive support and resistance levels"""
