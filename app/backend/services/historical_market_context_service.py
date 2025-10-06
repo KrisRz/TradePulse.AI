@@ -578,10 +578,12 @@ class HistoricalMarketContextService:
     
     def _find_resistance_levels(self, df: pd.DataFrame) -> List[float]:
         """Find significant resistance levels - DAY TRADING OPTIMIZED"""
+        logger.info(f"📊 S/R DEBUG: Finding resistance levels from {len(df)} candles")
         resistance_candidates = []
         
         # METHOD 1: STRONG LEVELS (historical rejection points - strict)
         highs = df['high'].rolling(window=20).max()
+        method1_count = 0
         for i in range(20, len(highs) - 20):
             if highs.iloc[i] == highs.iloc[i-10:i+10].max():
                 price_level = float(highs.iloc[i])
@@ -594,6 +596,9 @@ class HistoricalMarketContextService:
                 
                 if touches >= 1:  # At least 1 rejection (relaxed from 2)
                     resistance_candidates.append(price_level)
+                    method1_count += 1
+        
+        logger.info(f"📊 S/R DEBUG: Method 1 (historical) found {method1_count} resistance levels")
         
         # METHOD 2: RECENT SWING HIGHS (last 48h - micro levels for day trading)
         recent_window = min(len(df), 2880)  # Last 48h (2880 = 48*60 for 1m data)
