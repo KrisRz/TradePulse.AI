@@ -119,16 +119,28 @@ class ContinuousLearningEngine:
             return
             
         try:
+            print("=" * 80)
+            print("🧠 CONTINUOUS LEARNING ENGINE: Starting initialization...")
+            print("=" * 80)
             logger.info("🚀 Initializing Continuous Learning Engine...")
             
             # Load saved state
             await self._load_state()
+            print("✅ CONTINUOUS LEARNING: State loaded from DynamoDB")
             
             # Start background learning tasks
             await self._start_learning_tasks()
+            print("✅ CONTINUOUS LEARNING: Background tasks started")
             
             self.is_initialized = True
             self.is_running = True
+            
+            print("=" * 80)
+            print("✅ CONTINUOUS LEARNING ENGINE: Fully initialized!")
+            print(f"📊 Auto-optimization: {self.auto_optimization_enabled}")
+            print(f"🔄 Optimization interval: {self.optimization_cooldown_hours}h")
+            print(f"📈 Min samples for learning: {self.min_samples_for_learning}")
+            print("=" * 80)
             
             logger.info("✅ Continuous Learning Engine initialized and running")
             
@@ -153,16 +165,20 @@ class ContinuousLearningEngine:
     
     async def _periodic_optimization_loop(self):
         """Periodic optimization loop - runs every hour"""
+        print("🔄 CONTINUOUS LEARNING: Optimization loop STARTED (checking every 1h)")
         logger.info("🔄 CONTINUOUS LEARNING: Optimization loop started (1h interval)")
         while self.is_running:
             try:
                 await asyncio.sleep(3600)  # Check every hour
                 
                 if self.auto_optimization_enabled:
+                    print("🧠 CONTINUOUS LEARNING: Running optimization check...")
                     logger.info("🧠 CONTINUOUS LEARNING: Running periodic optimization check...")
                     await self._check_and_optimize()
+                    print("✅ CONTINUOUS LEARNING: Optimization check completed")
                     logger.info("✅ CONTINUOUS LEARNING: Optimization check completed")
                 else:
+                    print("⚠️ CONTINUOUS LEARNING: Auto-optimization DISABLED")
                     logger.warning("⚠️ CONTINUOUS LEARNING: Auto-optimization DISABLED")
                     
             except asyncio.CancelledError:
