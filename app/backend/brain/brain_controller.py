@@ -1013,16 +1013,8 @@ class BrainController:
             if self.day_trading_engine:
                 # Day trading engine handles its own warm-up internally
                 logger.info("✅ WARM-UP: Day Trading Engine will warm up automatically")
-                    
-                    # Update brain state with warm-up insights
-                    if warm_up_result.get("market_regime"):
-                        logger.info(f"📊 Market regime detected: {warm_up_result['market_regime']}")
-                        
-                else:
-                    logger.warning("⚠️ Unified warm-up incomplete, proceeding with caution")
-                    
             else:
-                logger.warning("⚠️ Unified engine not available, using fallback warm-up")
+                logger.warning("⚠️ Day trading engine not available, using fallback warm-up")
                 await self._fallback_warm_up()
                 
         except Exception as e:
