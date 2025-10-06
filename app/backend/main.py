@@ -73,6 +73,14 @@ from app.backend.utils.pipeline_debug_logger import (
 settings = get_settings()
 logger = get_logger(__name__)
 
+# STARTUP DEBUG - Print to console immediately
+print("=" * 80)
+print("🚀 TradePulse.AI Backend Starting...")
+print(f"📍 Version: main.py loaded")
+print(f"🌍 Environment: {settings.ENVIRONMENT}")
+print(f"🐍 Python: {sys.version}")
+print("=" * 80)
+
 # Initialize pipeline debug logger and register core components
 pipeline_logger = get_pipeline_debug_logger()
 

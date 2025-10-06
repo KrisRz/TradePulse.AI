@@ -34,10 +34,17 @@ class ServiceManager:
     
     async def initialize_services(self) -> None:
         """Initialize all TradePulse.AI services with real data only"""
-        print("🚀 LIFESPAN: Service manager starting...")  # Console output for debugging
+        print("=" * 80)
+        print("🚀 LIFESPAN: Service manager starting...")
+        print(f"🌍 Environment: {settings.ENVIRONMENT}")
+        print(f"📦 DynamoDB endpoint: {os.getenv('DYNAMODB_ENDPOINT', 'AWS')}")
+        print(f"🎯 Trading mode: {os.getenv('TRADING_MODE', 'unknown')}")
+        print("=" * 80)
         
         # ENHANCED: Start comprehensive service initialization with historical context
         logger.info("🚀 Starting enhanced service initialization with historical context...")
+        logger.info(f"🌍 Environment: {settings.ENVIRONMENT}")
+        logger.info(f"📦 DynamoDB: {os.getenv('DYNAMODB_ENDPOINT', 'AWS')}")
         print("🚀 LIFESPAN: Enhanced initialization starting...")
         
         try:
@@ -76,7 +83,9 @@ class ServiceManager:
             raise
         
         logger.info("🚀 Initializing TradePulse.AI Enterprise Services via DI Container")
-        print("🚀 LIFESPAN: Starting DI container initialization...")  # Console output for debugging
+        print("🚀 LIFESPAN: Starting DI container initialization...")
+        print("📊 LIFESPAN: DI Container status check...")
+        print(f"📦 Container initialized: {self.container is not None}")
         logger.info("=" * 80)
         logger.info("🔥 PIPELINE DEBUG: SERVICE INITIALIZATION SEQUENCE")
         logger.info("=" * 80)
@@ -95,9 +104,11 @@ class ServiceManager:
                 # Initialize services in stages with error isolation
                 logger.info("🔄 Initializing market data services...")
                 logger.info("📊 PIPELINE DEBUG: STEP 1 - Market Data Services")
+                print("📊 LIFESPAN: STEP 1 - Market Data Services starting...")
                 await self.container._initialize_market_data_services()
                 logger.info("✅ Market data services initialized")
                 logger.info("✅ PIPELINE DEBUG: STEP 1 COMPLETED - Market Data Services READY")
+                print("✅ LIFESPAN: STEP 1 - Market Data Services READY")
                 
                 logger.info("🔄 Initializing AI services...")
                 logger.info("🤖 PIPELINE DEBUG: STEP 2 - AI Services (6-Layer Models)")

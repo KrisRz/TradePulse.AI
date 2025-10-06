@@ -79,14 +79,14 @@ resource "aws_apprunner_service" "backend" {
     instance_role_arn = aws_iam_role.app_runner_instance.arn
   }
 
-  # Health check configuration
+  # Health check configuration (INCREASED TIMEOUT for startup)
   health_check_configuration {
     protocol            = "HTTP"
     path                = "/health"
     interval            = 10
-    timeout             = 5
+    timeout             = 10  # Increased from 5 to 10 seconds (startup can be slow)
     healthy_threshold   = 1
-    unhealthy_threshold = 3
+    unhealthy_threshold = 5   # Increased from 3 to 5 (give more retries)
   }
 
   # Auto scaling configuration
