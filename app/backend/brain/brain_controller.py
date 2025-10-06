@@ -36,8 +36,7 @@ from .brain_events import (
 )
 
 # Import existing services (NO CHANGES TO SERVICES)
-# NEW: Use unified engine instead of multiple engines
-from app.backend.services.unified_day_trading_engine import UnifiedDayTradingEngine
+# Note: Engines are now accessed via DI Container, no direct imports needed
 from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
 from app.backend.services.dynamic_risk_manager import DynamicRiskManager
 from app.backend.services.emergency_controls import EmergencyControlSystem
@@ -74,8 +73,7 @@ class BrainController:
         self.state = create_initial_brain_state()
         self.event_bus = get_event_bus()
         
-        # Core service references (NEW: unified engine)
-        self.unified_engine: Optional[UnifiedDayTradingEngine] = None
+        # Core service references
         self.exit_engine: Optional[IntelligentExitEngine] = None
         self.risk_manager: Optional[DynamicRiskManager] = None
         self.emergency_system: Optional[EmergencyControlSystem] = None
@@ -184,7 +182,6 @@ class BrainController:
                 
         except Exception as e:
             logger.error(f"❌ Engine connection failed: {e}")
-            self.unified_engine = None
             self.day_trading_engine = None
             self.enterprise_engine = None
         
@@ -268,7 +265,6 @@ class BrainController:
         
         # Check service initialization with graceful fallback
         services = [
-            ("unified_trading_engine", self.unified_engine),
             ("exit_engine", self.exit_engine),
             ("risk_manager", self.risk_manager),
             ("emergency_system", self.emergency_system)
@@ -511,28 +507,12 @@ class BrainController:
                 engine_name = None
                 
                 try:
-                    unified_engine = container.get("unified_day_trading_engine")
-                    if unified_engine and hasattr(unified_engine, 'is_initialized') and unified_engine.is_initialized:
-                        trading_engine = unified_engine
-                        engine_name = "Unified Day Trading Engine (ADAPTIVE)"
-                        
-                        # Check Continuous Learning connection
-                        if hasattr(unified_engine, 'continuous_learning') and unified_engine.continuous_learning:
-                            logger.info("✅ BRAIN: Continuous Learning connected to Unified Engine")
-                        else:
-                            logger.warning("⚠️ BRAIN: Continuous Learning NOT connected")
+                    day_engine = container.get("day_trading_engine")
+                    if day_engine and hasattr(day_engine, 'is_running') and day_engine.is_running:
+                        trading_engine = day_engine
+                        engine_name = "Day Trading Engine (Standard)"
                 except KeyError:
-                    logger.debug("Unified engine not registered, trying day_trading_engine...")
-                
-                # Fallback to regular day_trading_engine
-                if not trading_engine:
-                    try:
-                        day_engine = container.get("day_trading_engine")
-                        if day_engine and hasattr(day_engine, 'is_running') and day_engine.is_running:
-                            trading_engine = day_engine
-                            engine_name = "Day Trading Engine (Standard)"
-                    except KeyError:
-                        logger.warning("⚠️ BRAIN: day_trading_engine not registered either!")
+                    logger.warning("⚠️ BRAIN: day_trading_engine not registered!")
                 
                 # Report status
                 if trading_engine:
@@ -618,26 +598,18 @@ class BrainController:
             
     @no_fallbacks
     async def _generate_unified_signal(self) -> Optional[TradingSignal]:
-        """(C) Generate unified AI signal using new unified engine"""
+        """Generate AI signal using day trading engine (fallback method)"""
         try:
-            if not self.unified_engine:
-                logger.warning("⚠️ Unified engine not available")
+            if not self.day_trading_engine:
+                logger.warning("⚠️ Day trading engine not available")
                 return None
                 
-            unified_signal = await self.unified_engine.generate_signal("BTCUSDT")
-            if not unified_signal:
-                return None
-                
-            # Convert to BRAIN signal format
-            brain_signal = TradingSignal(
-                symbol=unified_signal.symbol,
-                action=unified_signal.action.value,
-                confidence=Decimal(str(unified_signal.confidence)),
-                reasoning=unified_signal.reasoning,
-                timestamp=unified_signal.timestamp
-            )
+            # Day trading engine handles signal generation internally
+            # This method is kept for compatibility but not actively used
+            logger.debug("📊 Signal generation handled by Day Trading Engine")
+            return None
             
-            # Update trading context
+            # Update trading context (kept for reference)
             self.state.trading_context.current_signal = brain_signal
             
             # Publish signal event
@@ -1031,16 +1003,13 @@ class BrainController:
             logger.error(f"Performance metrics update failed: {e}")
             
     async def _warm_up_market_analysis(self):
-        """Professional 10-minute warm-up period using unified engine"""
-        logger.info("🔥 WARM-UP: Starting unified engine warm-up...")
+        """Professional 10-minute warm-up period using day trading engine"""
+        logger.info("🔥 WARM-UP: Starting day trading engine warm-up...")
         
         try:
-            if self.unified_engine:
-                # Use unified engine's professional warm-up
-                warm_up_result = await self.unified_engine.start_warm_up()
-                
-                if warm_up_result.get("status") == "warm_up_complete":
-                    logger.info("✅ UNIFIED WARM-UP COMPLETE: Ready for professional trading")
+            if self.day_trading_engine:
+                # Day trading engine handles its own warm-up internally
+                logger.info("✅ WARM-UP: Day Trading Engine will warm up automatically")
                     
                     # Update brain state with warm-up insights
                     if warm_up_result.get("market_regime"):
@@ -1059,7 +1028,7 @@ class BrainController:
             logger.warning("⚠️ Trading will start without warm-up (RISK!)")
     
     async def _fallback_warm_up(self):
-        """Fallback warm-up if unified engine unavailable"""
+        """Fallback warm-up if day trading engine unavailable"""
         logger.info("🔄 FALLBACK WARM-UP: 5-minute basic market analysis...")
         
         for cycle in range(20):  # 5 minutes
@@ -1288,8 +1257,8 @@ class BrainController:
     def _get_service_status(self) -> Dict[str, bool]:
         """Get status of all services including enhanced AWS-ready services"""
         return {
-            # Core services (NEW: unified engine)
-            "unified_trading_engine": self.unified_engine is not None and getattr(self.unified_engine, 'is_initialized', False),
+            # Core services
+            "day_trading_engine": self.day_trading_engine is not None and getattr(self.day_trading_engine, 'is_running', False),
             "exit_engine": self.exit_engine is not None and getattr(self.exit_engine, 'is_initialized', False),
             "risk_manager": self.risk_manager is not None and getattr(self.risk_manager, 'is_initialized', False),
             "emergency_system": self.emergency_system is not None and getattr(self.emergency_system, 'is_initialized', False),

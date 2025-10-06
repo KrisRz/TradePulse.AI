@@ -940,9 +940,11 @@ from pathlib import Path
 
 # Clean absolute imports; sys.path hacks removed
 
-from app.backend.services.unified_day_trading_engine import UnifiedDayTradingEngine, TradingAction
+# OLD: UnifiedDayTradingEngine was replaced with DayTradingEngine
+# from app.backend.services.unified_day_trading_engine import UnifiedDayTradingEngine, TradingAction
 from app.backend.services.professional_portfolio import get_professional_portfolio, PositionType
 
+# NOTE: This trading brain is deprecated - Brain Controller now manages all trading
 _trading_brain_task = None
 
 async def start_trading_brain_background():
@@ -974,9 +976,9 @@ async def trading_brain_loop():
     """Main trading brain loop - runs every 15 seconds for day trading"""
     global _trading_brain_enabled
     
-    # Initialize unified trading engine
-    trading_engine = UnifiedDayTradingEngine()
-    await trading_engine.initialize()
+    # NOTE: This function is deprecated - use Brain Controller instead
+    logger.warning("⚠️ /brain/start is deprecated - use Brain Controller via WebSocket")
+    return {"status": "deprecated", "message": "Use Brain Controller instead"}
     
     # Start professional warm-up period
     await trading_engine.start_warm_up()
