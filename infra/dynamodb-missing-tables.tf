@@ -9,7 +9,7 @@
 # Purpose: Stores closed position results for ML learning and optimization
 
 resource "aws_dynamodb_table" "position_results" {
-  name         = "position_results"  # Match code usage (not tradepulse_ prefix)
+  name         = "position_results" # Match code usage (not tradepulse_ prefix)
   billing_mode = "PAY_PER_REQUEST"  # On-demand pricing (no capacity planning needed)
   hash_key     = "position_id"
   range_key    = "closed_at"
@@ -58,7 +58,7 @@ resource "aws_dynamodb_table" "position_results" {
 # Purpose: Stores AI trading signals for model retraining and analysis
 
 resource "aws_dynamodb_table" "trading_signals_v2" {
-  name         = "trading_signals_v2"  # Match code usage (not tradepulse_ prefix)
+  name         = "trading_signals_v2" # Match code usage (not tradepulse_ prefix)
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "signal_id"
   range_key    = "timestamp"
@@ -107,7 +107,7 @@ resource "aws_dynamodb_table" "trading_signals_v2" {
 # Purpose: Tracks position tracker statistics (win rate, avg PnL, etc.)
 
 resource "aws_dynamodb_table" "position_tracker_stats" {
-  name         = "position_tracker_stats"  # Match code usage (not tradepulse_ prefix)
+  name         = "position_tracker_stats" # Match code usage (not tradepulse_ prefix)
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "tracker_id"
 
