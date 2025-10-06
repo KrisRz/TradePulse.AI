@@ -643,6 +643,7 @@ class HistoricalMarketContextService:
     
     async def _calculate_support_resistance_levels(self, df: pd.DataFrame):
         """Calculate comprehensive support and resistance levels"""
+        print(f"📊 S/R CALCULATION: Starting with {len(df)} total candles...")
         logger.info("📊 Pre-calculating support/resistance levels...")
         
         # Calculate for different timeframes
@@ -654,14 +655,26 @@ class HistoricalMarketContextService:
             start_date = end_date - timedelta(days=days)
             period_data = df[df.index >= start_date]
             
+            print(f"📊 S/R CALCULATION: {tf} timeframe - {len(period_data)} candles from {start_date} to {end_date}")
+            logger.info(f"📊 S/R CALCULATION: {tf} timeframe - {len(period_data)} candles")
+            
             if len(period_data) > 0:
+                print(f"📊 S/R CALCULATION: Calling _find_support_levels for {tf}...")
                 support_levels = self._find_support_levels(period_data)
+                print(f"📊 S/R CALCULATION: Got {len(support_levels)} support levels for {tf}")
+                
+                print(f"📊 S/R CALCULATION: Calling _find_resistance_levels for {tf}...")
                 resistance_levels = self._find_resistance_levels(period_data)
+                print(f"📊 S/R CALCULATION: Got {len(resistance_levels)} resistance levels for {tf}")
                 
                 self.support_resistance_levels[f"support_{tf}"] = support_levels
                 self.support_resistance_levels[f"resistance_{tf}"] = resistance_levels
                 
+                print(f"✅ S/R CALCULATION: {tf} COMPLETE - {len(support_levels)} support, {len(resistance_levels)} resistance")
                 logger.info(f"   {tf}: {len(support_levels)} support, {len(resistance_levels)} resistance levels")
+            else:
+                print(f"⚠️ S/R CALCULATION: {tf} SKIPPED - no data in period!")
+                logger.warning(f"⚠️ S/R CALCULATION: {tf} skipped - no data in period")
     
     async def _calculate_pattern_success_rates(self, df: pd.DataFrame):
         """Pre-calculate pattern success rates for instant lookup"""

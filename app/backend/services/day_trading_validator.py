@@ -95,25 +95,29 @@ class DayTradingValidator:
         
         # ADAPTIVE Day Trading Parameters - NO HARDCODED VALUES!
         # These adjust based on market conditions and signal confidence
+        # RELAXED PARAMS FOR VIRTUAL PORTFOLIO TESTING
+        # Previous params blocked 100% of signals - now relaxed for actual trading
         self._base_params = {
-            'min_risk_reward_ratio': 1.5,
-            'max_spread_pct': 0.05,
-            'min_volume_ratio': 0.7,
-            'max_volatility': 0.08,  # Bitcoin: 8% (not 5%)
-            'min_volatility': 0.015,
-            'min_resistance_distance': 0.005,
-            'max_support_distance': 0.02
+            'min_risk_reward_ratio': 1.10,  # 1.1:1 (RELAXED from 1.5 - too strict!)
+            'max_spread_pct': 0.10,         # 0.10% max spread (RELAXED from 0.05)
+            'min_volume_ratio': 0.30,       # 30% avg volume (RELAXED from 0.70 - weekends!)
+            'max_volatility': 0.10,         # Bitcoin: 10% (RELAXED from 8%)
+            'min_volatility': 0.005,        # 0.5% (RELAXED from 1.5% - too strict!)
+            'min_resistance_distance': 0.003,  # 0.3% (RELAXED from 0.5%)
+            'max_support_distance': 0.03    # 3% (RELAXED from 2%)
         }
         
         # ADAPTIVE ADJUSTMENTS for different conditions
         self._weekend_adjustments = {
-            'min_volume_ratio': 0.3,  # Weekend = lower volume OK
-            'max_volatility': 0.10    # Weekend = higher volatility OK
+            'min_volume_ratio': 0.20,  # Weekend = even lower volume OK (RELAXED)
+            'max_volatility': 0.12,    # Weekend = higher volatility OK (RELAXED)
+            'min_volatility': 0.003    # Weekend = very low volatility OK (RELAXED)
         }
         
         self._high_confidence_adjustments = {
-            'min_risk_reward_ratio': 1.2,  # High confidence = relax RR
-            'min_volume_ratio': 0.5        # High confidence = lower volume OK
+            'min_risk_reward_ratio': 1.05,  # High confidence = very relaxed RR (RELAXED)
+            'min_volume_ratio': 0.20,       # High confidence = very low volume OK (RELAXED)
+            'min_volatility': 0.002         # High confidence = any volatility OK (RELAXED)
         }
         
         # Learning system
@@ -348,13 +352,14 @@ class DayTradingValidator:
     def _validate_layer_agreement(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
         """Validate that enough layers agree (ADAPTIVE based on confidence)"""
         # ADAPTIVE: High confidence signals can have lower layer agreement
-        if setup.confidence >= 0.80:
-            min_agreement = 3  # High confidence: 3/6 OK
-            logger.info(f"🎯 HIGH CONFIDENCE ({setup.confidence:.1%}): Requiring only 3/6 layer agreement")
-        elif setup.confidence >= 0.70:
-            min_agreement = 3  # Good confidence: 3/6 OK
+        # RELAXED: Allow more signals through for virtual portfolio testing
+        if setup.confidence >= 0.70:
+            min_agreement = 2  # Good confidence: 2/6 OK (RELAXED from 3)
+            logger.info(f"🎯 HIGH CONFIDENCE ({setup.confidence:.1%}): Requiring only 2/6 layer agreement")
+        elif setup.confidence >= 0.60:
+            min_agreement = 3  # Medium confidence: 3/6 OK (RELAXED)
         else:
-            min_agreement = 4  # Lower confidence: 4/6 required
+            min_agreement = 3  # Lower confidence: 3/6 required (RELAXED from 4)
         
         if setup.layer_agreement < min_agreement:
             return False, f"Insufficient layer agreement ({setup.layer_agreement}/6 < {min_agreement}/6)"
