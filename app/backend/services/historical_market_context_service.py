@@ -197,6 +197,8 @@ class HistoricalMarketContextService:
                 "resistance": [float(r) for r in cache_item.get("resistance_levels", [])]
             }
             
+            logger.info(f"✅ Loaded 90-day historical context from DynamoDB ({age_hours:.1f}h old)")
+            
             # Load pattern success rates
             for pattern_key, data in cache_item.get("pattern_success_rates", {}).items():
                 self.pattern_success_rates[pattern_key] = PatternSuccessRate(
