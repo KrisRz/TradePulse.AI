@@ -503,3 +503,5 @@ def get_day_trading_validator() -> DayTradingValidator:
 
 
 __all__ = ["DayTradingValidator", "get_day_trading_validator", "TradeSetup", "FailedTrade"]
+
+# VERSION 2.0.0 - Cache bust Mon Oct  6 21:34:15 BST 2025

@@ -1247,3 +1247,5 @@ async def get_historical_context_service() -> HistoricalMarketContextService:
 
 # Export the service
 __all__ = ["HistoricalMarketContextService", "get_historical_context_service", "PriceRange", "PatternSuccessRate", "MarketRegime"]
+
+# VERSION 3.0.1 - Cache bust Mon Oct  6 21:34:15 BST 2025
