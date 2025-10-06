@@ -113,7 +113,10 @@ class BrainController:
         """Initialize BRAIN controller and all services with automatic startup"""
         if self.state.current_state != BrainState.INIT:
             return {"status": "already_initialized", "current_state": self.state.current_state.value}
-            
+        
+        print("=" * 80)
+        print("🧠 BRAIN CONTROLLER: Starting initialization...")
+        print("=" * 80)
         logger.info("🚀 BRAIN Controller initialization starting...")
         
         try:
