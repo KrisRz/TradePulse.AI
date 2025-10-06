@@ -84,9 +84,9 @@ resource "aws_apprunner_service" "backend" {
     protocol            = "HTTP"
     path                = "/health"
     interval            = 10
-    timeout             = 10  # Increased from 5 to 10 seconds (startup can be slow)
+    timeout             = 10 # Increased from 5 to 10 seconds (startup can be slow)
     healthy_threshold   = 1
-    unhealthy_threshold = 5   # Increased from 3 to 5 (give more retries)
+    unhealthy_threshold = 5 # Increased from 3 to 5 (give more retries)
   }
 
   # Auto scaling configuration
