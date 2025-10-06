@@ -127,15 +127,10 @@ class HistoricalMarketContextService:
             # DAY TRADING: Try DynamoDB first (90-day fresh data)
             if await self._load_from_dynamodb():
                 logger.info("✅ Loaded fresh 90-day data from DynamoDB")
-            # Fallback: Check local cache
-            elif await self._is_cache_valid():
-                logger.info("✅ Loading pre-calculated historical data from cache...")
-                await self._load_from_cache()
-            # Last resort: Pre-calculate from parquet (if available)
+            # PROFESSIONAL: Fetch from Binance if DynamoDB empty (NO local cache fallbacks!)
             else:
-                logger.info("🔄 Pre-calculating historical data from parquet files...")
-                await self._pre_calculate_historical_data()
-                await self._save_to_cache()
+                logger.warning("⚠️ DynamoDB empty - fetching fresh data from Binance API...")
+                await self._fetch_and_calculate_from_binance()
             
             self.is_initialized = True
             self.is_loading = False
@@ -191,13 +186,20 @@ class HistoricalMarketContextService:
                     last_updated=datetime.fromtimestamp(int(data.get("last_updated", 0)), tz=timezone.utc)
                 )
             
-            # Load support/resistance
-            self.support_resistance_levels["30D"] = {
-                "support": [float(s) for s in cache_item.get("support_levels", [])],
-                "resistance": [float(r) for r in cache_item.get("resistance_levels", [])]
-            }
+            # Load support/resistance - FIX KEY FORMAT BUG!
+            # Store as "support_30D" and "resistance_30D" (not nested dict)
+            support_levels = [float(s) for s in cache_item.get("support_levels", [])]
+            resistance_levels = [float(r) for r in cache_item.get("resistance_levels", [])]
+            
+            self.support_resistance_levels["support_30D"] = support_levels
+            self.support_resistance_levels["resistance_30D"] = resistance_levels
+            self.support_resistance_levels["support_7D"] = support_levels  # Use 30D for 7D
+            self.support_resistance_levels["resistance_7D"] = resistance_levels
+            self.support_resistance_levels["support_1D"] = support_levels  # Use 30D for 1D
+            self.support_resistance_levels["resistance_1D"] = resistance_levels
             
             logger.info(f"✅ Loaded 90-day historical context from DynamoDB ({age_hours:.1f}h old)")
+            logger.info(f"   S/R LEVELS: {len(support_levels)} support, {len(resistance_levels)} resistance")
             
             # Load pattern success rates
             for pattern_key, data in cache_item.get("pattern_success_rates", {}).items():
@@ -221,6 +223,133 @@ class HistoricalMarketContextService:
         except Exception as e:
             logger.warning(f"   Failed to load from DynamoDB: {e}")
             return False
+    
+    async def _fetch_and_calculate_from_binance(self):
+        """Fetch fresh data from Binance API and calculate S/R levels (PROFESSIONAL FALLBACK)"""
+        print("=" * 80)
+        print("🚀 PROFESSIONAL FALLBACK: Fetching fresh data from Binance API...")
+        print("=" * 80)
+        logger.info("🚀 Fetching 90 days of data from Binance API...")
+        
+        try:
+            import requests
+            from decimal import Decimal
+            
+            # Fetch 90 days of 1h candles (90 * 24 = 2160 candles)
+            url = "https://api.binance.com/api/v3/klines"
+            params = {
+                "symbol": "BTCUSDT",
+                "interval": "1h",
+                "limit": 1000  # Max per request
+            }
+            
+            all_candles = []
+            end_time = None
+            
+            # Fetch in batches (need 3 requests for 2160 candles)
+            for batch in range(3):
+                if end_time:
+                    params["endTime"] = end_time
+                
+                print(f"📡 Fetching batch {batch+1}/3 from Binance API...")
+                response = requests.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                candles = response.json()
+                
+                if not candles:
+                    break
+                
+                all_candles = candles + all_candles  # Prepend (reverse chronological)
+                end_time = candles[0][0] - 1  # Start from before first candle
+                print(f"   Got {len(candles)} candles, total: {len(all_candles)}")
+            
+            logger.info(f"✅ Fetched {len(all_candles)} candles from Binance API")
+            print(f"✅ Fetched {len(all_candles)} candles from Binance API")
+            
+            # Convert to DataFrame
+            df_data = []
+            for candle in all_candles:
+                df_data.append({
+                    'timestamp': pd.to_datetime(int(candle[0]), unit='ms'),
+                    'open': float(candle[1]),
+                    'high': float(candle[2]),
+                    'low': float(candle[3]),
+                    'close': float(candle[4]),
+                    'volume': float(candle[5])
+                })
+            
+            df = pd.DataFrame(df_data)
+            df.set_index('timestamp', inplace=True)
+            df.sort_index(inplace=True)
+            
+            print(f"📊 Data range: {df.index.min()} to {df.index.max()}")
+            print(f"📊 Price range: ${df['close'].min():,.0f} - ${df['close'].max():,.0f}")
+            logger.info(f"📊 Data range: {df.index.min()} to {df.index.max()}")
+            
+            # Add technical indicators
+            df = await self._add_technical_indicators_to_dataframe(df)
+            
+            # Calculate S/R levels for all timeframes
+            print("🔍 Calculating S/R levels for all timeframes...")
+            await self._calculate_support_resistance_levels(df)
+            
+            # Calculate price ranges
+            await self._calculate_price_ranges(df)
+            
+            # Save to DynamoDB for next time
+            await self._save_to_dynamodb(df)
+            
+            print("✅ PROFESSIONAL FALLBACK COMPLETE!")
+            print("=" * 80)
+            logger.info("✅ Binance fallback completed successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Binance API fallback failed: {e}")
+            print(f"❌ CRITICAL: Binance API fallback failed: {e}")
+            raise
+    
+    async def _save_to_dynamodb(self, df: pd.DataFrame):
+        """Save calculated metrics to DynamoDB for next time"""
+        try:
+            from app.backend.core.database import DynamoDBClient
+            from app.backend.core.config import get_settings
+            
+            settings = get_settings()
+            client = DynamoDBClient(local_development=settings.is_development)
+            
+            # Prepare cache item
+            cache_item = {
+                "symbol": "BTCUSDT",
+                "period": "90D",
+                "last_updated": int(datetime.now(timezone.utc).timestamp()),
+                "support_levels": [Decimal(str(s)) for s in self.support_resistance_levels.get("support_30D", [])],
+                "resistance_levels": [Decimal(str(r)) for r in self.support_resistance_levels.get("resistance_30D", [])],
+                "price_ranges": {},
+                "pattern_success_rates": {}
+            }
+            
+            # Add price ranges
+            for period, pr in self.price_ranges.items():
+                cache_item["price_ranges"][period] = {
+                    "high": Decimal(str(pr.high)),
+                    "low": Decimal(str(pr.low)),
+                    "range_pct": Decimal(str(pr.range_pct)),
+                    "current_position": Decimal(str(pr.current_position)),
+                    "support_levels": [Decimal(str(s)) for s in pr.support_levels],
+                    "resistance_levels": [Decimal(str(r)) for r in pr.resistance_levels],
+                    "last_updated": int(pr.last_updated.timestamp())
+                }
+            
+            # Save to DynamoDB
+            table_name = "market_context_cache"
+            client.put_item(table_name, cache_item)
+            
+            logger.info(f"✅ Saved calculated metrics to DynamoDB ({len(cache_item['support_levels'])} S, {len(cache_item['resistance_levels'])} R)")
+            print(f"✅ Saved to DynamoDB: {len(cache_item['support_levels'])} support, {len(cache_item['resistance_levels'])} resistance")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to save to DynamoDB: {e}")
+            # Non-critical - we already have the data in memory
     
     async def _is_cache_valid(self) -> bool:
         """Check if cached data exists and is up to date"""
@@ -1255,4 +1384,7 @@ async def get_historical_context_service() -> HistoricalMarketContextService:
 # Export the service
 __all__ = ["HistoricalMarketContextService", "get_historical_context_service", "PriceRange", "PatternSuccessRate", "MarketRegime"]
 
-# VERSION 3.0.1 - Cache bust Mon Oct  6 21:34:15 BST 2025
+# VERSION 4.0.0 - Professional S/R system with Binance API fallback - Mon Oct  6 22:00:00 BST 2025
+# FIX: S/R key format bug (support_30D not 30D)
+# FIX: Binance API fallback if DynamoDB empty (NO local parquet!)
+# PROFESSIONAL: ATR-based risk-reward when S/R unavailable

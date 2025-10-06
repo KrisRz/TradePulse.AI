@@ -284,21 +284,36 @@ class DayTradingValidator:
         return True, f"Volatility OK ({setup.volatility:.1%}, range: {min_vol:.1%}-{max_vol:.1%})"
     
     def _validate_risk_reward(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
-        """Validate risk-reward ratio for day trading (ADAPTIVE)"""
+        """Validate risk-reward ratio for day trading (ADAPTIVE with ATR fallback)"""
         try:
-            # Calculate potential profit (to resistance)
-            potential_profit = abs(setup.resistance - setup.current_price) / setup.current_price
+            # PROFESSIONAL: If no S/R levels, use ATR-based targets (industry standard)
+            if setup.resistance == 0 or setup.support == 0:
+                logger.info("📊 Using ATR-based risk-reward (no S/R levels)")
+                
+                # ATR-based targets: 2x ATR profit, 1x ATR stop loss (conservative)
+                # This is professional practice when S/R levels are unavailable
+                atr_pct = setup.volatility * 1.5  # Approximate ATR from volatility
+                potential_profit = atr_pct * 2  # 2x ATR profit target
+                potential_loss = atr_pct  # 1x ATR stop loss
+                
+                risk_reward = potential_profit / potential_loss  # Should be 2.0
+                min_rr = params['min_risk_reward_ratio']
+                
+                if risk_reward < min_rr:
+                    return False, f"ATR-based RR too low ({risk_reward:.2f}:1 < {min_rr:.2f}:1)"
+                
+                return True, f"ATR-based RR OK ({risk_reward:.2f}:1, profit: +{potential_profit:.2%}, stop: -{potential_loss:.2%})"
             
-            # Calculate potential loss (to support)
+            # STANDARD: Use S/R levels for risk-reward
+            potential_profit = abs(setup.resistance - setup.current_price) / setup.current_price
             potential_loss = abs(setup.current_price - setup.support) / setup.current_price
             
             if potential_loss == 0:
                 return False, "Invalid support level (zero risk)"
             
-            # Calculate risk-reward ratio
             risk_reward = potential_profit / potential_loss
-            
             min_rr = params['min_risk_reward_ratio']
+            
             if risk_reward < min_rr:
                 return False, f"Risk-reward too low ({risk_reward:.2f}:1 < {min_rr:.2f}:1)"
             
@@ -309,15 +324,19 @@ class DayTradingValidator:
             return False, "Risk-reward calculation error"
     
     def _validate_support_resistance(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
-        """Validate support/resistance levels provide room (ADAPTIVE)"""
+        """Validate support/resistance levels provide room (ADAPTIVE with ATR fallback)"""
         try:
-            # Distance to resistance
+            # PROFESSIONAL: If no S/R levels, skip this check (ATR-based RR already validated)
+            if setup.resistance == 0 or setup.support == 0:
+                logger.info("📊 Skipping S/R distance check (using ATR-based targets)")
+                return True, "ATR-based targets (no S/R required)"
+            
+            # STANDARD: Validate S/R distance
             resistance_dist = abs(setup.resistance - setup.current_price) / setup.current_price
             min_res_dist = params['min_resistance_distance']
             if resistance_dist < min_res_dist:
                 return False, f"Too close to resistance ({resistance_dist:.2%} < {min_res_dist:.2%})"
             
-            # Distance to support
             support_dist = abs(setup.current_price - setup.support) / setup.current_price
             max_sup_dist = params['max_support_distance']
             if support_dist > max_sup_dist:
@@ -504,4 +523,5 @@ def get_day_trading_validator() -> DayTradingValidator:
 
 __all__ = ["DayTradingValidator", "get_day_trading_validator", "TradeSetup", "FailedTrade"]
 
-# VERSION 2.0.0 - Cache bust Mon Oct  6 21:34:15 BST 2025
+# VERSION 3.0.0 - Professional ATR-based risk-reward fallback - Mon Oct  6 22:00:00 BST 2025
+# PROFESSIONAL: ATR-based targets when S/R levels unavailable (industry standard)

@@ -1014,32 +1014,15 @@ class BrainController:
                 # Day trading engine handles its own warm-up internally
                 logger.info("✅ WARM-UP: Day Trading Engine will warm up automatically")
             else:
-                logger.warning("⚠️ Day trading engine not available, using fallback warm-up")
-                await self._fallback_warm_up()
+                logger.error("❌ Day trading engine not available - cannot warm up!")
+                raise RuntimeError("Day trading engine required for warmup")
                 
         except Exception as e:
             logger.error(f"❌ Warm-up failed: {e}")
             # Proceed anyway but log warning
             logger.warning("⚠️ Trading will start without warm-up (RISK!)")
     
-    async def _fallback_warm_up(self):
-        """Fallback warm-up if day trading engine unavailable"""
-        logger.info("🔄 FALLBACK WARM-UP: 5-minute basic market analysis...")
-        
-        for cycle in range(20):  # 5 minutes
-            try:
-                tick_data = await self._get_fresh_market_data()
-                if cycle % 4 == 0:  # Every minute
-                    progress = (cycle / 20) * 100
-                    price = tick_data.get('tick', 0) if tick_data else 0
-                    logger.info(f"🔥 FALLBACK Progress: {progress:.0f}% - Price: ${price:,.2f}")
-                
-                await asyncio.sleep(15)
-                
-            except Exception as e:
-                logger.warning(f"⚠️ Fallback cycle {cycle} failed: {e}")
-        
-        logger.info("✅ FALLBACK WARM-UP COMPLETE")
+    # REMOVED: No fallback warmup - professional system uses real engines only
     
     async def _automatic_warmup_timer(self):
         """
