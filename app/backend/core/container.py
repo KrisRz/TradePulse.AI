@@ -34,6 +34,8 @@ class ServiceContainer:
     def __init__(self):
         self._instances: Dict[str, object] = {}
         self._factories: Dict[str, callable] = {}
+        self._singletons: Dict[str, object] = {}  # Legacy singleton storage
+        self._services: Dict[str, callable] = {}  # Transient services
         self._sealed = False
         self._initialized = False
         self._initialization_in_progress = False
