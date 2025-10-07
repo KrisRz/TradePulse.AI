@@ -321,21 +321,6 @@ resource "aws_dynamodb_table" "users" {
 }
 
 # Virtual portfolios table
-resource "aws_dynamodb_table" "virtual_portfolios" {
-  name         = "virtual_portfolios"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "user_id"
-
-  attribute {
-    name = "user_id"
-    type = "S"
-  }
-
-  tags = {
-    Name = "${var.project_name}-virtual-portfolios"
-  }
-}
-
 # AI vs Random experiments
 resource "aws_dynamodb_table" "ai_vs_random_experiments" {
   name         = "ai_vs_random_experiments"

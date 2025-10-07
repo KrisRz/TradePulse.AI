@@ -195,64 +195,7 @@ resource "aws_dynamodb_table" "brain_state" {
   }
 }
 
-resource "aws_dynamodb_table" "market_data" {
-  name         = "${var.project_name}_market_data"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "symbol"
-  range_key    = "timestamp"
-
-  attribute {
-    name = "symbol"
-    type = "S"
-  }
-
-  attribute {
-    name = "timestamp"
-    type = "N"
-  }
-
-  ttl {
-    attribute_name = "ttl"
-    enabled        = true
-  }
-
-  tags = {
-    Name        = "${var.project_name}-market-data"
-    Environment = "production"
-    Purpose     = "90-day rolling window for day trading"
-  }
-}
-
-# Runtime table for lease management and heartbeat monitoring
-resource "aws_dynamodb_table" "runtime" {
-  name         = "${var.project_name}_runtime"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  ttl {
-    attribute_name = "ttl"
-    enabled        = true
-  }
-
-  point_in_time_recovery {
-    enabled = true
-  }
-
-  tags = {
-    Name = "${var.project_name}-runtime"
-  }
-}
+# Removed duplicate market_data and runtime tables - using versions from dynamodb-app-tables.tf
 
 # Optional: DynamoDB VPC Endpoint for cost optimization
 resource "aws_vpc_endpoint" "dynamodb" {
