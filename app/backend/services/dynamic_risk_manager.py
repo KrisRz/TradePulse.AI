@@ -712,8 +712,10 @@ class DynamicRiskManager:
                         max_stop_from_entry = entry_price * (1 - 0.006)  # 0.60% max drawdown
                         new_stop = max(max_stop_from_entry, new_stop)  # Don't go below cap
                     
-                    if new_stop != position.stop_loss:
-                        old_stop = position.stop_loss
+                    # FIXED: Convert stop_loss to float to prevent Decimal/float type mismatch
+                    current_stop_loss = float(position.stop_loss) if isinstance(position.stop_loss, Decimal) else position.stop_loss
+                    if new_stop != current_stop_loss:
+                        old_stop = current_stop_loss
                         change_pct = ((new_stop - old_stop) / old_stop) * 100 if old_stop else 0
                         logger.info(f"📊 Adjusting trailing stop: {position.position_id} {old_stop:.2f} -> {new_stop:.2f} ({change_pct:+.1f}%)")
                         
@@ -785,8 +787,11 @@ class DynamicRiskManager:
             # Return VaR as percentage for day trading
             # For new positions, VaR can be higher due to initial volatility
             if hasattr(position, 'entry_price') and hasattr(position, 'current_price'):
-                entry_price = float(getattr(position, 'entry_price', 0))
-                current_price = float(getattr(position, 'current_price', entry_price))
+                # FIXED: Ensure all values are float to prevent Decimal/float type mismatch
+                entry_price = getattr(position, 'entry_price', 0)
+                entry_price = float(entry_price) if isinstance(entry_price, Decimal) else float(entry_price)
+                current_price = getattr(position, 'current_price', entry_price)
+                current_price = float(current_price) if isinstance(current_price, Decimal) else float(current_price)
                 
                 if entry_price > 0:
                     # VaR based on current price deviation from entry
