@@ -68,6 +68,11 @@ class ModelRetrainingService:
         
     async def initialize(self):
         """Initialize the retraining service"""
+        # Idempotency guard
+        if self.is_initialized:
+            logger.info("🔄 Model Retraining Service already initialized, skipping...")
+            return
+        
         if not ML_AVAILABLE:
             raise RuntimeError("ML libraries not available - cannot initialize retraining service")
             

@@ -175,6 +175,7 @@ class ProfessionalPortfolio:
         self.daily_starting_balance = self.initial_balance  # Use the resolved initial_balance
         self.peak_balance = self.initial_balance
         self.max_drawdown_amount = Decimal('0')
+        self.last_daily_reset_date = datetime.now(timezone.utc).date()  # Track last reset
         
         # Risk management - OPTIMIZED FOR SMALL FREQUENT TRADES
         self.daily_trades = 0
@@ -1210,6 +1211,9 @@ class ProfessionalPortfolio:
         
     def get_daily_pnl(self) -> Decimal:
         """Get daily P&L amount - REQUIRED by BRAIN controller"""
+        # Auto-reset if new day
+        self._check_and_reset_daily_metrics()
+        
         try:
             current_value = self.total_value
             daily_pnl = current_value - self.daily_starting_balance
@@ -1220,6 +1224,9 @@ class ProfessionalPortfolio:
             
     def get_daily_pnl_percentage(self) -> float:
         """Get daily P&L as percentage of starting balance - REQUIRED by emergency controls"""
+        # Auto-reset if new day
+        self._check_and_reset_daily_metrics()
+        
         try:
             current_value = float(self.cash_balance or Decimal('0')) + sum(
                 float(pos.current_value or Decimal('0')) for pos in self.positions.values() 
@@ -1233,6 +1240,23 @@ class ProfessionalPortfolio:
         except Exception as e:
             logger.error(f"Daily P&L calculation failed: {e}")
             return 0.0
+    
+    def _check_and_reset_daily_metrics(self):
+        """Check if it's a new day and reset daily metrics if needed"""
+        try:
+            current_date = datetime.now(timezone.utc).date()
+            if current_date > self.last_daily_reset_date:
+                # New day detected - reset daily metrics
+                current_value = float(self.cash_balance or Decimal('0')) + sum(
+                    float(pos.current_value or Decimal('0')) for pos in self.positions.values() 
+                    if pos.status == PositionStatus.OPEN
+                )
+                self.daily_starting_balance = Decimal(str(current_value))
+                self.daily_trades = 0
+                self.last_daily_reset_date = current_date
+                logger.info(f"📅 Daily metrics reset - New starting balance: ${current_value:,.2f}")
+        except Exception as e:
+            logger.error(f"Failed to reset daily metrics: {e}")
 
 # Professional singleton pattern with persistent instances
 _portfolio_instances: Dict[str, ProfessionalPortfolio] = {}

@@ -208,6 +208,14 @@ class EnhancedMarketPersistence:
     
     async def initialize(self) -> Dict[str, Any]:
         """Initialize persistence engine"""
+        # Idempotency guard
+        if self.is_running:
+            logger.info("🔄 Enhanced Persistence Engine already initialized, skipping...")
+            return {
+                "status": "already_initialized",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
         try:
             logger.info("⚡ Initializing Enhanced Persistence Engine...")
             

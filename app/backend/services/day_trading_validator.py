@@ -115,7 +115,7 @@ class DayTradingValidator:
         }
         
         self._high_confidence_adjustments = {
-            'min_risk_reward_ratio': 1.05,  # High confidence = very relaxed RR (RELAXED)
+            'min_risk_reward_ratio': 0.95,  # High confidence (80%+) = very relaxed RR - allow slightly negative RR for strong signals
             'min_volume_ratio': 0.20,       # High confidence = very low volume OK (RELAXED)
             'min_volatility': 0.002         # High confidence = any volatility OK (RELAXED)
         }

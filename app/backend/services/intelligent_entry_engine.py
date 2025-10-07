@@ -65,6 +65,7 @@ class EntryReason(str, Enum):
     MARKET_REGIME_SHIFT = "market_regime_shift"
     HIGH_CONFIDENCE = "high_confidence"
     MANUAL_OVERRIDE = "manual_override"
+    PLAYBOOK_OVERRIDE = "playbook_override"  # Playbook-specific override entry
     INSUFFICIENT_CONFIDENCE = "insufficient_confidence"
     POOR_TIMING = "poor_timing"
     WEAK_SIGNAL = "weak_signal"  # Added for weak signal rejection
@@ -859,6 +860,9 @@ class IntelligentEntryEngine:
     async def _analyze_entry_core(self, symbol: str, signal_data: Dict[str, Any], user_portfolio: Dict[str, Any], 
                                  market_data_override: Optional[Dict[str, Any]], current_price: float, start_time):
         """Core entry analysis logic separated for better error handling"""
+        # Initialize market_data early to prevent NameError in exception handlers
+        market_data = None
+        
         try:
             
             # Get current market data with strict validation (no fallbacks)

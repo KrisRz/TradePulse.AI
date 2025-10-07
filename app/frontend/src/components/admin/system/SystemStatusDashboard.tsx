@@ -299,9 +299,11 @@ export default function SystemStatusDashboard() {
         if (!response.success) throw new Error('Portfolio API unavailable');
         
         const data = response.data;
-        const totalValue = data.total_value || 0;
-        const activePositions = data.active_positions || 0;
-        const cashBalance = data.cash_balance || 0;
+        // FIX: Admin endpoint returns nested structure
+        const summary = data.portfolio_summary || {};
+        const totalValue = summary.total_value || 0;
+        const activePositions = (data.active_positions || []).length;
+        const cashBalance = summary.balance || 0;
         
         return {
           name: 'Virtual Portfolio',

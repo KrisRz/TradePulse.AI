@@ -173,6 +173,14 @@ class BinanceHybridClient:
     
     async def initialize(self) -> Dict[str, Any]:
         """Initialize all client components"""
+        # Idempotency guard
+        if self.is_running:
+            logger.info("🔄 Binance Hybrid Client already initialized, skipping...")
+            return {
+                "status": "already_initialized",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
         try:
             logger.info("🚀 Initializing Binance Hybrid Client...")
             

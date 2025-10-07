@@ -168,9 +168,13 @@ class TensorFlowAsyncService:
             logger.error(f"❌ Async model loading failed: {e}")
     
     def keras_predict(self, model, x):
-        """FIXED: Remove verbose entirely to avoid TF 2.16+ conflicts"""
-        # Don't pass verbose at all - let TensorFlow handle it
-        return model.predict(x)
+        """FIXED: Explicitly set verbose=0 to avoid TF 2.16+ conflicts"""
+        # Explicitly pass verbose=0 to prevent Keras 3.x from adding duplicate verbose argument
+        try:
+            return model.predict(x, verbose=0)
+        except TypeError:
+            # Fallback for older TensorFlow versions that don't accept verbose
+            return model.predict(x)
     
     def _load_single_model(self, model_path: Path):
         """Load a single TensorFlow model (thread-safe) - FIXED for proper warm-up"""

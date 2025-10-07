@@ -166,15 +166,13 @@ class BrainController:
             from app.backend.core.container import get_container
             container = get_container()
             
-            # Connect to UNIFIED Day Trading Engine (ADAPTIVE)
-            self.unified_engine = container.get("unified_day_trading_engine")
-            # Also get as day_trading_engine for backward compatibility
+            # Connect to Day Trading Engine
             self.day_trading_engine = container.get("day_trading_engine")
+            # Backward compatibility alias
+            self.unified_engine = self.day_trading_engine
             
-            if self.unified_engine:
-                logger.info("✅ Connected to ADAPTIVE Unified Day Trading Engine")
-            elif self.day_trading_engine:
-                logger.info("✅ Connected to Day Trading Engine (fallback)")
+            if self.day_trading_engine:
+                logger.info("✅ Connected to Day Trading Engine")
             else:
                 logger.warning("⚠️ No trading engine found")
                 
@@ -498,7 +496,8 @@ class BrainController:
         """Execute simplified monitoring cycle - Day Trading Engine handles actual trading"""
         try:
             # SIMPLIFIED BRAIN: Monitor Day Trading Engine operation
-            logger.info("🧠 BRAIN CYCLE: Monitoring trading engines status")
+            print(f"🧠 BRAIN: Cycle #{self.state.cycle_count} - State: {self.state.current_state.value}")
+            logger.info(f"🧠 BRAIN CYCLE #{self.state.cycle_count}: Monitoring trading engines status")
             
             # (A) Check Trading Engine status (with proper fallback)
             try:
@@ -1227,6 +1226,9 @@ class BrainController:
         except Exception:
             pass
         
+        print("=" * 80)
+        print(f"🔄 BRAIN STATE TRANSITION: {old_state.value} → {new_state.value}")
+        print("=" * 80)
         logger.info(f"🔄 BRAIN State: {old_state.value} → {new_state.value}")
         
         # Publish state change event
@@ -1250,7 +1252,7 @@ class BrainController:
         
     def get_status(self) -> Dict[str, Any]:
         """Get comprehensive BRAIN status"""
-        return {
+        status = {
             "current_state": self.state.current_state.value,
             "state_entered_at": self.state.state_entered_at.isoformat(),
             "uptime_seconds": self.state.uptime_seconds,
@@ -1278,6 +1280,12 @@ class BrainController:
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+        
+        # DEBUG LOG on every status check
+        print(f"🧠 BRAIN STATUS CHECK: State={status['current_state']}, Cycles={status['cycle_count']}, Services={list(status['services'].keys())}")
+        logger.debug(f"🧠 BRAIN status requested: {status['current_state']} | Cycles: {status['cycle_count']}")
+        
+        return status
 
 # Global BRAIN controller instance
 _brain_controller: Optional[BrainController] = None
@@ -1285,14 +1293,36 @@ _brain_controller: Optional[BrainController] = None
 async def get_brain_controller() -> BrainController:
     """Get or create global BRAIN controller"""
     global _brain_controller
+    
+    print("🧠 get_brain_controller() CALLED")
+    logger.info("🧠 get_brain_controller() function invoked")
+    
     if _brain_controller is None:
+        print("🧠 BRAIN: No existing instance, creating new Brain Controller...")
+        logger.info("🧠 BRAIN: Creating new Brain Controller instance")
         try:
             _brain_controller = BrainController()
+            print(f"🧠 BRAIN: Instance created: {_brain_controller}")
+            logger.info("🧠 BRAIN: Instance object created, starting initialization...")
+            
             await _brain_controller.initialize()
+            
+            print(f"🧠 BRAIN: Initialization complete! State: {_brain_controller.state.current_state.value}")
+            logger.info(f"🧠 BRAIN: Initialization successful - State: {_brain_controller.state.current_state.value}")
         except Exception as e:
+            print(f"🧠 BRAIN: INITIALIZATION ERROR: {e}")
             logging.error(f"Failed to initialize brain controller: {e}")
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"🧠 BRAIN: Error traceback:\n{error_trace}")
+            logger.error(f"Full traceback: {error_trace}")
             # Return a basic brain controller without full initialization
             _brain_controller = BrainController()
+            print("🧠 BRAIN: Returning basic (uninitialized) controller")
+    else:
+        print(f"🧠 BRAIN: Returning existing instance (State: {_brain_controller.state.current_state.value})")
+        logger.info(f"🧠 BRAIN: Returning cached instance - State: {_brain_controller.state.current_state.value}")
+    
     return _brain_controller
 
 # Export classes and functions

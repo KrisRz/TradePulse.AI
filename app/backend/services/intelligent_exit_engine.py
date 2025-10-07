@@ -118,7 +118,7 @@ class IntelligentExitEngine:
         
         # LEARNED PARAMETERS (loaded from continuous learning OR intelligent defaults)
         self._learned_params = None
-        self._last_param_refresh = datetime.min
+        self._last_param_refresh = datetime.min.replace(tzinfo=timezone.utc)  # FIX: timezone-aware
         self._initialized_params = False
         
         # DAY TRADING MODE - Professional Parameters for Quality Trades

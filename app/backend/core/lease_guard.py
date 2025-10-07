@@ -36,7 +36,7 @@ class LeaseGuard:
         # DynamoDB client
         self.ddb = boto3.client(
             "dynamodb",
-            region_name=self.settings.AWS_REGION,
+            region_name=self.settings.DYNAMODB_REGION,  # Use DYNAMODB_REGION for consistency
             endpoint_url=self.settings.DYNAMODB_ENDPOINT if self.settings.is_development else None
         )
         

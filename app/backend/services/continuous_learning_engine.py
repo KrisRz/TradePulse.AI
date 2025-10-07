@@ -165,27 +165,45 @@ class ContinuousLearningEngine:
     
     async def _periodic_optimization_loop(self):
         """Periodic optimization loop - runs every hour"""
-        print("🔄 CONTINUOUS LEARNING: Optimization loop STARTED (checking every 1h)")
+        print("=" * 80)
+        print("🔄 CONTINUOUS LEARNING: Optimization loop STARTED")
+        print("⏰ Check interval: Every 1 hour (3600s)")
+        print("📊 Auto-optimization: ENABLED" if self.auto_optimization_enabled else "⚠️ Auto-optimization: DISABLED")
+        print("=" * 80)
         logger.info("🔄 CONTINUOUS LEARNING: Optimization loop started (1h interval)")
+        
+        cycle_count = 0
         while self.is_running:
             try:
-                await asyncio.sleep(3600)  # Check every hour
+                cycle_count += 1
                 
+                # Log heartbeat every 5 minutes
+                for i in range(12):  # 12 * 5min = 60min
+                    await asyncio.sleep(300)  # 5 minutes
+                    if i % 3 == 0:  # Every 15 minutes
+                        print(f"🧠 CONTINUOUS LEARNING: Loop #{cycle_count} active - {(i+1)*5}min/{60}min")
+                        logger.info(f"🧠 CONTINUOUS LEARNING: Heartbeat - Loop #{cycle_count} at {(i+1)*5}min")
+                
+                # Now do the actual optimization check
                 if self.auto_optimization_enabled:
-                    print("🧠 CONTINUOUS LEARNING: Running optimization check...")
-                    logger.info("🧠 CONTINUOUS LEARNING: Running periodic optimization check...")
+                    print("=" * 80)
+                    print(f"🧠 CONTINUOUS LEARNING: Loop #{cycle_count} - Running optimization check...")
+                    print("=" * 80)
+                    logger.info(f"🧠 CONTINUOUS LEARNING: Loop #{cycle_count} - Running periodic optimization check...")
                     await self._check_and_optimize()
-                    print("✅ CONTINUOUS LEARNING: Optimization check completed")
-                    logger.info("✅ CONTINUOUS LEARNING: Optimization check completed")
+                    print(f"✅ CONTINUOUS LEARNING: Loop #{cycle_count} - Optimization check completed")
+                    logger.info(f"✅ CONTINUOUS LEARNING: Loop #{cycle_count} - Optimization check completed")
                 else:
-                    print("⚠️ CONTINUOUS LEARNING: Auto-optimization DISABLED")
-                    logger.warning("⚠️ CONTINUOUS LEARNING: Auto-optimization DISABLED")
+                    print(f"⚠️ CONTINUOUS LEARNING: Loop #{cycle_count} - Auto-optimization DISABLED")
+                    logger.warning(f"⚠️ CONTINUOUS LEARNING: Loop #{cycle_count} - Auto-optimization DISABLED")
                     
             except asyncio.CancelledError:
+                print("🛑 CONTINUOUS LEARNING: Optimization loop CANCELLED")
                 logger.info("🛑 CONTINUOUS LEARNING: Optimization loop cancelled")
                 break
             except Exception as e:
-                logger.error(f"❌ CONTINUOUS LEARNING: Loop error: {e}")
+                print(f"❌ CONTINUOUS LEARNING: Loop #{cycle_count} error: {e}")
+                logger.error(f"❌ CONTINUOUS LEARNING: Loop #{cycle_count} error: {e}")
                 await asyncio.sleep(300)  # Wait 5 minutes on error
     
     async def _check_and_optimize(self):
@@ -632,25 +650,50 @@ class ContinuousLearningEngine:
 
     async def _periodic_model_monitoring_loop(self):
         """Periodic model monitoring loop - runs every 12 hours"""
+        print("=" * 80)
+        print("🤖 CONTINUOUS LEARNING: Model monitoring loop STARTED")
+        print("⏰ Check interval: Every 12 hours")
+        print("=" * 80)
+        logger.info("🤖 CONTINUOUS LEARNING: Model monitoring loop started (12h interval)")
+        
+        cycle_count = 0
         while self.is_running:
             try:
-                await asyncio.sleep(3600 * 12)  # Check every 12 hours
+                cycle_count += 1
+                
+                # Log heartbeat every 2 hours
+                for i in range(6):  # 6 * 2h = 12h
+                    await asyncio.sleep(7200)  # 2 hours
+                    hours_elapsed = (i + 1) * 2
+                    print(f"🤖 CONTINUOUS LEARNING: Model monitoring #{cycle_count} - {hours_elapsed}h/{12}h")
+                    logger.info(f"🤖 CONTINUOUS LEARNING: Model monitoring heartbeat #{cycle_count} at {hours_elapsed}h")
 
                 if self.auto_optimization_enabled:
+                    print("=" * 80)
+                    print(f"🤖 CONTINUOUS LEARNING: Model monitoring #{cycle_count} - Checking models...")
+                    print("=" * 80)
+                    logger.info(f"🤖 CONTINUOUS LEARNING: Model monitoring #{cycle_count} - Checking model performance...")
                     await self._check_and_update_models()
+                    print(f"✅ CONTINUOUS LEARNING: Model monitoring #{cycle_count} - Check completed")
 
                     # Also perform portfolio cleanup every 12 hours
                     try:
                         from ..professional_portfolio import cleanup_old_portfolio_instances
                         await cleanup_old_portfolio_instances(max_age_hours=24)
+                        logger.info("🧹 Portfolio cleanup completed")
                     except Exception as cleanup_error:
                         logger.debug(f"Portfolio cleanup skipped: {cleanup_error}")
+                else:
+                    print(f"⚠️ CONTINUOUS LEARNING: Model monitoring #{cycle_count} - Auto-optimization DISABLED")
+                    logger.warning(f"⚠️ CONTINUOUS LEARNING: Model monitoring #{cycle_count} - Skipped (disabled)")
 
             except asyncio.CancelledError:
-                logger.info("🛑 Model monitoring loop cancelled")
+                print("🛑 CONTINUOUS LEARNING: Model monitoring loop CANCELLED")
+                logger.info("🛑 CONTINUOUS LEARNING: Model monitoring loop cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in model monitoring loop: {e}")
+                print(f"❌ CONTINUOUS LEARNING: Model monitoring #{cycle_count} error: {e}")
+                logger.error(f"❌ CONTINUOUS LEARNING: Model monitoring #{cycle_count} error: {e}")
                 await asyncio.sleep(3600)  # Wait 1 hour on error
 
     async def _check_and_update_models(self):

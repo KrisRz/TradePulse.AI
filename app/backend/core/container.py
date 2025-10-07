@@ -338,6 +338,44 @@ class ServiceContainer:
             # Emergency controls (REAL SAFETY SYSTEMS)
             self.register_singleton("emergency_controls", EmergencyControlSystem)
             
+            # Brain Controller (MAIN ORCHESTRATOR) - Initialize and register instance
+            try:
+                print("=" * 80)
+                print("🧠 BRAIN CONTROLLER: Starting initialization in DI container...")
+                print("=" * 80)
+                logger.info("🔄 BRAIN CONTROLLER: Starting async initialization...")
+                
+                # Initialize brain controller (async call)
+                brain_controller = await get_brain_controller()
+                
+                print(f"🧠 BRAIN CONTROLLER: Instance created: {brain_controller}")
+                print(f"🧠 BRAIN CONTROLLER: Instance type: {type(brain_controller)}")
+                print(f"🧠 BRAIN CONTROLLER: Has state: {hasattr(brain_controller, 'state')}")
+                
+                if brain_controller:
+                    logger.info(f"✅ BRAIN CONTROLLER: Instance initialized - State: {brain_controller.state.current_state.value}")
+                    print(f"✅ BRAIN CONTROLLER: Current state = {brain_controller.state.current_state.value}")
+                else:
+                    logger.error("❌ BRAIN CONTROLLER: get_brain_controller() returned None!")
+                    print("❌ BRAIN CONTROLLER: Initialization returned None!")
+                
+                # Register the initialized instance
+                self.register_singleton("brain_controller", lambda: brain_controller)
+                logger.info("✅ BRAIN CONTROLLER: Registered in DI container")
+                print("✅ BRAIN CONTROLLER: Successfully registered in DI container")
+                print("=" * 80)
+                
+            except Exception as e:
+                logger.error(f"❌ BRAIN CONTROLLER: Initialization FAILED: {e}")
+                print(f"❌ BRAIN CONTROLLER: INITIALIZATION FAILED!")
+                print(f"❌ Error: {e}")
+                import traceback
+                error_trace = traceback.format_exc()
+                logger.error(f"📋 Full traceback: {error_trace}")
+                print(f"📋 Traceback:\n{error_trace}")
+                self.register_singleton("brain_controller", lambda: None)
+                print("=" * 80)
+            
             # Enhanced persistence (REAL DATA PERSISTENCE) - Register as factory to avoid async issues
             try:
                 from app.backend.services.enhanced_market_persistence import EnhancedMarketPersistence
@@ -346,11 +384,6 @@ class ServiceContainer:
             except Exception as e:
                 logger.warning(f"⚠️ Enhanced Persistence registration failed: {e}")
                 self.register_singleton("enhanced_persistence", lambda: None)
-            
-            # BRAIN Controller - Skip registration here, handled by application.py Phase 6
-            logger.info("🔄 Brain Controller registration deferred to application startup phase")
-            # Register a placeholder to prevent service lookup failures during startup
-            self.register_singleton("brain_controller", lambda: None)
             
             # POST-INITIALIZATION: Initialize engines that were registered but not initialized
             await self._post_initialize_trading_engines()

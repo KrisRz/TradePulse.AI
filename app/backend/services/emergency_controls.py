@@ -552,7 +552,7 @@ class EmergencyControlSystem:
         
         # Stop trading brain if running
         try:
-            from app.api.v1.routes.trading import _trading_brain_enabled, stop_trading_brain_background
+            from app.backend.api.v1.routes.trading import _trading_brain_enabled, stop_trading_brain_background
             if _trading_brain_enabled:
                 await stop_trading_brain_background()
                 logger.info("✅ Trading brain stopped")
@@ -585,9 +585,7 @@ class EmergencyControlSystem:
                 try:
                     result = await portfolio.close_position(
                         position_id=position.position_id,
-                        exit_reason="emergency_stop",
-                        exit_confidence=1.0,
-                        current_price=await get_live_bitcoin_price()
+                        reason="emergency_stop"
                     )
                     
                     if result:

@@ -2,6 +2,104 @@
 # These tables are created with local DynamoDB but missing from AWS
 # Generated to match app/backend/core/database.py TableSchemas
 
+
+# Trading decisions audit log - CRITICAL for decision tracking
+resource "aws_dynamodb_table" "trading_decisions" {
+  name         = "trading_decisions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "decision_id"
+  range_key    = "timestamp"
+
+  attribute {
+    name = "decision_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "N"
+  }
+
+  attribute {
+    name = "day"
+    type = "S"
+  }
+
+  # GSI for querying decisions by day
+  global_secondary_index {
+    name            = "DayIndex"
+    hash_key        = "day"
+    range_key       = "timestamp"
+    projection_type = "ALL"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-trading-decisions"
+    Environment = "production"
+  }
+}
+
+# Market data persistence - stores real-time candle data
+resource "aws_dynamodb_table" "market_data" {
+  name         = "tradepulse_market_data"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "symbol"
+  range_key    = "timestamp"
+
+  attribute {
+    name = "symbol"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "N"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-market-data"
+    Environment = "production"
+  }
+}
+
+# Runtime table - for lease guard and singleton coordination
+resource "aws_dynamodb_table" "runtime" {
+  name         = "runtime"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-runtime"
+    Environment = "production"
+  }
+}
+
 # Live candles table for real-time market data (local/development)
 resource "aws_dynamodb_table" "live_candles" {
   name         = "live_candles"
@@ -505,5 +603,144 @@ resource "aws_dynamodb_table" "trade_analyses" {
 
   tags = {
     Name = "${var.project_name}-trade-analyses"
+  }
+}
+
+# Emergency state - CRITICAL for emergency controls and circuit breakers
+resource "aws_dynamodb_table" "emergency_state" {
+  name         = "emergency_state"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-emergency-state"
+    Environment = "production"
+    Critical    = "true"
+  }
+}
+
+# Portfolio active positions - CRITICAL for trading operations
+resource "aws_dynamodb_table" "portfolio_positions" {
+  name         = "portfolio_positions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "user_id"
+  range_key    = "position_id"
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "position_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "symbol"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  # GSI for querying positions by symbol
+  global_secondary_index {
+    name            = "SymbolIndex"
+    hash_key        = "symbol"
+    range_key       = "status"
+    projection_type = "ALL"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-portfolio-positions"
+    Environment = "production"
+    Critical    = "true"
+  }
+}
+
+# Portfolio closed positions - CRITICAL for performance tracking
+resource "aws_dynamodb_table" "portfolio_closed_positions" {
+  name         = "portfolio_closed_positions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "user_id"
+  range_key    = "position_id"
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "position_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "symbol"
+    type = "S"
+  }
+
+  attribute {
+    name = "closed_at"
+    type = "S"
+  }
+
+  # GSI for querying closed positions by symbol
+  global_secondary_index {
+    name            = "SymbolClosedIndex"
+    hash_key        = "symbol"
+    range_key       = "closed_at"
+    projection_type = "ALL"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-portfolio-closed-positions"
+    Environment = "production"
+    Critical    = "true"
+  }
+}
+
+# Virtual portfolios - HIGH priority for virtual portfolio trading
+resource "aws_dynamodb_table" "virtual_portfolios" {
+  name         = "tradepulse-virtual-portfolios"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "user_id"
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-virtual-portfolios"
+    Environment = "production"
   }
 }

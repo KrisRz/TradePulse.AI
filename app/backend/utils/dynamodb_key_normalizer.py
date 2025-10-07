@@ -20,12 +20,16 @@ logger = logging.getLogger(__name__)
 # Table key schemas - defines expected types for each table's keys
 TABLE_KEY_SCHEMAS = {
     "trading_decisions": {
-        "decision_id": "S",  # String (primary key: decision_YYYYMMDD_HHMMSS_uuid)
-        "day": "S"  # String (partition key: YYYY-MM-DD)
+        "decision_id": "S",  # String (HASH key: decision_YYYYMMDD_HHMMSS_uuid)
+        "timestamp": "N"  # Number (RANGE key: epoch timestamp)
+    },
+    "tradepulse_market_data": {
+        "symbol": "S",  # String (HASH key)
+        "timestamp": "N"  # Number (RANGE key: epoch timestamp)
     },
     "live_candles": {
         "symbol": "S",  # String
-        "timestamp": "S"  # String (epoch as string)
+        "timestamp": "N"  # Number (consistent with Terraform)
     },
     "tradepulse-live_candles-production": {
         "symbol": "S",  # String

@@ -52,12 +52,26 @@ export SECRET_KEY="${SECRET_KEY:-tradepulse-ai-dev-secret-key-2024-enterprise-gr
 export HOST="${HOST:-${API_HOST:-0.0.0.0}}"
 export PORT="${PORT:-${API_PORT:-9002}}"
 
-# Ensure single instance on desired port
+# Ensure single instance on desired port - FORCE CLEANUP
+echo "🔍 Checking if port ${PORT} is in use..."
 EXISTING_PIDS=$(lsof -t -i :"$PORT" -sTCP:LISTEN || true)
+
 if [ -n "${EXISTING_PIDS}" ]; then
-  echo "🛑 Stopping existing backend on port ${PORT}: ${EXISTING_PIDS}"
-  kill ${EXISTING_PIDS} || true
-  sleep 1
+  echo "🛑 Port ${PORT} occupied by PID(s): ${EXISTING_PIDS}"
+  echo "🔨 Force killing existing process(es)..."
+  kill -9 ${EXISTING_PIDS} 2>/dev/null || true
+  sleep 2
+  
+  # Verify port is free
+  STILL_RUNNING=$(lsof -t -i :"$PORT" -sTCP:LISTEN || true)
+  if [ -n "${STILL_RUNNING}" ]; then
+    echo "❌ ERROR: Failed to free port ${PORT}, PID ${STILL_RUNNING} still running"
+    echo "💡 Try manually: kill -9 ${STILL_RUNNING}"
+    exit 1
+  fi
+  echo "✅ Port ${PORT} is now free"
+else
+  echo "✅ Port ${PORT} is free - ready to start"
 fi
 
 # Quick preflight checks
