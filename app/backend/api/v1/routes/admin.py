@@ -2056,8 +2056,8 @@ async def clear_virtual_portfolio_database(
             db = DynamoDBClient()
             
             # Delete virtual portfolio entries
-            db.delete_item('virtual_portfolios', {'portfolio_id': 'default'})
-            tables_cleared.append('virtual_portfolios')
+            db.delete_item('tradepulse-virtual-portfolios', {'user_id': 'default'})
+            tables_cleared.append('tradepulse-virtual-portfolios')
             
             # Clear positions table  
             db.delete_item('virtual_positions', {'portfolio_id': 'default'})

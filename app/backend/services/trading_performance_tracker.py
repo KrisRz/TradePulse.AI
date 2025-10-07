@@ -1088,8 +1088,10 @@ class TradingPerformanceTracker:
                 return
             
             # Convert to DynamoDB format
+            now = datetime.now(timezone.utc)
             trade_data = {
                 "trade_id": trade.trade_id,
+                "analysis_timestamp": int(now.timestamp() * 1000),  # REQUIRED RANGE KEY: milliseconds since epoch
                 "symbol": trade.symbol,
                 "entry_time": trade.entry_time.isoformat(),
                 "exit_time": trade.exit_time.isoformat() if trade.exit_time else None,
@@ -1105,7 +1107,7 @@ class TradingPerformanceTracker:
                 "entry_quality_score": Decimal(str(trade.entry_quality_score)),
                 "exit_timing_score": Decimal(str(trade.exit_timing_score)),
                 "risk_management_score": Decimal(str(trade.risk_management_score)),
-                "created_at": datetime.now(timezone.utc).isoformat()
+                "created_at": now.isoformat()
             }
             
             # Save to trade_analyses table

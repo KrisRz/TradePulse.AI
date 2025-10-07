@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     # DynamoDB table names
     SIGNALS_TABLE: str = Field(default="trading_signals", env="SIGNALS_TABLE")
     TRADES_TABLE: str = Field(default="trading_trades", env="TRADES_TABLE")
-    PORTFOLIOS_TABLE: str = Field(default="virtual_portfolios", env="PORTFOLIOS_TABLE")
+    PORTFOLIOS_TABLE: str = Field(default="tradepulse-virtual-portfolios", env="PORTFOLIOS_TABLE")
     USERS_TABLE: str = Field(default="tradepulse_users", env="USERS_TABLE")
     ANALYTICS_TABLE: str = Field(default="tradepulse_analytics", env="ANALYTICS_TABLE")
     

@@ -81,4 +81,4 @@ EXPOSE 9002
 CMD ["python", "-m", "uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "9002", "--workers", "1"]
 
 # Cache bust for force rebuild - FRESH COMPLETE PIPELINE
-ENV CACHE_BUST=20251007_COMPLETE_PIPELINE
+ENV CACHE_BUST=20251007_CLOUDWATCH_FIXES

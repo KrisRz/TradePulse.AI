@@ -706,6 +706,8 @@ class DynamicRiskManager:
                     # CAP AGGRESSIVE TRAILING: Limit max trailing stop adjustment from entry
                     MAX_TS_FROM_ENTRY_BP = 60  # Max 0.60% from entry price at start
                     entry_price = getattr(position, 'entry_price', tick.get('tick', 0.0))
+                    # FIXED: Convert entry_price to float to avoid Decimal/float type mismatch
+                    entry_price = float(entry_price) if isinstance(entry_price, Decimal) else entry_price
                     if entry_price > 0:
                         max_stop_from_entry = entry_price * (1 - 0.006)  # 0.60% max drawdown
                         new_stop = max(max_stop_from_entry, new_stop)  # Don't go below cap

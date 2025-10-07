@@ -142,7 +142,7 @@ class PositionResultTracker:
                 'risk_assessment': result.risk_assessment,
                 'patterns_detected': result.patterns_detected,
                 'pattern_analysis_enabled': result.pattern_analysis_enabled,
-                'closed_at': result.closed_at.isoformat(),
+                'closed_at': int(result.closed_at.timestamp() * 1000),  # REQUIRED RANGE KEY: milliseconds since epoch (Number)
                 'recorded_at': datetime.now(timezone.utc).isoformat()
             }
             

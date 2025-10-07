@@ -202,8 +202,8 @@ class ProfessionalPortfolio:
             # Initialize DynamoDB client
             client = DynamoDBClient()
             
-            # Get portfolio from virtual_portfolios table
-            portfolio_data = client.get_item('virtual_portfolios', {'portfolio_id': self.user_id}, consistent_read=True)
+            # Get portfolio from virtual_portfolios table (AWS: tradepulse-virtual-portfolios)
+            portfolio_data = client.get_item('tradepulse-virtual-portfolios', {'user_id': self.user_id}, consistent_read=True)
             
             if portfolio_data:
                 balance = portfolio_data.get('balance', Decimal('50000'))
@@ -828,10 +828,9 @@ class ProfessionalPortfolio:
             
             total_value += position_value
             
-            # Save to virtual_portfolios table
+            # Save to virtual_portfolios table (AWS: tradepulse-virtual-portfolios)
             portfolio_data = {
-                'portfolio_id': self.user_id,
-                'user_id': self.user_id,
+                'user_id': self.user_id,  # PRIMARY KEY for tradepulse-virtual-portfolios
                 'balance': str(total_value),
                 'cash_balance': str(self.cash_balance),
                 'position_value': str(position_value),
@@ -845,7 +844,7 @@ class ProfessionalPortfolio:
                 'last_sync': datetime.now(timezone.utc).isoformat()
             }
             
-            self.db_client.put_item('virtual_portfolios', portfolio_data)
+            self.db_client.put_item('tradepulse-virtual-portfolios', portfolio_data)
             logger.info(f"💾 Portfolio state saved: ${float(total_value):,.2f} total, {len(self.positions)} positions")
             
         except Exception as e:
