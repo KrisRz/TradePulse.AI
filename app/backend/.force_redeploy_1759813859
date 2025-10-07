@@ -1,0 +1,3 @@
+# Force redeploy - timestamp: $(date)
+# Commit: de92cb4 - Professional trading engine fixes
+# Issue: Previous deployment didn't pick up new code
