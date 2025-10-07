@@ -28,6 +28,7 @@ class EventType(str, Enum):
     BRAIN_STARTED = "brain_started"
     BRAIN_STOPPED = "brain_stopped"
     STATE_CHANGED = "state_changed"
+    SYSTEM_READY = "system_ready"
     
     # Data events
     TICK_RECEIVED = "tick_received"
