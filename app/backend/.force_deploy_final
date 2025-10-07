@@ -1,0 +1,4 @@
+# FINAL FORCE DEPLOY - Timestamp: $(date +%s)
+# Issue: App Runner using old ECR image
+# Evidence: Logs show 1 S/R level (not 15), 1.00:1 RR (not ATR-based)
+# Fix: Cache bust + force GitHub Actions rebuild
