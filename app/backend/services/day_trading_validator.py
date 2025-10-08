@@ -102,7 +102,7 @@ class DayTradingValidator:
             'max_spread_pct': 0.10,         # 0.10% max spread (RELAXED from 0.05)
             'min_volume_ratio': 0.30,       # 30% avg volume (RELAXED from 0.70 - weekends!)
             'max_volatility': 0.10,         # Bitcoin: 10% (RELAXED from 8%)
-            'min_volatility': 0.005,        # 0.5% (RELAXED from 1.5% - too strict!)
+            'min_volatility': 0.0008,       # 0.08% (RELAXED - BTC can have low vol periods)
             'min_resistance_distance': 0.003,  # 0.3% (RELAXED from 0.5%)
             'max_support_distance': 0.03    # 3% (RELAXED from 2%)
         }
@@ -111,7 +111,7 @@ class DayTradingValidator:
         self._weekend_adjustments = {
             'min_volume_ratio': 0.20,  # Weekend = even lower volume OK (RELAXED)
             'max_volatility': 0.12,    # Weekend = higher volatility OK (RELAXED)
-            'min_volatility': 0.003    # Weekend = very low volatility OK (RELAXED)
+            'min_volatility': 0.0005   # Weekend = very low volatility OK (0.05%)
         }
         
         self._high_confidence_adjustments = {
@@ -314,6 +314,12 @@ class DayTradingValidator:
             risk_reward = potential_profit / potential_loss
             min_rr = params['min_risk_reward_ratio']
             
+            # DAY TRADING: Skip R/R check for HIGH CONFIDENCE (80%+) signals
+            # When AI is very confident, trust the signal even with tight S/R levels
+            if setup.confidence >= 0.80:
+                logger.info(f"🎯 HIGH CONFIDENCE ({setup.confidence:.1%}): Skipping R/R check (R/R={risk_reward:.2f}:1)")
+                return True, f"HIGH CONFIDENCE override (R/R={risk_reward:.2f}:1, profit: +{potential_profit:.2%}, stop: -{potential_loss:.2%})"
+            
             if risk_reward < min_rr:
                 return False, f"Risk-reward too low ({risk_reward:.2f}:1 < {min_rr:.2f}:1)"
             
@@ -405,32 +411,18 @@ class DayTradingValidator:
             layer_analysis = signal.layer_analysis
             agreement = 0
             
-            # Check each layer's recommendation
-            for layer_name in ["layer_1_regime", "layer_2_lstm", "layer_3_reversal", 
-                              "layer_4_filters", "layer_5_confidence", "layer_6_timing"]:
+            # Check each layer's recommendation (FIXED: Use actual layer names from signal)
+            for layer_name in ["layer_1_regime", "layer_2_predictive", "layer_3_patterns", 
+                              "layer_4_technical", "layer_5_price_direction", "layer_6_timing"]:
                 layer_data = layer_analysis.get(layer_name, {})
                 
-                # Different layers have different output formats
-                if layer_name == "layer_2_lstm":
-                    # LSTM: Check if prediction supports action
-                    prediction = layer_data.get("prediction", signal.price)
-                    if signal.action == "BUY" and prediction > signal.price:
-                        agreement += 1
-                    elif signal.action == "SELL" and prediction < signal.price:
-                        agreement += 1
-                elif layer_name == "layer_3_reversal":
-                    # DAY TRADING LOGIC: Reversal = OPPORTUNITY (not risk!)
-                    reversal_prob = layer_data.get("reversal_probability", 0.5)
-                    # For day trading: HIGH reversal probability = good entry opportunity
-                    # Low reversal = also OK (trending)
-                    # Middle zone (0.4-0.6) = uncertain, don't count
-                    if reversal_prob < 0.4 or reversal_prob > 0.70:
-                        agreement += 1  # Either safe trend OR reversal opportunity!
-                else:
-                    # Other layers: Check confidence or score
-                    confidence = layer_data.get("confidence", 0.0)
-                    if confidence > 0.5:
-                        agreement += 1
+                # Check if layer agrees with signal action
+                # Layers report: {"recommendation": "enter"|"wait", "confidence": float}
+                layer_recommendation = layer_data.get("recommendation", "wait")
+                
+                # "enter" means layer agrees with BUY/SELL signal
+                if layer_recommendation == "enter":
+                    agreement += 1
             
             return agreement
             
