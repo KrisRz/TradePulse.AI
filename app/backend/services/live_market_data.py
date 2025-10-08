@@ -344,11 +344,12 @@ class LiveMarketDataService:
 			try:
 				logger.info(f"📡 Connecting to ticker stream: {stream_name} (attempt {reconnect_count + 1})")
 				
-				# Create WebSocket with proper session management
+				# Create WebSocket with AWS-optimized timing
+				# AWS App Runner has aggressive idle timeouts - use shorter ping interval
 				websocket = await websockets.connect(
 					url,
-					ping_interval=20,
-					ping_timeout=10,
+					ping_interval=10,  # Ping every 10s (was 20s) - keep connection active through AWS proxy
+					ping_timeout=20,   # Wait 20s for pong (was 10s) - account for AWS network latency
 					close_timeout=10
 				)
 				self.connections["ticker"] = websocket
@@ -460,11 +461,12 @@ class LiveMarketDataService:
 			try:
 				logger.info(f"📡 Connecting to candle stream: {stream_name} (attempt {reconnect_count + 1})")
 				
-				# Create WebSocket with proper session management
+				# Create WebSocket with AWS-optimized timing
+				# AWS App Runner has aggressive idle timeouts - use shorter ping interval
 				websocket = await websockets.connect(
 					url,
-					ping_interval=20,
-					ping_timeout=10,
+					ping_interval=10,  # Ping every 10s (was 20s) - keep connection active through AWS proxy
+					ping_timeout=20,   # Wait 20s for pong (was 10s) - account for AWS network latency
 					close_timeout=10
 				)
 				self.connections[f"kline_{interval}"] = websocket

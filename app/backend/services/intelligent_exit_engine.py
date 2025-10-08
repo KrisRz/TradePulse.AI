@@ -463,26 +463,18 @@ class IntelligentExitEngine:
                 
                 age_s = (datetime.now(timezone.utc) - entry_time.replace(tzinfo=timezone.utc)).total_seconds()
                 
-                # Get current price for PnL calculation
+                # DAY TRADING: Calculate position metrics as FEATURES for AI decision
+                # NO HARD BLOCKS - let AI models decide based on ALL data!
                 current_price = await get_live_bitcoin_price()
                 entry_price = position_data.get('entry_price', current_price)
                 pnl_pct = ((current_price - entry_price) / entry_price) if entry_price else 0.0
                 abs_bp = abs(pnl_pct) * 10000  # Convert to basis points
                 
-                # ADAPTIVE MIN HOLD TIME (intelligent learning - NO hardcoded!)
-                min_hold = self._get_adaptive_param('min_hold_seconds')
-                if age_s < min_hold:
-                    logger.info(f"⏳ SMART: Position {position_id} too fresh ({age_s:.0f}s < {min_hold:.0f}s optimal) - HOLD")
-                    return self._create_hold_result("min_hold_time", age_s, current_price)
-                
-                # ADAPTIVE PNL HYSTERESIS (intelligent learning - NO hardcoded!)
-                min_pnl_bp = self._get_adaptive_param('min_pnl_bp')
-                if abs_bp < min_pnl_bp:
-                    logger.info(f"📊 SMART: Position {position_id} PnL too small ({abs_bp:.1f}bp < {min_pnl_bp:.1f}bp optimal) - HOLD")
-                    return self._create_hold_result("pnl_hysteresis", abs_bp, current_price)
+                # Store position age and PnL as context for AI (not as hard limits!)
+                logger.info(f"📊 Position context: age={age_s:.0f}s, pnl={abs_bp:.1f}bp - AI will analyze")
                     
             except Exception as e:
-                logger.warning(f"Failed to parse entry time for hysteresis check: {e}")
+                logger.warning(f"Failed to parse entry time for context: {e}")
         
         start_time = datetime.now()
         

@@ -277,6 +277,13 @@ class DayTradingValidator:
         """Validate volatility is in day trading range (ADAPTIVE)"""
         max_vol = params['max_volatility']
         min_vol = params['min_volatility']
+        
+        # DAY TRADING: Skip volatility check for HIGH CONFIDENCE (80%+) signals
+        # When AI is very confident, trust the signal regardless of current volatility
+        if setup.confidence >= 0.80:
+            logger.info(f"🎯 HIGH CONFIDENCE ({setup.confidence:.1%}): Skipping volatility check (vol={setup.volatility:.1%})")
+            return True, f"HIGH CONFIDENCE override (vol={setup.volatility:.1%})"
+        
         if setup.volatility > max_vol:
             return False, f"Volatility too high ({setup.volatility:.1%} > {max_vol:.1%})"
         if setup.volatility < min_vol:

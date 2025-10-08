@@ -2779,8 +2779,8 @@ class IntelligentEntryEngine:
                     total_count += 1
                     # Check if price went up in next 5 periods
                     if i + 5 < len(historical_candles):
-                        entry_price = float(historical_candles[i][4])
-                        future_price = float(historical_candles[i + 5][4])
+                        entry_price = float(historical_candles[i].get("close", 0))
+                        future_price = float(historical_candles[i + 5].get("close", 0))
                         if future_price > entry_price * 1.01:  # 1% gain
                             success_count += 1
             
@@ -2809,8 +2809,8 @@ class IntelligentEntryEngine:
                 if abs(rsi - current_rsi) < 5:  # Similar RSI level
                     total_count += 1
                     if i + 5 < len(historical_candles):
-                        entry_price = float(historical_candles[i][4])
-                        future_price = float(historical_candles[i + 5][4])
+                        entry_price = float(historical_candles[i].get("close", 0))
+                        future_price = float(historical_candles[i + 5].get("close", 0))
                         if future_price < entry_price * 0.99:  # 1% drop
                             success_count += 1
             
@@ -2844,15 +2844,15 @@ class IntelligentEntryEngine:
                 if direction == "bullish" and macd > 0 and prev_macd <= 0:
                     total_count += 1
                     # Check outcome
-                    entry_price = float(historical_candles[i][4])
-                    future_price = float(historical_candles[i + 5][4])
+                    entry_price = float(historical_candles[i].get("close", 0))
+                    future_price = float(historical_candles[i + 5].get("close", 0))
                     if future_price > entry_price * 1.015:  # 1.5% gain
                         success_count += 1
                         
                 elif direction == "bearish" and macd < 0 and prev_macd >= 0:
                     total_count += 1
-                    entry_price = float(historical_candles[i][4])
-                    future_price = float(historical_candles[i + 5][4])
+                    entry_price = float(historical_candles[i].get("close", 0))
+                    future_price = float(historical_candles[i + 5].get("close", 0))
                     if future_price < entry_price * 0.985:  # 1.5% drop
                         success_count += 1
             
@@ -2879,7 +2879,7 @@ class IntelligentEntryEngine:
             total_count = 0
             
             for i, bb in enumerate(bb_data[:-5]):
-                price = float(historical_candles[i][4])
+                price = float(historical_candles[i].get("close", 0))
                 upper_band = bb["upper"]
                 lower_band = bb["lower"]
                 
