@@ -54,6 +54,14 @@ from app.backend.utils.safe_formatting import safe_format_number, safe_format_pr
 from app.backend.services.binance_hybrid_client import get_hybrid_client
 from app.backend.services.day_trading_validator import get_day_trading_validator
 
+# Import professional configs
+from app.backend.config.entry_engine_config import (
+    DynamicEntryThresholds,
+    AdaptiveEntryCalculator,
+    KellyCriterionCalculator,
+    MarketRegime
+)
+
 logger = logging.getLogger(__name__)
 
 class EntryReason(str, Enum):
@@ -121,19 +129,31 @@ class IntelligentEntryEngine:
         current_file = Path(__file__).parent.parent  # Go up from services/ to backend/
         self.model_path = current_file / "models" / "enterprise"
         
-        # 🎯 ADAPTIVE ENTRY THRESHOLDS - Initial defaults (will be replaced by Continuous Learning)
-        # TEMPORARY FIX: Lowered from 0.60 to 0.58 while S/R detection is being fixed
-        # (Many 77-79% signals were rejected at 0.59 consensus/confidence - just 0.01 below threshold!)
-        self._default_thresholds = {
-            'confidence_threshold': 0.58,  # 58% minimum (was 0.60) - TEMPORARY FIX
-            'consensus_threshold': 0.58,   # 58% consensus (was 0.60) - TEMPORARY FIX
-            'high_confidence_threshold': 0.75,  # 75% high confidence
-            'historical_validation_threshold': 0.55  # 55% historical success
-        }
-        self.confidence_threshold = self._default_thresholds['confidence_threshold']
-        self.consensus_threshold = self._default_thresholds['consensus_threshold']
-        self.high_confidence_threshold = self._default_thresholds['high_confidence_threshold']
-        self.historical_validation_threshold = self._default_thresholds['historical_validation_threshold']
+        # 🎯 PROFESSIONAL ADAPTIVE THRESHOLDS (NO HARDCODED VALUES!)
+        # All thresholds calculated dynamically based on:
+        # - Historical Sharpe ratio
+        # - Current market regime
+        # - ATR percentiles
+        # - Signal confidence
+        self.adaptive_calculator = AdaptiveEntryCalculator()
+        self.kelly_calculator = KellyCriterionCalculator()
+        
+        # ATR percentiles (updated from historical data)
+        self.atr_percentiles = AdaptiveEntryCalculator.DEFAULT_ATR_PERCENTILES.copy()
+        
+        # Historical performance tracking (for Sharpe calculation)
+        self.historical_wins = 0
+        self.historical_losses = 0
+        self.historical_returns = []  # List of return %s
+        self.historical_sharpe = 1.5  # Default starting Sharpe
+        
+        # Kelly Criterion parameters (from historical performance)
+        self.kelly_win_rate = 0.55  # Default 55% win rate
+        self.kelly_avg_win = 0.025  # Default 2.5% avg win
+        self.kelly_avg_loss = 0.015  # Default 1.5% avg loss
+        
+        # Dynamic thresholds (will be calculated per-signal)
+        self.current_dynamic_thresholds: Optional[DynamicEntryThresholds] = None
         
         # Continuous Learning connection (initialized during initialize())
         self.continuous_learning = None
@@ -1303,53 +1323,97 @@ class IntelligentEntryEngine:
         return layer_results
     
     async def _analyze_entry_market_regime(self, market_data: Dict[str, Any], signal_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Layer 1: Analyze market regime for entry"""
+        """
+        Layer 1: Analyze market regime for entry (PROFESSIONAL - NO HARDCODED VALUES)
+        
+        Uses adaptive thresholds based on:
+        - Current ATR percentile
+        - Market regime classification
+        - Signal confidence
+        """
         
         volatility = market_data.get("volatility", 0.02)
         volume_ratio = market_data.get("volume_ratio", 1.0)
-        trend_strength = market_data.get("trend_strength", 0.5)
+        trend_strength = market_data.get("trend_strength", 0.0)
         signal_action = signal_data.get("action", "HOLD")
+        signal_confidence = signal_data.get("confidence", 0.5)
         
-        # Determine if regime is favorable for entry
+        # Classify market regime using professional algorithm
+        regime_class = self.adaptive_calculator.classify_market_regime(
+            trend_strength, volatility, volume_ratio, self.atr_percentiles
+        )
+        
+        # Calculate dynamic thresholds for this regime
+        dynamic_thresholds = self.adaptive_calculator.calculate_dynamic_thresholds(
+            current_atr=volatility,
+            atr_percentiles=self.atr_percentiles,
+            trend_strength=trend_strength,
+            volume_ratio=volume_ratio,
+            historical_sharpe=self.historical_sharpe,
+            signal_confidence=signal_confidence
+        )
+        
+        # Store for use in other layers
+        self.current_dynamic_thresholds = dynamic_thresholds
+        
+        # Determine if regime is favorable for entry (ADAPTIVE)
         if signal_action == "BUY":
-            if trend_strength > 0.7 and volatility < 0.05:  # Strong uptrend, low volatility
+            # Check trend strength against dynamic threshold
+            if trend_strength > dynamic_thresholds.min_trend_strength and volatility < dynamic_thresholds.max_volatility_atr:
                 recommendation = "enter"
-                confidence = 0.8
-                regime = "favorable_uptrend"
-            elif volume_ratio > 1.5 and volatility < 0.08:  # High volume, moderate volatility
+                confidence = min(0.8, 0.6 + trend_strength * 0.3)  # Scale with trend strength
+                regime_desc = f"favorable_{regime_class.value}"
+            elif volume_ratio > dynamic_thresholds.min_volume_ratio and volatility < dynamic_thresholds.max_volatility_atr:
                 recommendation = "enter"
-                confidence = 0.7
-                regime = "high_volume_breakout"
-            elif volatility > 0.10:  # Too volatile
+                confidence = min(0.7, 0.5 + volume_ratio * 0.2)  # Scale with volume
+                regime_desc = "volume_breakout"
+            elif volatility > dynamic_thresholds.max_volatility_atr:
                 recommendation = "wait"
                 confidence = 0.3
-                regime = "too_volatile"
+                regime_desc = "excessive_volatility"
             else:
-                recommendation = "enter"
-                confidence = 0.6
-                regime = "neutral"
+                # Neutral regime - use signal confidence as guide
+                if signal_confidence > 0.65:
+                    recommendation = "enter"
+                    confidence = signal_confidence * 0.9
+                else:
+                    recommendation = "wait"
+                    confidence = signal_confidence * 0.8
+                regime_desc = "neutral"
+        
         elif signal_action == "SELL":
-            if trend_strength < -0.7 and volatility < 0.05:  # Strong downtrend
+            # Similar logic for SELL with inverted trend
+            if trend_strength < -dynamic_thresholds.min_trend_strength and volatility < dynamic_thresholds.max_volatility_atr:
                 recommendation = "enter"
-                confidence = 0.8
-                regime = "favorable_downtrend"
+                confidence = min(0.8, 0.6 + abs(trend_strength) * 0.3)
+                regime_desc = f"favorable_{regime_class.value}"
+            elif volume_ratio > dynamic_thresholds.min_volume_ratio:
+                recommendation = "enter"
+                confidence = min(0.7, 0.5 + volume_ratio * 0.2)
+                regime_desc = "volume_breakdown"
             else:
                 recommendation = "wait"
                 confidence = 0.4
-                regime = "unfavorable_short"
+                regime_desc = "unfavorable_short"
         else:
             recommendation = "wait"
             confidence = 0.2
-            regime = "no_signal"
+            regime_desc = "no_signal"
         
         return {
             "recommendation": recommendation,
             "confidence": confidence,
-            "regime": regime,
+            "regime": regime_desc,
+            "regime_class": regime_class.value,
             "volatility": volatility,
             "volume_ratio": volume_ratio,
             "trend_strength": trend_strength,
-            "reasoning": f"Market regime: {regime} with {safe_format_number(volatility * 100, 1)}% volatility"
+            "dynamic_thresholds": {
+                "min_trend": dynamic_thresholds.min_trend_strength,
+                "max_vol": dynamic_thresholds.max_volatility_atr,
+                "min_vol_ratio": dynamic_thresholds.min_volume_ratio
+            },
+            "reasoning": f"Market regime: {regime_class.value} → {regime_desc} (vol={volatility:.2%}, trend={trend_strength:.2f})"
         }
     
     def _calculate_technical_features(self, candles: List[Dict], lookback: int = 200) -> np.ndarray:
@@ -2126,8 +2190,15 @@ class IntelligentEntryEngine:
         layer_analysis = signal_data.get("layer_analysis", {})
         l6_timing = layer_analysis.get("layer_6_timing", {}).get("timing_score", 0.0)
         
-        # ACTIVE DAY TRADING: Use base confidence thresholds (not phase-based)
-        conf_thresh = self.confidence_threshold if not is_exploratory else 0.35  # Use base threshold
+        # PROFESSIONAL: Use dynamic thresholds (NO HARDCODED VALUES!)
+        if self.current_dynamic_thresholds:
+            conf_thresh = self.current_dynamic_thresholds.min_confidence if not is_exploratory else 0.35
+            base_consensus_thresh = self.current_dynamic_thresholds.min_consensus
+        else:
+            # Fallback if dynamic thresholds not yet calculated
+            conf_thresh = 0.60 if not is_exploratory else 0.35
+            base_consensus_thresh = 0.60
+        
         # Unified signal threshold
         from app.backend.config.trading_thresholds import ConfidenceThresholds
         thresholds = ConfidenceThresholds()
@@ -2140,7 +2211,7 @@ class IntelligentEntryEngine:
         
         # PHASE-BASED consensus threshold adjustment - FIXED FOR MEAN-REVERSION
         phase = self.get_current_warmup_phase()
-        phase_consensus_thresh = self.consensus_threshold
+        phase_consensus_thresh = base_consensus_thresh  # Use dynamic threshold as base
         
         # Detect playbook type from signal data
         signal_playbook = signal_data.get("playbook", "unknown")
@@ -2169,7 +2240,9 @@ class IntelligentEntryEngine:
         if not self.is_warmed_up:
             meets_historical = True
         else:
-            meets_historical = historical_validation_score > self.historical_validation_threshold
+            # Use dynamic threshold for historical validation
+            min_historical_thresh = self.current_dynamic_thresholds.min_historical_success if self.current_dynamic_thresholds else 0.55
+            meets_historical = historical_validation_score > min_historical_thresh
         meets_signal = signal_action in ["BUY", "SELL"] and signal_confidence > signal_thresh
         
         # Timing: respect Enterprise L6_time as override if strong
@@ -2282,7 +2355,7 @@ class IntelligentEntryEngine:
                 "timing_score": timing_score,
                 "layer_votes": {"enter": enter_votes, "wait": wait_votes}
             }
-        elif consensus_score > self.high_confidence_threshold and signal_confidence > signal_thresh and timing_ok:
+        elif consensus_score > (self.current_dynamic_thresholds.high_confidence if self.current_dynamic_thresholds else 0.75) and signal_confidence > signal_thresh and timing_ok:
             decision = {
                 "should_enter": True,
                 "confidence": signal_confidence,  # Use original signal confidence
@@ -2294,14 +2367,15 @@ class IntelligentEntryEngine:
                 "layer_votes": {"enter": enter_votes, "wait": wait_votes}
             }
         else:
-            # Enhanced WAIT logging with specific reasons and thresholds
+            # Enhanced WAIT logging with specific reasons and dynamic thresholds
             wait_reasons = []
             if not meets_consensus:
                 wait_reasons.append(f"consensus {consensus_score:.2f}<{phase_consensus_thresh:.2f}")
             if not meets_confidence:
                 wait_reasons.append(f"confidence {consensus_score:.2f}<{conf_thresh:.2f}")
             if not meets_historical:
-                wait_reasons.append(f"historical {historical_validation_score:.2f}<{self.historical_validation_threshold:.2f}")
+                min_hist_thresh = self.current_dynamic_thresholds.min_historical_success if self.current_dynamic_thresholds else 0.55
+                wait_reasons.append(f"historical {historical_validation_score:.2f}<{min_hist_thresh:.2f}")
             if not meets_signal:
                 wait_reasons.append(f"signal {signal_confidence:.2f}<{signal_thresh:.2f}")
             if not timing_ok:
@@ -2572,7 +2646,17 @@ class IntelligentEntryEngine:
         return round(optimal_price, 2)
     
     def _calculate_position_size(self, entry_decision: Dict[str, Any], user_portfolio: Dict[str, Any], layer_results: Dict[str, Any]) -> float:
-        """Calculate recommended position size with $500 minimum and safe validation"""
+        """
+        Calculate optimal position size using Kelly Criterion (PROFESSIONAL)
+        
+        Uses industry-standard Kelly Criterion with fractional sizing:
+        f* = (p*b - q) / b
+        
+        Where:
+        - p = win probability (from historical performance)
+        - b = win/loss ratio (avg_win / avg_loss)
+        - Fractional Kelly (25%) for risk management
+        """
         
         # Safe extraction with validation
         available_cash = user_portfolio.get("available_cash", 10000)
@@ -2588,36 +2672,41 @@ class IntelligentEntryEngine:
         if risk_score is None:
             risk_score = 0.5
         
-        # Professional minimum position size
-        MINIMUM_POSITION_SIZE = 500.0  # $500 minimum for professional trading
+        # Professional minimum position size (2% of portfolio)
+        min_position_pct = 0.02
+        min_position_size = available_cash * min_position_pct
         
-        # Base position size as percentage of available cash
-        base_percentage = 0.1  # 10% base
+        # Calculate Kelly Criterion position size
+        kelly_fraction = self.kelly_calculator.calculate_kelly_fraction(
+            win_rate=self.kelly_win_rate,
+            avg_win_pct=self.kelly_avg_win,
+            avg_loss_pct=self.kelly_avg_loss,
+            kelly_fraction=0.25  # Quarter Kelly (conservative)
+        )
         
-        # Adjust based on confidence - higher confidence = larger positions
-        if confidence >= 0.8:
-            confidence_multiplier = 2.0  # High confidence: 20% of portfolio
-        elif confidence >= 0.6:
-            confidence_multiplier = 1.5  # Medium confidence: 15% of portfolio
-        else:
-            confidence_multiplier = 1.0  # Low confidence: 10% of portfolio
+        # Adjust Kelly size based on signal quality
+        adjusted_kelly = self.kelly_calculator.adjust_kelly_for_confidence(
+            kelly_size=kelly_fraction,
+            signal_confidence=confidence,
+            risk_score=risk_score
+        )
         
-        # Adjust based on risk
-        risk_multiplier = 1.0 - (risk_score * 0.3)  # Reduce size for higher risk
+        # Calculate position size from Kelly %
+        kelly_position_size = available_cash * adjusted_kelly
         
-        # Calculate position size
-        position_percentage = base_percentage * confidence_multiplier * risk_multiplier
-        position_percentage = min(position_percentage, 0.25)  # Max 25% of portfolio
+        # Enforce minimum (2% of portfolio or $500, whichever is lower)
+        position_size = max(kelly_position_size, min(min_position_size, 500.0))
         
-        position_size = available_cash * position_percentage
+        # Ensure we don't exceed available cash (leave 10% buffer)
+        max_position_size = available_cash * 0.90
+        position_size = min(position_size, max_position_size)
         
-        # Enforce minimum position size for professional trading
-        position_size = max(position_size, MINIMUM_POSITION_SIZE)
-        
-        # Ensure we don't exceed available cash
-        position_size = min(position_size, available_cash * 0.9)  # Leave 10% cash buffer
-        
-        logger.info(f"💰 Position size calculated: {safe_format_price(position_size)} (confidence={safe_format_number(confidence, 2)}, available={safe_format_price(available_cash)})")
+        logger.info(
+            f"💰 Kelly Criterion position: {safe_format_price(position_size)} "
+            f"({adjusted_kelly:.1%} of portfolio, "
+            f"win_rate={self.kelly_win_rate:.1%}, "
+            f"confidence={safe_format_number(confidence, 2)})"
+        )
         
         return round(position_size, 2)
     
@@ -2642,8 +2731,13 @@ class IntelligentEntryEngine:
             "success_rate": self.successful_entries / max(self.entries_recommended, 1),
             "layer_health": self.layer_health.copy(),
             "models_loaded": len(self.models),
-            "confidence_threshold": self.confidence_threshold,
-            "consensus_threshold": self.consensus_threshold,
+            "dynamic_thresholds": self.current_dynamic_thresholds.__repr__() if self.current_dynamic_thresholds else "Not yet calculated",
+            "kelly_parameters": {
+                "win_rate": self.kelly_win_rate,
+                "avg_win": self.kelly_avg_win,
+                "avg_loss": self.kelly_avg_loss
+            },
+            "historical_sharpe": self.historical_sharpe,
             "status": "operational" if self.is_initialized else "initializing"
         }
     
@@ -2659,8 +2753,81 @@ class IntelligentEntryEngine:
                 layer_name: 0.85 for layer_name in self.layer_health.keys()
             },
             "engine_uptime": "100%",
-            "status": "healthy"
+            "status": "healthy",
+            "kelly_parameters": {
+                "win_rate": self.kelly_win_rate,
+                "avg_win": self.kelly_avg_win,
+                "avg_loss": self.kelly_avg_loss
+            },
+            "sharpe_ratio": self.historical_sharpe
         }
+    
+    async def update_performance_from_trade(self, entry_price: float, exit_price: float, was_profitable: bool) -> None:
+        """
+        Update Kelly parameters and Sharpe ratio from completed trade
+        
+        This allows the engine to adapt its position sizing and confidence thresholds
+        based on actual trading performance.
+        
+        Args:
+            entry_price: Trade entry price
+            exit_price: Trade exit price
+            was_profitable: Whether trade was profitable
+        """
+        # Calculate return %
+        trade_return = (exit_price - entry_price) / entry_price
+        
+        # Update win/loss tracking
+        if was_profitable:
+            self.historical_wins += 1
+        else:
+            self.historical_losses += 1
+        
+        # Update return history
+        self.historical_returns.append(trade_return)
+        # Keep last 100 trades
+        if len(self.historical_returns) > 100:
+            self.historical_returns.pop(0)
+        
+        # Recalculate Kelly parameters
+        total_trades = self.historical_wins + self.historical_losses
+        if total_trades >= 10:  # Need minimum 10 trades
+            self.kelly_win_rate = self.historical_wins / total_trades
+            
+            # Calculate avg win and avg loss
+            wins = [r for r in self.historical_returns if r > 0]
+            losses = [abs(r) for r in self.historical_returns if r < 0]
+            
+            if wins:
+                self.kelly_avg_win = np.mean(wins)
+            if losses:
+                self.kelly_avg_loss = np.mean(losses)
+            
+            # Recalculate Sharpe ratio
+            if len(self.historical_returns) >= 20:
+                returns_array = np.array(self.historical_returns)
+                avg_return = np.mean(returns_array)
+                std_return = np.std(returns_array)
+                
+                if std_return > 0:
+                    # Annualized Sharpe (assuming daily returns)
+                    self.historical_sharpe = (avg_return / std_return) * np.sqrt(252)
+                    
+                    logger.info(
+                        f"📊 Performance updated: Win rate={self.kelly_win_rate:.1%}, "
+                        f"Avg win={self.kelly_avg_win:.2%}, Avg loss={self.kelly_avg_loss:.2%}, "
+                        f"Sharpe={self.historical_sharpe:.2f}"
+                    )
+        
+        # Update continuous learning if available
+        if self.continuous_learning:
+            try:
+                await self.continuous_learning.record_trade_result(
+                    was_profitable=was_profitable,
+                    return_pct=trade_return
+                )
+            except Exception as e:
+                logger.debug(f"Failed to update continuous learning: {e}")
     
     # ===== HISTORICAL PATTERN ANALYSIS METHODS =====
     

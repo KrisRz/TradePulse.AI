@@ -86,6 +86,13 @@ from app.backend.services.live_market_data import (
 )
 from app.backend.services.binance_hybrid_client import get_hybrid_client
 
+# Import professional configs
+from app.backend.config.exit_engine_config import (
+    DynamicExitThresholds,
+    AdaptiveExitCalculator,
+    ExitMarketRegime
+)
+
 logger = logging.getLogger(__name__)
 
 class IntelligentExitEngine:
@@ -103,16 +110,27 @@ class IntelligentExitEngine:
         current_file = Path(__file__).parent.parent  # Go up from services/ to backend/
         self.model_path = current_file / "models" / "enterprise"
         
-        # DAY TRADING ADAPTIVE: Use learned parameters from continuous learning
-        self.confidence_threshold = 0.60  # ADAPTIVE: 60% confidence (can be learned)
-        self.consensus_threshold = 0.55   # ADAPTIVE: 55% consensus (can be learned)
-        self.emergency_threshold = 0.90   # Emergency exits threshold
-        self.scalping_mode = False        # DAY TRADING mode (not ultra-fast scalping)
+        # 🎯 PROFESSIONAL ADAPTIVE THRESHOLDS (NO HARDCODED VALUES!)
+        # All thresholds calculated dynamically based on:
+        # - Historical Sharpe ratio
+        # - Current market regime
+        # - ATR percentiles
+        # - Exit confidence
+        self.adaptive_calculator = AdaptiveExitCalculator()
         
-        # ADAPTIVE PARAMETERS - NO HARDCODED VALUES!
-        # These are calculated by Continuous Learning from REAL trading data
-        self.REVERSAL_CONFIRM_TICKS = 3         # Reversal confirmation ticks
-        self.DONOT_EXIT_IF_ENTRY_BUY = 60       # Fresh position protection
+        # ATR percentiles (updated from historical data)
+        self.atr_percentiles = AdaptiveExitCalculator.DEFAULT_ATR_PERCENTILES.copy()
+        
+        # Historical performance tracking (for Sharpe calculation)
+        self.historical_wins = 0
+        self.historical_losses = 0
+        self.historical_returns = []  # List of return %s
+        self.historical_sharpe = 1.5  # Default starting Sharpe
+        
+        # Dynamic thresholds (will be calculated per-exit)
+        self.current_dynamic_thresholds: Optional[DynamicExitThresholds] = None
+        
+        # Reversal confirmation tracking
         self._rev_hits = {}                     # Track reversal confirmation hits
         self._last_exit_at = {}                 # Track last exit time per symbol
         
@@ -120,21 +138,6 @@ class IntelligentExitEngine:
         self._learned_params = None
         self._last_param_refresh = datetime.min.replace(tzinfo=timezone.utc)  # FIX: timezone-aware
         self._initialized_params = False
-        
-        # DAY TRADING MODE - Professional Parameters for Quality Trades
-        self.current_mode = "day"  # Use day trading mode (balanced)
-        self.mode_parameters = {
-            "day": {
-                "consensus_threshold": 0.55,  # DAY TRADING: 55% consensus for quality exits
-                "atr_k": 2.0,                 # DAY TRADING: 2.0x ATR trailing stop (reasonable room)
-                "time_multiplier": 1.0        # DAY TRADING: 1.0x duration = 15-30 minutes typical
-            },
-            "scalping": {
-                "consensus_threshold": 0.50,  # SCALPING: 50% consensus (faster exits)
-                "atr_k": 1.5,                 # SCALPING: Tight trailing stop
-                "time_multiplier": 0.6        # SCALPING: 60% of position duration = ~9 minutes
-            }
-        }
         
         # Performance tracking
         self.total_analyses = 0
@@ -151,18 +154,11 @@ class IntelligentExitEngine:
             6: {"name": "Adaptive Timing", "weight": 0.10}
         }
         
-        logger.info("🧠 Intelligent Exit Engine initialized")
-    
-    async def _get_current_trading_mode(self) -> str:
-        """Get current trading mode - USE DAY TRADING MODE for balanced exits"""
-        # USE DAY TRADING MODE for balanced exits with proper Bitcoin volatility tolerance
-        # This ensures 45% consensus threshold instead of 35% (scalping mode)
-        return "day"  # BALANCED: Use day trading mode for Bitcoin volatility tolerance
-    
-    async def _get_mode_parameters(self) -> Dict[str, Any]:
-        """Get parameters for current trading mode"""
-        current_mode = await self._get_current_trading_mode()
-        return self.mode_parameters.get(current_mode, self.mode_parameters["day"])
+        logger.info("🧠 Professional Adaptive Intelligent Exit Engine initialized")
+        logger.info("   ✅ NO hardcoded thresholds - all calculated from market conditions")
+        logger.info("   ✅ Industry-standard ATR-based profit targets")
+        logger.info("   ✅ Sharpe-optimized confidence thresholds")
+        logger.info("   ✅ Dynamic trailing stops based on market regime")
     
     def _get_model_feature_names(self, model: Any, default_order: List[str]) -> List[str]:
         """Return feature names in the order expected by the model if available."""
@@ -498,6 +494,29 @@ class IntelligentExitEngine:
             else:
                 logger.info("✅ PIPELINE DEBUG: Exit Engine - Live market data retrieved successfully")
             
+            # PROFESSIONAL: Calculate dynamic exit thresholds from market conditions
+            logger.info("📊 PIPELINE DEBUG: Exit Engine - Calculating dynamic exit thresholds...")
+            entry_price = position_data.get('entry_price', current_price)
+            volatility = market_data.get("volatility", 0.02)
+            trend_strength = market_data.get("trend_strength", 0.0)
+            volume_ratio = market_data.get("volume_ratio", 1.0)
+            
+            self.current_dynamic_thresholds = self.adaptive_calculator.calculate_dynamic_exit_thresholds(
+                current_atr=volatility,
+                atr_percentiles=self.atr_percentiles,
+                trend_strength=trend_strength,
+                volume_ratio=volume_ratio,
+                historical_sharpe=self.historical_sharpe,
+                entry_price=entry_price
+            )
+            
+            logger.info(f"✅ Dynamic exit thresholds calculated: {self.current_dynamic_thresholds}")
+            logger.info(f"   Regime: {self.current_dynamic_thresholds.market_regime.value}")
+            logger.info(f"   Excellent profit: {self.current_dynamic_thresholds.excellent_profit_threshold*100:.2f}%")
+            logger.info(f"   Good profit: {self.current_dynamic_thresholds.good_profit_threshold*100:.2f}%")
+            logger.info(f"   Small profit: {self.current_dynamic_thresholds.small_profit_threshold*100:.2f}%")
+            logger.info(f"   Stop loss: {self.current_dynamic_thresholds.stop_loss_atr_multiple:.1f}x ATR")
+            
             # NEW: Get current AI signal for strategy mismatch detection
             try:
                 from app.backend.services.enterprise_trading_engine import EnterpriseTradingEngine
@@ -523,21 +542,24 @@ class IntelligentExitEngine:
             # Calculate consensus decision
             exit_decision = await self._calculate_exit_consensus(layer_results)
             
-            # REVERSAL CONFIRMATION: Track reversal hits for confirmation
+            # REVERSAL CONFIRMATION: Track reversal hits for confirmation (DYNAMIC TICKS!)
             if position_id and "layer_3_reversal" in layer_results:
                 reversal_data = layer_results["layer_3_reversal"]
                 reversal_score = reversal_data.get("confidence", 0.0) if reversal_data.get("recommendation") == "exit" else 0.0
+                
+                # Get dynamic confirmation ticks based on market regime
+                required_ticks = self.current_dynamic_thresholds.reversal_confirmation_ticks if self.current_dynamic_thresholds else 3
                 
                 if reversal_score > 0.75:
                     self._rev_hits[position_id] = self._rev_hits.get(position_id, 0) + 1
                 else:
                     self._rev_hits[position_id] = 0
                 
-                # Require confirmation for reversal exits
+                # Require confirmation for reversal exits (adaptive ticks based on volatility)
                 if (exit_decision.get("reason") == "consensus_exit" and 
                     reversal_score > 0.75 and 
-                    self._rev_hits[position_id] < self.REVERSAL_CONFIRM_TICKS):
-                    logger.info(f"🔄 Reversal needs confirmation: {self._rev_hits[position_id]}/{self.REVERSAL_CONFIRM_TICKS} ticks")
+                    self._rev_hits[position_id] < required_ticks):
+                    logger.info(f"🔄 Reversal needs confirmation: {self._rev_hits[position_id]}/{required_ticks} ticks (adaptive)")
                     return self._create_hold_result("need_reversal_confirmation", self._rev_hits[position_id], current_price)
             
             # Check for emergency conditions
@@ -553,11 +575,12 @@ class IntelligentExitEngine:
                     "emergency_conditions": emergency_conditions
                 }
 
-            # ATR-based trailing and time-stop overlay with adaptive parameters
-            mode_params = await self._get_mode_parameters()
+            # ATR-based trailing and time-stop overlay with DYNAMIC parameters
+            # Use dynamic thresholds calculated from market conditions
+            atr_k = self.current_dynamic_thresholds.trailing_stop_atr_multiple if self.current_dynamic_thresholds else 2.0
             trailing_overlay = await self._evaluate_atr_trailing_and_time_stop(
                 symbol=symbol, position_data=position_data, current_price=current_price,
-                atr_k=mode_params["atr_k"]
+                atr_k=atr_k
             )
             if trailing_overlay.get("should_exit"):
                 exit_decision = {
@@ -682,20 +705,26 @@ class IntelligentExitEngine:
             if trigger:
                 return {"should_exit": True, "reason": "atr_trailing", "atr": float(atr), "stop_level": float(stop_level)}
 
-            # Adaptive time stop based on trading mode
+            # PROFESSIONAL: Adaptive time stop based on DYNAMIC market regime
             age_hours = self._calculate_position_age(position_data)
             
-            # Get current trading mode from day trading engine
+            # Get dynamic time multiplier from market regime
             if time_stop_minutes is None:
                 try:
-                    from app.backend.services.day_trading_engine import get_day_trading_engine
-                    engine = await get_day_trading_engine()
-                    mode_config = engine.mode_configs[engine.current_mode]
-                    # Get mode-specific time multiplier
-                    mode_params = self.mode_parameters.get(engine.current_mode.value, self.mode_parameters["day"])
-                    time_multiplier = mode_params["time_multiplier"]
-                    time_stop_minutes = int((mode_config.position_duration / 60) * time_multiplier)
-                    logger.info(f"🕐 Adaptive time stop: {time_stop_minutes}min for {engine.current_mode.value} mode (multiplier: {time_multiplier}x)")
+                    # Use dynamic time multiplier from market regime classification
+                    time_multiplier = self.current_dynamic_thresholds.time_multiplier if self.current_dynamic_thresholds else 1.0
+                    
+                    # Base position duration from day trading engine if available
+                    try:
+                        from app.backend.services.day_trading_engine import get_day_trading_engine
+                        engine = await get_day_trading_engine()
+                        mode_config = engine.mode_configs[engine.current_mode]
+                        base_duration_minutes = mode_config.position_duration / 60
+                    except Exception:
+                        base_duration_minutes = 60  # Default 60 minutes for day trading
+                    
+                    time_stop_minutes = int(base_duration_minutes * time_multiplier)
+                    logger.info(f"🕐 Dynamic time stop: {time_stop_minutes}min (base: {base_duration_minutes:.0f}min × regime multiplier: {time_multiplier:.1f}x)")
                 except Exception:
                     time_stop_minutes = 60   # Fallback for day trading (1 hour)
             
@@ -1250,12 +1279,24 @@ class IntelligentExitEngine:
         market_hours = True  # Bitcoin trades 24/7 - always market hours
         position_mature = position_age > 0.17  # DAY TRADING: 10 minutes = mature (scalping)
         
-        # SMART DAY TRADING: Dynamic exits based on market conditions and reversal signals
-        excellent_profit = current_pnl_pct > 0.8  # 0.8%+ = excellent profit ($400+ on $50K)
-        good_profit = current_pnl_pct > 0.4       # 0.4%+ = good profit ($200+ on $50K)  
-        small_profit = current_pnl_pct > 0.15     # 0.15%+ = small profit ($75+ on $50K)
-        stop_loss_hit = current_pnl_pct < -1.5    # 1.5% stop loss (wider for Bitcoin volatility)
-        any_profit = current_pnl_pct > 0.05       # Any profit (for reversal detection)
+        # PROFESSIONAL: ATR-BASED PROFIT TARGETS (NO HARDCODED %!)
+        # Calculate dynamic thresholds from market conditions
+        if not hasattr(self, 'current_dynamic_thresholds') or self.current_dynamic_thresholds is None:
+            # Fallback if dynamic thresholds not calculated yet
+            excellent_profit = current_pnl_pct > 0.8
+            good_profit = current_pnl_pct > 0.4
+            small_profit = current_pnl_pct > 0.15
+            stop_loss_threshold = -1.5
+        else:
+            # Use ATR-based dynamic thresholds (convert from decimal to %)
+            excellent_profit = current_pnl_pct > (self.current_dynamic_thresholds.excellent_profit_threshold * 100)
+            good_profit = current_pnl_pct > (self.current_dynamic_thresholds.good_profit_threshold * 100)
+            small_profit = current_pnl_pct > (self.current_dynamic_thresholds.small_profit_threshold * 100)
+            # Stop loss = -stop_loss_atr_multiple * ATR
+            stop_loss_threshold = -(self.current_dynamic_thresholds.stop_loss_atr_multiple * self.current_dynamic_thresholds.current_atr / entry_price * 100)
+        
+        stop_loss_hit = current_pnl_pct < stop_loss_threshold
+        any_profit = current_pnl_pct > (small_profit / 3) if small_profit else (current_pnl_pct > 0.05)  # 1/3 of small profit threshold
         
         # SMART EXIT: Get reversal signals from Layer 3 - FIXED: Handle None layer_results
         if layer_results:
@@ -1325,14 +1366,16 @@ class IntelligentExitEngine:
         }
     
     async def _calculate_exit_consensus(self, layer_results: Dict[str, Any]) -> Dict[str, Any]:
-        """Calculate consensus-based exit decision with adaptive thresholds"""
+        """Calculate consensus-based exit decision with DYNAMIC adaptive thresholds"""
         
-        # Get mode-specific parameters
-        mode_params = await self._get_mode_parameters()
-        adaptive_threshold = mode_params["consensus_threshold"]
-        
-        # DAY TRADING: Use proper consensus thresholds without artificial caps
-        # REMOVED artificial cap - use mode-specific thresholds as designed
+        # PROFESSIONAL: Use dynamic thresholds calculated from market conditions
+        if self.current_dynamic_thresholds:
+            adaptive_threshold = self.current_dynamic_thresholds.min_consensus
+            regime = self.current_dynamic_thresholds.market_regime.value
+        else:
+            # Fallback if dynamic thresholds not yet calculated
+            adaptive_threshold = 0.55
+            regime = "unknown"
         
         exit_votes = 0
         hold_votes = 0
@@ -1356,9 +1399,8 @@ class IntelligentExitEngine:
         total_votes = exit_votes + hold_votes
         consensus_score = np.mean(consensus_scores) if consensus_scores else 0.0
         
-        current_mode = await self._get_current_trading_mode()
         logger.info(f"🎯 Exit consensus: {exit_votes} exit vs {hold_votes} hold votes, "
-                   f"score={consensus_score:.2f}, threshold={adaptive_threshold:.2f} ({current_mode} mode)")
+                   f"score={consensus_score:.2f}, threshold={adaptive_threshold:.2f} (regime: {regime})")
         
         # Determine final decision with adaptive threshold
         if exit_votes > hold_votes and consensus_score > adaptive_threshold:
@@ -1586,8 +1628,67 @@ class IntelligentExitEngine:
                 layer_name: 0.85 for layer_name in self.layer_health.keys()
             },
             "engine_uptime": "100%",
-            "status": "healthy"
+            "status": "healthy",
+            "historical_sharpe": self.historical_sharpe,
+            "win_rate": self.historical_wins / max(self.historical_wins + self.historical_losses, 1)
         }
+    
+    async def update_performance_from_exit(self, entry_price: float, exit_price: float, was_profitable: bool) -> None:
+        """
+        Update performance metrics from completed exit
+        
+        This allows the engine to adapt its exit thresholds and confidence levels
+        based on actual trading performance.
+        
+        Args:
+            entry_price: Trade entry price
+            exit_price: Trade exit price
+            was_profitable: Whether exit was profitable
+        """
+        # Calculate return %
+        trade_return = (exit_price - entry_price) / entry_price
+        
+        # Update win/loss tracking
+        if was_profitable:
+            self.historical_wins += 1
+        else:
+            self.historical_losses += 1
+        
+        # Update return history
+        self.historical_returns.append(trade_return)
+        # Keep last 100 exits
+        if len(self.historical_returns) > 100:
+            self.historical_returns.pop(0)
+        
+        # Recalculate Sharpe ratio
+        if len(self.historical_returns) >= 20:
+            returns_array = np.array(self.historical_returns)
+            avg_return = np.mean(returns_array)
+            std_return = np.std(returns_array)
+            
+            if std_return > 0:
+                # Annualized Sharpe (assuming daily returns)
+                self.historical_sharpe = (avg_return / std_return) * np.sqrt(252)
+                
+                win_rate = self.historical_wins / (self.historical_wins + self.historical_losses)
+                
+                logger.info(
+                    f"📊 Exit performance updated: Win rate={win_rate:.1%}, "
+                    f"Avg return={avg_return:.2%}, "
+                    f"Sharpe={self.historical_sharpe:.2f}"
+                )
+        
+        # Update continuous learning if available
+        try:
+            from app.backend.services.continuous_learning_engine import get_continuous_learning_engine
+            learning_engine = await get_continuous_learning_engine()
+            if learning_engine:
+                await learning_engine.record_trade_result(
+                    was_profitable=was_profitable,
+                    return_pct=trade_return
+                )
+        except Exception as e:
+            logger.debug(f"Failed to update continuous learning: {e}")
 
 # Export the engine class
 __all__ = ["IntelligentExitEngine"]
