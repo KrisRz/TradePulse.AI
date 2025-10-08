@@ -160,16 +160,16 @@ class HistoricalMarketContextService:
                 logger.info("   No data in DynamoDB yet")
                 return False
             
-            # Check freshness (< 72 hours - increased for weekends when data can't refresh)
+            # FAST ITERATION: 12h cache for rapid AWS testing (was 72h)
             last_updated = float(cache_item.get("last_updated", 0))  # Convert Decimal to float
             age_hours = (datetime.now(timezone.utc).timestamp() - last_updated) / 3600
             
-            # RELAXED: 72h instead of 24h (weekends + holidays where refresh may fail)
-            if age_hours > 72:
-                logger.warning(f"   DynamoDB data is {age_hours:.1f} hours old (>72h), refreshing needed")
+            # ✅ 12h TTL for faster iteration (was 72h)
+            if age_hours > 12:
+                logger.warning(f"   DynamoDB data is {age_hours:.1f} hours old (>12h), refreshing needed")
                 return False
-            elif age_hours > 24:
-                logger.info(f"   ℹ️ Using DynamoDB data ({age_hours:.1f}h old, acceptable for weekends)")
+            elif age_hours > 6:  # ✅ 6h warning (was 24h)
+                logger.info(f"   ℹ️ Using DynamoDB data ({age_hours:.1f}h old, consider refresh)")
             else:
                 logger.info(f"   ✅ Fresh DynamoDB data ({age_hours:.1f}h old)")
             
