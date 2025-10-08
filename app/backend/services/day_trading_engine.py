@@ -28,6 +28,7 @@ from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
 from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_market_data, get_live_candlestick_data, get_live_market_data_service
 from app.backend.services.professional_portfolio import get_professional_portfolio, PositionType
 from app.backend.core.runtime_config import runtime_config_store
+from app.backend.config.day_trading_config import get_day_trading_config
 # Professional integrations - CRITICAL for Phase 1A
 from app.backend.services.dynamic_risk_manager import DynamicRiskManager
 from app.backend.services.emergency_controls import EmergencyControlSystem
@@ -134,19 +135,27 @@ class DayTradingEngine:
         # Duplicate suppression burst tracker (timestamps of suppressions)
         self._dupe_suppress_ts: List[float] = []
         
-        # CONSERVATIVE SCALPING MODE - Tryb 1: Małe, częste zyski
+        # ✅ PROFESSIONAL: Use adaptive config from day_trading_config.py
         from app.backend.core.config import get_settings
         s = get_settings()
+        
+        # Static config for compatibility (used for max_positions only)
+        # Other params delegated to adaptive systems:
+        # - analysis_interval → adaptive (volatility-based)
+        # - confidence_threshold → ConfidenceThresholds (unified)
+        # - position_size_pct → Kelly Criterion (Entry Engine)
+        # - stop_loss_pct → ATR-based (Exit Engine)
+        # - take_profit_pct → ATR-based (Exit Engine)
         self.mode_configs = {
             TradingMode.DAY_TRADING: TradingModeConfig(
                 mode=TradingMode.DAY_TRADING,
-                analysis_interval=8,        # 8 seconds - MICRO SCALPING: jeszcze szybsze (was 12s)
-                position_duration=900,     # 15 minutes average (krótsze pozycje)
-                confidence_threshold=0.30,  # JUMP CATCHING: 30% confidence (więcej okazji na reversal)
-                max_positions=int(getattr(s, "MAX_CONCURRENT_POSITIONS", 12)),  # Więcej małych pozycji (was 8)
-                position_size_pct=0.015,   # SMALL TRADES: 1.5% per position (~$750 for $30 profit targets)
-                stop_loss_pct=0.004,       # TIGHT: 0.4% = $40 max loss (tighter)
-                take_profit_pct=0.003      # FREQUENT: 0.3% = $30 target (więcej okazji)
+                analysis_interval=8,        # Base interval (adaptive in _analysis_loop)
+                position_duration=900,      # Informational only
+                confidence_threshold=0.30,  # Delegated to ConfidenceThresholds
+                max_positions=int(getattr(s, "MAX_CONCURRENT_POSITIONS", 12)),
+                position_size_pct=0.015,   # Delegated to Kelly Criterion
+                stop_loss_pct=0.004,       # Delegated to Exit Engine
+                take_profit_pct=0.003      # Delegated to Exit Engine
             )
         }
         
@@ -370,8 +379,9 @@ class DayTradingEngine:
         }
     
     async def _analysis_loop(self):
-        """Main analysis loop - frequency depends on trading mode"""
+        """Main analysis loop - frequency adapts to market volatility"""
         config = self.mode_configs[self.current_mode]
+        day_config = get_day_trading_config()
         
         try:
             while self.is_running:
@@ -392,7 +402,6 @@ class DayTradingEngine:
                     await self._run_market_analysis()
                     
                     # Monitor open positions with exit engine (EVERY CYCLE for day trading)
-                    # DAY TRADING FIX: Check positions every 12 seconds, not every 36 seconds!
                     await self._monitor_open_positions()
                     
                     # Track performance
@@ -411,8 +420,31 @@ class DayTradingEngine:
                 except Exception as e:
                     logger.error(f"❌ Analysis error in {self.current_mode.value} mode: {e}")
                 
-                # Wait for next analysis based on mode
-                await asyncio.sleep(config.analysis_interval)
+                # ✅ ADAPTIVE INTERVAL: Calculate based on current volatility
+                try:
+                    service = await get_live_market_data_service()
+                    recent_candles = service.get_recent_candles("1m", 20)
+                    
+                    # Calculate realized volatility from recent closes
+                    current_vol = 0.015  # default
+                    if recent_candles and len(recent_candles) >= 10:
+                        closes = []
+                        for c in recent_candles[-10:]:
+                            if isinstance(c, dict):
+                                closes.append(float(c.get("close", 0.0)))
+                            elif isinstance(c, list) and len(c) >= 5:
+                                closes.append(float(c[4]))
+                        
+                        if len(closes) >= 10 and min(closes) > 0:
+                            import numpy as np
+                            current_vol = float(np.std(closes) / np.mean(closes))
+                    
+                    adaptive_interval = day_config.get_analysis_interval(current_vol)
+                    await asyncio.sleep(adaptive_interval)
+                    
+                except Exception as e:
+                    logger.debug(f"Adaptive interval calculation failed: {e}, using base interval")
+                    await asyncio.sleep(config.analysis_interval)
                 
         except asyncio.CancelledError:
             logger.info(f"🛑 {self.current_mode.value} analysis loop cancelled")
@@ -1232,25 +1264,17 @@ class DayTradingEngine:
             }
     
     def _get_session_confidence_multiplier(self) -> float:
-        """Get confidence multiplier based on current trading session"""
-        # BITCOIN JUMP CATCHING - Higher multipliers for volatility sessions
-        session_multipliers = {
-            TradingSession.ASIAN: 0.80,            # Lower volatility (reduced from 0.85)
-            TradingSession.EUROPEAN: 1.0,          # Standard
-            TradingSession.AMERICAN: 1.15,         # Higher Bitcoin activity (increased from 1.1)
-            TradingSession.OVERLAP_EU_US: 1.30,    # Peak volatility for Bitcoin (increased from 1.2)
-            TradingSession.OVERLAP_ASIAN_EU: 1.10, # Morning volatility
-            TradingSession.OVERLAP_US_ASIAN: 1.05  # Evening overlap
-        }
+        """
+        Get confidence multiplier based on current trading session
         
-        base_multiplier = session_multipliers.get(self.current_session, 1.0)
+        ✅ ADAPTIVE: Uses DayTradingConfig for Bitcoin-optimized session detection
+        Bitcoin trades 24/7, so effects are subtle (0.95-1.12x)
+        """
+        day_config = get_day_trading_config()
+        current_hour = datetime.now(timezone.utc).hour
         
-        # Additional boost for day trading during high-volume sessions
-        if self.current_mode == TradingMode.DAY_TRADING:
-            if self.current_session in [TradingSession.AMERICAN, TradingSession.OVERLAP_EU_US]:
-                base_multiplier *= 1.05
-        
-        return base_multiplier
+        # Get adaptive multiplier from config
+        return day_config.get_session_multiplier(current_hour)
         
     async def _audit_decision(self, signal, entry_decision, exit_decision, risk_assessment, outcome: str):
         """PHASE 1A: Complete decision audit trail for professional operation"""

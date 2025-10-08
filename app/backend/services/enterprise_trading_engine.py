@@ -52,14 +52,14 @@ class EnterpriseTradingEngine:
         current_file = Path(__file__).parent.parent  # Go up from services/ to backend/
         self.model_path = current_file / "models" / "enterprise"
         
-        # Use unified trading thresholds
+        # Use unified trading thresholds (delegated to validator & entry/exit engines)
         self.thresholds = get_trading_thresholds()
         self.confidence_threshold = self.thresholds.confidence.BUY_THRESHOLD  # 65% unified threshold
-        self.risk_threshold = 0.80        # SCALPING: 80% max reversal risk (more opportunities!)
-        self.max_position_size = 0.20     # SCALPING: 20% of portfolio max (8 positions × 2.5%)
-        self.day_mode = True
-        self.enable_exploratory_signals = True  # Enable exploratory signals
-        self.scalping_mode = True         # Enable scalping optimizations
+        
+        # ✅ PROFESSIONAL: Risk & position sizing delegated to specialized services:
+        # - Risk threshold → DynamicRiskManager (adaptive)
+        # - Position size → Kelly Criterion in Entry Engine (adaptive)
+        # - No hardcoded flags (engine is pure signal generator)
         
         # Market data service
         self.market_service = None
