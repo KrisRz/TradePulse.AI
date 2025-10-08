@@ -919,22 +919,32 @@ class IntelligentEntryEngine:
                     
                     # CRITICAL FIX: Find nearest support/resistance for risk-reward calculation
                     # Day trading validator needs single values, not arrays
+                    # FILTER to reasonable distances for day trading (max 3% support, 5% resistance)
+                    MAX_SUPPORT_DISTANCE_PCT = 0.03  # 3% max for support
+                    MAX_RESISTANCE_DISTANCE_PCT = 0.05  # 5% max for resistance
+                    
                     nearest_support = None
                     nearest_resistance = None
                     
                     if support_levels:
-                        # Find nearest support BELOW current price
-                        supports_below = [s for s in support_levels if s < current_price]
-                        nearest_support = max(supports_below) if supports_below else current_price * 0.98  # Fallback 2% below
+                        # Find nearest support BELOW current price AND within max distance
+                        supports_below = [
+                            s for s in support_levels 
+                            if s < current_price and (current_price - s) / current_price <= MAX_SUPPORT_DISTANCE_PCT
+                        ]
+                        nearest_support = max(supports_below) if supports_below else current_price * 0.985  # Fallback 1.5% below (tighter)
                     else:
-                        nearest_support = current_price * 0.98  # Fallback 2% below
+                        nearest_support = current_price * 0.985  # Fallback 1.5% below
                     
                     if resistance_levels:
-                        # Find nearest resistance ABOVE current price
-                        resistances_above = [r for r in resistance_levels if r > current_price]
-                        nearest_resistance = min(resistances_above) if resistances_above else current_price * 1.03  # Fallback 3% above (asymmetric for better R/R)
+                        # Find nearest resistance ABOVE current price AND within max distance
+                        resistances_above = [
+                            r for r in resistance_levels 
+                            if r > current_price and (r - current_price) / current_price <= MAX_RESISTANCE_DISTANCE_PCT
+                        ]
+                        nearest_resistance = min(resistances_above) if resistances_above else current_price * 1.025  # Fallback 2.5% above (asymmetric for better R/R)
                     else:
-                        nearest_resistance = current_price * 1.03  # Fallback 3% above (asymmetric for better R/R)
+                        nearest_resistance = current_price * 1.025  # Fallback 2.5% above
                     
                     # Calculate risk/reward for logging
                     potential_profit = (nearest_resistance - current_price) / current_price

@@ -331,7 +331,15 @@ class DayTradingValidator:
                 logger.info("📊 Skipping S/R distance check (using ATR-based targets)")
                 return True, "ATR-based targets (no S/R required)"
             
-            # STANDARD: Validate S/R distance
+            # DAY TRADING: Skip distance check for HIGH CONFIDENCE (80%+) signals
+            # If AI is 80%+ confident, trust it even if resistance is close
+            if setup.confidence >= 0.80:
+                resistance_dist = abs(setup.resistance - setup.current_price) / setup.current_price
+                support_dist = abs(setup.current_price - setup.support) / setup.current_price
+                logger.info(f"🎯 HIGH CONFIDENCE ({setup.confidence:.1%}): Skipping S/R distance checks (R: +{resistance_dist:.2%}, S: -{support_dist:.2%})")
+                return True, f"HIGH CONFIDENCE override (R: +{resistance_dist:.2%}, S: -{support_dist:.2%})"
+            
+            # STANDARD: Validate S/R distance for <80% confidence
             resistance_dist = abs(setup.resistance - setup.current_price) / setup.current_price
             min_res_dist = params['min_resistance_distance']
             if resistance_dist < min_res_dist:
