@@ -890,8 +890,33 @@ def _calculate_technical_indicators(candles: List[Dict], current_price: float) -
 		ema_20 = _calculate_ema(closes, 20)
 		ema_50 = _calculate_ema(closes, 50) if len(closes) >= 50 else ema_20
 		
-		# 5. Volatility (price volatility)
-		volatility = float(np.std(closes[-20:]) / np.mean(closes[-20:])) if len(closes) >= 20 else 0.02
+		# 5. Volatility (DAY TRADING: Use full 50-candle window, not just 20)
+		# PROFESSIONAL: Calculate True Range-based volatility (like ATR)
+		# For day trading, need ACTUAL volatility, not just 20-minute snapshot
+		if len(closes) >= 50 and len(highs) >= 50 and len(lows) >= 50:
+			# Calculate True Ranges for ATR-style volatility
+			true_ranges = []
+			for i in range(1, min(len(highs), 50)):
+				high = highs[-i]
+				low = lows[-i]
+				prev_close = closes[-(i+1)]
+				tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+				true_ranges.append(tr)
+			
+			# ATR-based volatility as % of price (professional standard)
+			avg_true_range = float(np.mean(true_ranges)) if true_ranges else 0.0
+			volatility = (avg_true_range / current_price) if current_price > 0 else 0.02
+			
+			# ADDITIONAL: Price volatility over full window (backup measure)
+			price_volatility = float(np.std(closes[-50:]) / np.mean(closes[-50:]))
+			
+			# Use the HIGHER of the two (captures real volatility)
+			volatility = max(volatility, price_volatility)
+		elif len(closes) >= 20:
+			# Fallback: use 20-candle window but calculate properly
+			volatility = float(np.std(closes[-20:]) / np.mean(closes[-20:]))
+		else:
+			volatility = 0.02  # Default
 		
 		# 6. Volume Ratio (current vs average)
 		avg_volume = float(np.mean(volumes)) if len(volumes) > 0 else 1000000

@@ -31,7 +31,7 @@ class RuntimeConfig(BaseModel):
     playbook_override_min_timing: float = 0.70
     playbook_override_size_multiplier: float = 0.60
     playbook_override_max_spread_bps: float = 3.0
-    playbook_override_max_slippage_bps: float = 100.0  # FIXED: Bitcoin requires higher slippage tolerance
+    playbook_override_max_slippage_bps: float = 400.0  # DAY TRADING: Volatility proxy needs higher tolerance (was 100)
     playbook_override_block_if_guard: Set[str] = {"breaker", "volatility", "cooldown", "duplicate"}
     require_macd_validator_pass: bool = True
 

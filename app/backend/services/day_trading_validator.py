@@ -383,10 +383,11 @@ class DayTradingValidator:
         if setup.layer_agreement < min_agreement:
             return False, f"Insufficient layer agreement ({setup.layer_agreement}/6 < {min_agreement}/6)"
         
-        # RELAXED LSTM check: Don't require LSTM for high confidence signals
+        # RELAXED LSTM check: Don't require LSTM for 70%+ confidence signals (DAY TRADING OPTIMIZED)
+        # For day trading, we want to catch moves quickly - 70% is strong enough
         if setup.action in ["BUY", "SELL"]:
-            if not setup.lstm_confirmation and setup.confidence < 0.75:
-                return False, "LSTM does not confirm direction (required for <75% confidence)"
+            if not setup.lstm_confirmation and setup.confidence < 0.70:  # LOWERED from 0.75 to 0.70 for day trading
+                return False, f"LSTM does not confirm direction (required for <70% confidence)"
         
         return True, f"Layer agreement OK ({setup.layer_agreement}/6 layers >= {min_agreement}/6, LSTM: {'✓' if setup.lstm_confirmation else '✗'})"
     

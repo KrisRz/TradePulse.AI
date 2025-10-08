@@ -917,11 +917,39 @@ class IntelligentEntryEngine:
                     
                     logger.info(f"📊 S/R LEVELS: {len(support_levels)} support, {len(resistance_levels)} resistance (from optimized algorithm)")
                     
+                    # CRITICAL FIX: Find nearest support/resistance for risk-reward calculation
+                    # Day trading validator needs single values, not arrays
+                    nearest_support = None
+                    nearest_resistance = None
+                    
+                    if support_levels:
+                        # Find nearest support BELOW current price
+                        supports_below = [s for s in support_levels if s < current_price]
+                        nearest_support = max(supports_below) if supports_below else current_price * 0.98  # Fallback 2% below
+                    else:
+                        nearest_support = current_price * 0.98  # Fallback 2% below
+                    
+                    if resistance_levels:
+                        # Find nearest resistance ABOVE current price
+                        resistances_above = [r for r in resistance_levels if r > current_price]
+                        nearest_resistance = min(resistances_above) if resistances_above else current_price * 1.03  # Fallback 3% above (asymmetric for better R/R)
+                    else:
+                        nearest_resistance = current_price * 1.03  # Fallback 3% above (asymmetric for better R/R)
+                    
+                    # Calculate risk/reward for logging
+                    potential_profit = (nearest_resistance - current_price) / current_price
+                    potential_loss = (current_price - nearest_support) / current_price
+                    risk_reward = potential_profit / potential_loss if potential_loss > 0 else 0.0
+                    
+                    logger.info(f"📊 NEAREST S/R: Support=${nearest_support:.2f} (-{potential_loss:.2%}), Resistance=${nearest_resistance:.2f} (+{potential_profit:.2%}), R/R={risk_reward:.2f}:1")
+                    
                     # Add to market data for layer analysis
                     market_data["price_position_30d"] = price_position_30d
                     market_data["price_position_7d"] = price_position_7d
                     market_data["support_levels"] = support_levels
                     market_data["resistance_levels"] = resistance_levels
+                    market_data["support"] = nearest_support  # CRITICAL: Single value for validator
+                    market_data["resistance"] = nearest_resistance  # CRITICAL: Single value for validator
                     market_data["historical_context_available"] = True
                     
                     # Safe formatting for price positions
