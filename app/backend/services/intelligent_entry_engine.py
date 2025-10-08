@@ -2695,7 +2695,7 @@ class IntelligentEntryEngine:
                     outcome = self._analyze_pattern_outcome(historical_candles[i:i+10], signal_action)
                     if outcome["success"]:
                         patterns_found.append({
-                            "timestamp": candle[0],  # Open time
+                            "timestamp": candle.get("timestamp", candle.get("open_time", 0)),  # Open time
                             "price": historical_price,
                             "outcome": outcome,
                             "similarity": price_similarity
@@ -2721,13 +2721,13 @@ class IntelligentEntryEngine:
         if len(future_candles) < 5:
             return {"success": False, "success_score": 0.0}
         
-        entry_price = float(future_candles[0][4])  # Close price of entry candle
+        entry_price = float(future_candles[0].get("close", 0))  # Close price of entry candle
         max_gain = 0.0
         max_loss = 0.0
         
         for candle in future_candles[1:]:
-            high_price = float(candle[2])
-            low_price = float(candle[3])
+            high_price = float(candle.get("high", 0))
+            low_price = float(candle.get("low", 0))
             
             # Calculate gains and losses
             gain = (high_price - entry_price) / entry_price
@@ -2837,29 +2837,45 @@ class IntelligentEntryEngine:
             total_count = 0
             
             for i in range(1, len(macd_data) - 5):
-                macd = macd_data[i]
-                prev_macd = macd_data[i - 1]
-                
-                # Detect crossovers
-                if direction == "bullish" and macd > 0 and prev_macd <= 0:
-                    total_count += 1
-                    # Check outcome
-                    entry_price = float(historical_candles[i].get("close", 0))
-                    future_price = float(historical_candles[i + 5].get("close", 0))
-                    if future_price > entry_price * 1.015:  # 1.5% gain
-                        success_count += 1
-                        
-                elif direction == "bearish" and macd < 0 and prev_macd >= 0:
-                    total_count += 1
-                    entry_price = float(historical_candles[i].get("close", 0))
-                    future_price = float(historical_candles[i + 5].get("close", 0))
-                    if future_price < entry_price * 0.985:  # 1.5% drop
-                        success_count += 1
+                try:
+                    macd = macd_data[i]
+                    prev_macd = macd_data[i - 1]
+                    
+                    # Detect crossovers
+                    if direction == "bullish" and macd > 0 and prev_macd <= 0:
+                        total_count += 1
+                        # Check outcome - ensure candle is a dictionary
+                        candle_i = historical_candles[i]
+                        candle_future = historical_candles[i + 5]
+                        if not isinstance(candle_i, dict) or not isinstance(candle_future, dict):
+                            logger.warning(f"⚠️ MACD: Invalid candle format at i={i} (types: {type(candle_i)}, {type(candle_future)})")
+                            continue
+                        entry_price = float(candle_i.get("close", 0))
+                        future_price = float(candle_future.get("close", 0))
+                        if future_price > entry_price * 1.015:  # 1.5% gain
+                            success_count += 1
+                            
+                    elif direction == "bearish" and macd < 0 and prev_macd >= 0:
+                        total_count += 1
+                        candle_i = historical_candles[i]
+                        candle_future = historical_candles[i + 5]
+                        if not isinstance(candle_i, dict) or not isinstance(candle_future, dict):
+                            logger.warning(f"⚠️ MACD: Invalid candle format at i={i} (types: {type(candle_i)}, {type(candle_future)})")
+                            continue
+                        entry_price = float(candle_i.get("close", 0))
+                        future_price = float(candle_future.get("close", 0))
+                        if future_price < entry_price * 0.985:  # 1.5% drop
+                            success_count += 1
+                except (KeyError, TypeError, AttributeError, IndexError) as inner_e:
+                    logger.warning(f"⚠️ MACD: Inner loop error at i={i}: {type(inner_e).__name__}: {inner_e}")
+                    continue
             
             return success_count / max(total_count, 1)
             
         except Exception as e:
-            logger.warning(f"MACD validation failed: {e}")
+            logger.warning(f"MACD validation failed: {type(e).__name__}: {e}")
+            import traceback
+            logger.warning(f"MACD traceback: {traceback.format_exc()}")
             return 0.6
     
     async def _validate_bollinger_bounce_historically(self, level: str) -> float:
@@ -2879,29 +2895,51 @@ class IntelligentEntryEngine:
             total_count = 0
             
             for i, bb in enumerate(bb_data[:-5]):
-                price = float(historical_candles[i].get("close", 0))
-                upper_band = bb["upper"]
-                lower_band = bb["lower"]
-                
-                # Check for touches near bands
-                if level == "support" and price <= lower_band * 1.005:  # Near lower band
-                    total_count += 1
-                    # Check for bounce (price goes up)
-                    future_price = float(historical_candles[i + 3][4]) if i + 3 < len(historical_candles) else price
-                    if future_price > price * 1.01:  # 1% bounce
-                        success_count += 1
-                        
-                elif level == "resistance" and price >= upper_band * 0.995:  # Near upper band
-                    total_count += 1
-                    # Check for rejection (price goes down)
-                    future_price = float(historical_candles[i + 3][4]) if i + 3 < len(historical_candles) else price
-                    if future_price < price * 0.99:  # 1% rejection
-                        success_count += 1
+                try:
+                    candle_i = historical_candles[i]
+                    if not isinstance(candle_i, dict):
+                        logger.warning(f"⚠️ Bollinger: Invalid candle format at i={i} (type: {type(candle_i)})")
+                        continue
+                    price = float(candle_i.get("close", 0))
+                    upper_band = bb["upper"]
+                    lower_band = bb["lower"]
+                    
+                    # Check for touches near bands
+                    if level == "support" and price <= lower_band * 1.005:  # Near lower band
+                        total_count += 1
+                        # Check for bounce (price goes up)
+                        if i + 3 < len(historical_candles):
+                            candle_future = historical_candles[i + 3]
+                            if not isinstance(candle_future, dict):
+                                continue
+                            future_price = float(candle_future.get("close", 0))
+                        else:
+                            future_price = price
+                        if future_price > price * 1.01:  # 1% bounce
+                            success_count += 1
+                            
+                    elif level == "resistance" and price >= upper_band * 0.995:  # Near upper band
+                        total_count += 1
+                        # Check for rejection (price goes down)
+                        if i + 3 < len(historical_candles):
+                            candle_future = historical_candles[i + 3]
+                            if not isinstance(candle_future, dict):
+                                continue
+                            future_price = float(candle_future.get("close", 0))
+                        else:
+                            future_price = price
+                        if future_price < price * 0.99:  # 1% rejection
+                            success_count += 1
+                except (KeyError, TypeError, AttributeError, IndexError) as inner_e:
+                    logger.warning(f"⚠️ Bollinger: Inner loop error at i={i}: {type(inner_e).__name__}: {inner_e}")
+                    continue
             
             return success_count / max(total_count, 1)
             
         except Exception as e:
-            logger.warning(f"Bollinger validation failed: {e}")
+            logger.warning(f"Bollinger validation failed: {type(e).__name__}: {e}")
+            import traceback
+            logger.warning(f"Bollinger traceback: {traceback.format_exc()}")
             return 0.55
     
     async def _validate_volume_breakout_historically(self, volume_ratio: float) -> float:
