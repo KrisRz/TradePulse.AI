@@ -1259,10 +1259,10 @@ class EnterpriseTradingEngine:
                 return primary_signal[0], primary_signal[1], "primary"
             
             # EXPLORATORY SIGNAL (lower thresholds for small positions)
-            if self.enable_exploratory_signals:
-                exploratory_signal = self._calculate_exploratory_signal(confidence, timing_score, reversal_prob, filter_score, volatility)
-                if exploratory_signal[0] != "HOLD":
-                    return exploratory_signal[0], exploratory_signal[1], "exploratory"
+            # ✅ PROFESSIONAL: Always enabled for day trading opportunities
+            exploratory_signal = self._calculate_exploratory_signal(confidence, timing_score, reversal_prob, filter_score, volatility)
+            if exploratory_signal[0] != "HOLD":
+                return exploratory_signal[0], exploratory_signal[1], "exploratory"
             
             # Default to HOLD if no signals generated
             logger.info("🔍 DECISION: No signals generated - HOLD")
