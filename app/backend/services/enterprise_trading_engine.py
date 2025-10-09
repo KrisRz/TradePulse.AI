@@ -1245,7 +1245,7 @@ class EnterpriseTradingEngine:
             volatility = layer_results.get("volatility", 0.05)  # Default 5%
             
             logger.info(f"🔍 DECISION DEBUG - confidence={confidence:.3f}, timing={timing_score:.3f}, reversal={reversal_prob:.3f}, filter={filter_score:.3f}")
-            logger.info(f"🔍 THRESHOLDS - primary={self.thresholds.confidence.BUY_THRESHOLD:.2f}, exploratory={self.thresholds.confidence.EXPLORATORY_BUY:.2f}, consensus={self.thresholds.confidence.CONSENSUS_THRESHOLD:.2f}, risk_thresh={self.risk_threshold:.2f}")
+            logger.info(f"🔍 THRESHOLDS - primary={self.thresholds.confidence.BUY_THRESHOLD:.2f}, exploratory={self.thresholds.confidence.EXPLORATORY_BUY:.2f}, consensus={self.thresholds.confidence.CONSENSUS_THRESHOLD:.2f}")
             
             # PRIMARY SIGNAL (strict criteria)
             primary_signal = self._calculate_primary_signal(
@@ -1279,15 +1279,15 @@ class EnterpriseTradingEngine:
             conf_check = confidence >= self.thresholds.confidence.BUY_THRESHOLD  # 65% confidence required
             
             # SCALPING: High reversal probability = OPPORTUNITY for quick profits!
+            # ✅ PROFESSIONAL: Risk threshold delegated to DynamicRiskManager
             reversal_opportunity = reversal_prob > 0.55  # 55%+ reversal = OPPORTUNITY (was 60%)
-            reversal_safe = reversal_prob < self.risk_threshold  # Check extreme risk (80%+)
-            reversal_check = reversal_opportunity or reversal_safe  # Either opportunity OR safe
+            reversal_check = reversal_opportunity  # Opportunity-based (risk delegated)
             
             filter_check = filter_score > 0.08  # SCALPING: Lower filter threshold (was 0.15)
             timing_buy_check = timing_score > 0.008   # SCALPING: More sensitive timing (was 0.02)
             timing_sell_check = timing_score < -0.008 # SCALPING: More sensitive timing (was -0.02)
             
-            logger.info(f"DAY TRADING CHECKS - conf:{conf_check}, reversal_opp:{reversal_opportunity}, reversal_safe:{reversal_safe}, filter:{filter_check}, timing_buy:{timing_buy_check}, timing_sell:{timing_sell_check}")
+            logger.info(f"DAY TRADING CHECKS - conf:{conf_check}, reversal_opp:{reversal_opportunity}, filter:{filter_check}, timing_buy:{timing_buy_check}, timing_sell:{timing_sell_check}")
             
             # DAY TRADING: Special logic for extreme oversold/overbought conditions
             # Bind to actual RSI/BB to avoid mislabeling
@@ -1356,10 +1356,13 @@ class EnterpriseTradingEngine:
             return "HOLD", 0.5
     
     def _calculate_position_size(self, confidence: float, layer_results: Dict[str, Any]) -> float:
-        """Calculate position size based on confidence and risk"""
+        """
+        Calculate relative position size indicator (0-1 scale)
+        
+        ✅ PROFESSIONAL: Actual position sizing delegated to Kelly Criterion in Entry Engine
+        This just provides a relative indicator for signal strength
+        """
         try:
-            base_size = self.max_position_size
-            
             # Adjust by confidence
             confidence_factor = confidence
             
@@ -1369,14 +1372,15 @@ class EnterpriseTradingEngine:
                 # Lower size for high volatility
                 volatility_factor = max(0.5, 1.0 - layer_results["layer_4_filters"]["filter_score"])
             
-            # Calculate final size
-            position_size = base_size * confidence_factor * volatility_factor
+            # Calculate relative size indicator (0-1 scale)
+            position_size = confidence_factor * volatility_factor
             
-            return min(position_size, self.max_position_size)
+            # Return clamped indicator
+            return min(1.0, max(0.0, position_size))
             
         except Exception as e:
             logger.error(f"Position size calculation error: {e}")
-            return 0.1  # Conservative fallback
+            return 0.5  # Neutral fallback
     
     def _calculate_risk_score(self, layer_results: Dict[str, Any]) -> float:
         """Calculate overall risk score"""
