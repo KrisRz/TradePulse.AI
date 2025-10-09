@@ -354,11 +354,12 @@ class LiveMarketDataService:
 				logger.info(f"📡 Connecting to ticker stream: {stream_name} (attempt {reconnect_count + 1})")
 				
 				# Create WebSocket with AWS-optimized timing
-				# AWS App Runner has aggressive idle timeouts - use shorter ping interval
+				# Binance recommends 3-minute keepalive; AWS adds network latency
+				# FIXED: Increased intervals to prevent "keepalive ping timeout" errors
 				websocket = await websockets.connect(
 					url,
-					ping_interval=10,  # Ping every 10s (was 20s) - keep connection active through AWS proxy
-					ping_timeout=20,   # Wait 20s for pong (was 10s) - account for AWS network latency
+					ping_interval=45,  # Ping every 45s - balanced for stability
+					ping_timeout=30,   # Wait 30s for pong - account for AWS network latency
 					close_timeout=10
 				)
 				self.connections["ticker"] = websocket
@@ -490,11 +491,12 @@ class LiveMarketDataService:
 				logger.info(f"📡 Connecting to candle stream: {stream_name} (attempt {reconnect_count + 1})")
 				
 				# Create WebSocket with AWS-optimized timing
-				# AWS App Runner has aggressive idle timeouts - use shorter ping interval
+				# Binance recommends 3-minute keepalive; AWS adds network latency
+				# FIXED: Increased intervals to prevent "keepalive ping timeout" errors
 				websocket = await websockets.connect(
 					url,
-					ping_interval=10,  # Ping every 10s (was 20s) - keep connection active through AWS proxy
-					ping_timeout=20,   # Wait 20s for pong (was 10s) - account for AWS network latency
+					ping_interval=45,  # Ping every 45s - balanced for stability
+					ping_timeout=30,   # Wait 30s for pong - account for AWS network latency
 					close_timeout=10
 				)
 				self.connections[f"kline_{interval}"] = websocket
