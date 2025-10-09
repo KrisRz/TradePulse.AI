@@ -80,5 +80,5 @@ EXPOSE 9002
 # Start command - properly reference main module in app/backend
 CMD ["python", "-m", "uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "9002", "--workers", "1"]
 
-# Cache bust for force rebuild - FRESH COMPLETE PIPELINE
-ENV CACHE_BUST=20251007_CLOUDWATCH_FIXES
+# Cache bust for force rebuild - DAY TRADING OPTIMIZATIONS + KALMAN FILTER
+ENV CACHE_BUST=20251009_DAY_TRADING_KALMAN_FILTER

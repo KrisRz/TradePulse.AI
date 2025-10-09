@@ -44,6 +44,7 @@ pandas>=2.2.3
 pyarrow>=17.0.0
 optuna>=3.6.1
 # Technical Analysis implemented using pandas and numpy (no external dependencies)
+# Kalman Filter: Custom implementation using NumPy (no additional dependencies)
 
 # Env
 python-dotenv==1.1.1
