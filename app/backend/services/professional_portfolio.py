@@ -593,15 +593,20 @@ class ProfessionalPortfolio:
         # FIXED: Use division to reduce position size, not addition to increase it
         loss_adjustment = Decimal('1') / (Decimal('1') + Decimal('0.03') * Decimal(str(self.consecutive_losses)))
         
-        # Hard block after max consecutive losses
+        # 🚨 CRITICAL FIX: Hard block after max consecutive losses
         if self.consecutive_losses >= self.max_consecutive_losses:
-            logger.warning(f"⚠️ Max consecutive losses reached ({self.consecutive_losses}), blocking new positions for 15 minutes")
-            loss_adjustment = Decimal('0')  # Block all new positions
+            logger.error(f"🚨 LOSS LIMIT ENFORCED: {self.consecutive_losses} consecutive losses (max: {self.max_consecutive_losses})")
+            logger.error(f"🚫 BLOCKING ALL NEW POSITIONS - wait for manual review or next trading session")
+            # Return 0 immediately - DO NOT apply minimum size!
+            return Decimal('0')
         
         # Calculate size using safe money math
         portfolio_value = self.get_total_portfolio_value()
         base_calc = safe_monetary_multiply(portfolio_value, base_size_pct)
         confidence_calc = safe_monetary_multiply(base_calc, confidence_multiplier)
+        
+        # Adjust by consecutive losses (reduce size after losses)
+        loss_adjustment = Decimal('1') / (Decimal('1') + Decimal('0.03') * Decimal(str(self.consecutive_losses)))
         max_position_value = safe_monetary_multiply(confidence_calc, loss_adjustment)
 
         # Risk-based sizing (Kelly criterion approximation)
@@ -618,9 +623,16 @@ class ProfessionalPortfolio:
         # Use the smaller of requested size or calculated size
         final_size = min(requested_size, calculated_size)
         
-        # Ensure minimum viable position
-        min_size = Decimal('0.001')  # 0.001 BTC minimum
-        final_size = max(final_size, min_size)
+        # ✅ FIX: Only apply minimum size if we're not in a loss-block situation
+        # This ensures the loss limit is actually enforced
+        if final_size > 0:
+            # Ensure minimum viable position
+            min_size = Decimal('0.001')  # 0.001 BTC minimum
+            final_size = max(final_size, min_size)
+        else:
+            # If calculated size is 0, respect that (loss limit reached)
+            logger.warning(f"⚠️ Calculated position size is 0 - not applying minimum size")
+            final_size = Decimal('0')
         
         # Apply Binance LOT_SIZE validation
         validated_size = await self._validate_binance_lot_size(final_size, "BTCUSDT")

@@ -1383,6 +1383,32 @@ class IntelligentExitEngine:
             adaptive_threshold = 0.55
             regime = "unknown"
         
+        # 🚨 CRITICAL FIX: Check for strong reversal signals FIRST
+        # When reversal layer detects 4+ signals, OVERRIDE voting and force EXIT
+        reversal_layer = layer_results.get("layer_3_reversal", {})
+        if isinstance(reversal_layer, dict):
+            reversal_signals = reversal_layer.get("reversal_signals", 0)
+            reversal_confidence = reversal_layer.get("confidence", 0.0)
+            
+            if reversal_signals >= 4:  # Very strong reversal - IMMEDIATE EXIT!
+                logger.warning(f"🚨 CRITICAL: {reversal_signals} reversal signals detected - FORCING EXIT (confidence={reversal_confidence:.2f})")
+                return {
+                    "should_exit": True,
+                    "confidence": 0.9,
+                    "reason": "strong_reversal_override",
+                    "consensus_score": 0.9,
+                    "layer_votes": {"exit": "forced", "hold": 0},
+                    "reversal_signals": reversal_signals
+                }
+            elif reversal_signals >= 3 and reversal_confidence >= 0.75:  # Strong reversal
+                logger.warning(f"⚠️ STRONG: {reversal_signals} reversal signals - PRIORITIZING EXIT (confidence={reversal_confidence:.2f})")
+                # Don't force, but heavily bias toward exit
+                reversal_override = True
+            else:
+                reversal_override = False
+        else:
+            reversal_override = False
+        
         exit_votes = 0
         hold_votes = 0
         total_confidence = 0.0
@@ -1407,6 +1433,17 @@ class IntelligentExitEngine:
         
         logger.info(f"🎯 Exit consensus: {exit_votes} exit vs {hold_votes} hold votes, "
                    f"score={consensus_score:.2f}, threshold={adaptive_threshold:.2f} (regime: {regime})")
+        
+        # 🎯 FIX: With strong reversal override, prioritize EXIT even if votes are split
+        if reversal_override and exit_votes >= 2:
+            logger.warning(f"⚠️ Strong reversal detected with {exit_votes} exit votes - FORCING EXIT")
+            return {
+                "should_exit": True,
+                "confidence": max(consensus_score, 0.75),
+                "reason": "reversal_priority_exit",
+                "consensus_score": consensus_score,
+                "layer_votes": {"exit": exit_votes, "hold": hold_votes}
+            }
         
         # Determine final decision with adaptive threshold
         if exit_votes > hold_votes and consensus_score > adaptive_threshold:
