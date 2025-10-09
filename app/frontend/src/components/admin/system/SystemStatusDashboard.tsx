@@ -318,11 +318,12 @@ export default function SystemStatusDashboard() {
       
       const data = await apiClient.portfolio.getOverview();
       
-      // Fix: Use correct API response structure - data.total_value not data.data.total_portfolio_value
-      const totalValue = data.total_value || 0;
+      // Fix: admin endpoint returns nested structure in portfolio_summary
+      const summary = data.portfolio_summary || {};
+      const totalValue = summary.total_value || 0;
       const totalPortfolios = data.total_portfolios || 0;
-      const cashBalance = data.cash_balance || 0;
-      const activePositions = data.active_positions || 0;
+      const cashBalance = summary.balance || 0;
+      const activePositions = (data.active_positions || []).length;
       
       // Service is healthy if we can connect and get data, even with 0 portfolios
       const isHealthy = totalValue > 0 || cashBalance > 0;
