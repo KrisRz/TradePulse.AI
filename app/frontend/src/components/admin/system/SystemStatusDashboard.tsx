@@ -322,7 +322,7 @@ export default function SystemStatusDashboard() {
       const summary = data.portfolio_summary || {};
       const totalValue = summary.total_value || 0;
       const totalPortfolios = data.total_portfolios || 0;
-      const cashBalance = summary.balance || 0;
+      const cashBalance = summary.balance || 0;  // FORCE REBUILD 2025-10-09
       const activePositions = (data.active_positions || []).length;
       
       // Service is healthy if we can connect and get data, even with 0 portfolios
