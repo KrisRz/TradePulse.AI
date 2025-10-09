@@ -115,11 +115,15 @@ class DynamoDBClient:
         try:
             table = self.dynamodb.create_table(**table_config)
             table.wait_until_exists()
-            logger.info(f"Created table: {table_config['TableName']}")
+            logger.info(f"✅ Created table: {table_config['TableName']}")
             return True
         except ClientError as e:
-            logger.error(f"Error creating table {table_config['TableName']}: {e}")
-            return False
+            if e.response['Error']['Code'] == 'ResourceInUseException':
+                logger.debug(f"✅ Table {table_config['TableName']} already exists")
+                return True
+            else:
+                logger.error(f"❌ Error creating table {table_config['TableName']}: {e}")
+                return False
     
     def put_item(self, table_name: str, item: Dict[str, Any]) -> bool:
         """Put an item in DynamoDB table with proper type conversion"""
@@ -540,8 +544,7 @@ class TableSchemas:
                         {'AttributeName': 'date', 'KeyType': 'HASH'},
                         {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 },
                 {
                     'IndexName': 'HourIndex',
@@ -549,8 +552,7 @@ class TableSchemas:
                         {'AttributeName': 'hour', 'KeyType': 'HASH'},
                         {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ],
             'BillingMode': 'PAY_PER_REQUEST',
@@ -593,8 +595,7 @@ class TableSchemas:
                         {'AttributeName': 'GSI1PK', 'KeyType': 'HASH'},
                         {'AttributeName': 'GSI1SK', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 },
                 {
                     'IndexName': 'DateConfidenceIndex',
@@ -602,8 +603,7 @@ class TableSchemas:
                         {'AttributeName': 'GSI2PK', 'KeyType': 'HASH'},
                         {'AttributeName': 'GSI2SK', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ],
             'BillingMode': 'PAY_PER_REQUEST',
@@ -644,8 +644,7 @@ class TableSchemas:
                         {'AttributeName': 'data_source', 'KeyType': 'HASH'},
                         {'AttributeName': 'created_at', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ],
             'BillingMode': 'PAY_PER_REQUEST',
@@ -680,8 +679,7 @@ class TableSchemas:
                         {'AttributeName': 'GSI1PK', 'KeyType': 'HASH'},
                         {'AttributeName': 'GSI1SK', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 },
                 {
                     'IndexName': 'SymbolDateIndex',
@@ -689,8 +687,7 @@ class TableSchemas:
                         {'AttributeName': 'GSI2PK', 'KeyType': 'HASH'},
                         {'AttributeName': 'GSI2SK', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ],
             'BillingMode': 'PAY_PER_REQUEST',
@@ -733,8 +730,7 @@ class TableSchemas:
                         {'AttributeName': 'GSI1PK', 'KeyType': 'HASH'},
                         {'AttributeName': 'GSI1SK', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 },
                 {
                     'IndexName': 'StatusIndex',
@@ -742,8 +738,7 @@ class TableSchemas:
                         {'AttributeName': 'GSI2PK', 'KeyType': 'HASH'},
                         {'AttributeName': 'GSI2SK', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ],
             'BillingMode': 'PAY_PER_REQUEST',
@@ -784,8 +779,7 @@ class TableSchemas:
                         {'AttributeName': 'GSI1PK', 'KeyType': 'HASH'},
                         {'AttributeName': 'GSI1SK', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ],
             'BillingMode': 'PAY_PER_REQUEST',
@@ -826,8 +820,7 @@ class TableSchemas:
                         {'AttributeName': 'status', 'KeyType': 'HASH'},
                         {'AttributeName': 'created_at', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ],
             'BillingMode': 'PAY_PER_REQUEST',
@@ -856,8 +849,7 @@ class TableSchemas:
                     'KeySchema': [
                         {'AttributeName': 'email', 'KeyType': 'HASH'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ],
             'BillingMode': 'PAY_PER_REQUEST',
@@ -906,8 +898,7 @@ class TableSchemas:
                         {'AttributeName': 'experiment_status', 'KeyType': 'HASH'},
                         {'AttributeName': 'start_date', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ],
             'BillingMode': 'PAY_PER_REQUEST'
@@ -1386,12 +1377,13 @@ class DatabaseManager:
             try:
                 # Check if table exists
                 table = self.client.get_table(config['TableName'])
-                logger.info(f"Table {config['TableName']} already exists")
+                logger.debug(f"✅ Table {config['TableName']} already exists")
             except:
                 # Create table if it doesn't exist
-                logger.info(f"Creating table {config['TableName']}")
+                logger.info(f"📝 Creating table {config['TableName']}")
                 if not self.client.create_table(config):
                     success = False
+                    logger.error(f"❌ Failed to create table {config['TableName']}")
         
         return success
     
@@ -1686,7 +1678,7 @@ def ensure_table_exists(dynamodb_client, table_name: str, attributes: List[Dict]
     try:
         # Check if table exists
         table = dynamodb_client.get_table(table_name)
-        logger.info(f"✅ Table '{table_name}' already exists")
+        logger.debug(f"✅ Table '{table_name}' already exists")
         return True
     except Exception:
         # Table doesn't exist, create it
@@ -1769,7 +1761,7 @@ def ensure_required_tables() -> bool:
             try:
                 # Check if table exists
                 client.dynamodb.meta.client.describe_table(TableName=table_name)
-                logger.info(f"✅ Table {table_name} already exists")
+                logger.debug(f"✅ Table {table_name} already exists")
                 success_count += 1
                 
             except ClientError as e:

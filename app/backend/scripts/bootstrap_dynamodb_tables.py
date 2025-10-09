@@ -87,7 +87,7 @@ def create_table_if_not_exists(client, table_schema: dict) -> bool:
     table_name = table_schema['TableName']
     
     if table_exists(client, table_name):
-        logger.info(f"✅ Table {table_name} already exists")
+        logger.debug(f"✅ Table {table_name} already exists")
         return True
     
     try:
