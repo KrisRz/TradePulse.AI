@@ -855,8 +855,189 @@ class EnterpriseTradingEngine:
             # Professional fallback - conservative but not blocking
             return {"reversal_probability": 0.4, "model_used": False}
             
+    def _enhanced_volume_spike_detection(self, features: Dict[str, float]) -> Dict[str, Any]:
+        """
+        🎯 ENHANCED: Detect volume spikes that indicate exhaustion (not breakout!)
+        
+        Volume spikes + extreme prices = STRONG reversal signals
+        This replaces Anomaly Detection with reversal-specific logic
+        """
+        try:
+            volume_ratio = features.get('volume_ratio', 1.0)
+            volatility = features.get('volatility', 0.03)
+            rsi = features.get('rsi', 50.0)
+            trend_strength = abs(features.get('trend_strength', 0.0))
+            
+            # Check for volume spike (2.5x+ average volume)
+            if volume_ratio > 2.5:
+                # Calculate spike strength (0-0.3 range)
+                spike_strength = min((volume_ratio - 2.5) / 2.0, 0.3)
+                
+                # Overbought + Volume Spike = SELL exhaustion signal
+                if rsi > 70:
+                    return {
+                        'volume_spike_detected': True,
+                        'spike_type': 'sell_exhaustion',
+                        'spike_strength': spike_strength,
+                        'reversal_boost': spike_strength * 1.5,  # 45% max boost
+                        'reasoning': f"Volume spike {volume_ratio:.1f}x + Overbought RSI {rsi:.0f}"
+                    }
+                
+                # Oversold + Volume Spike = BUY exhaustion signal
+                elif rsi < 30:
+                    return {
+                        'volume_spike_detected': True,
+                        'spike_type': 'buy_exhaustion',
+                        'spike_strength': spike_strength,
+                        'reversal_boost': spike_strength * 1.5,  # 45% max boost
+                        'reasoning': f"Volume spike {volume_ratio:.1f}x + Oversold RSI {rsi:.0f}"
+                    }
+                
+                # Volume spike with strong trend = potential exhaustion
+                elif trend_strength > 0.05:
+                    return {
+                        'volume_spike_detected': True,
+                        'spike_type': 'trend_exhaustion',
+                        'spike_strength': spike_strength * 0.7,  # Weaker signal
+                        'reversal_boost': spike_strength * 0.7,  # 21% max boost
+                        'reasoning': f"Volume spike {volume_ratio:.1f}x + Strong trend {trend_strength:.2%}"
+                    }
+            
+            # High volatility spike without volume = potential fake signal
+            elif volatility > 0.06 and volume_ratio < 1.5:
+                return {
+                    'volume_spike_detected': False,
+                    'spike_type': 'false_spike',
+                    'spike_strength': 0.0,
+                    'reversal_boost': -0.1,  # Penalize (likely noise)
+                    'reasoning': f"High volatility {volatility:.2%} but low volume {volume_ratio:.1f}x - likely noise"
+                }
+            
+            return {
+                'volume_spike_detected': False,
+                'spike_type': 'none',
+                'spike_strength': 0.0,
+                'reversal_boost': 0.0,
+                'reasoning': 'No significant volume spike'
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Enhanced volume spike detection failed: {e}")
+            return {
+                'volume_spike_detected': False,
+                'spike_type': 'error',
+                'spike_strength': 0.0,
+                'reversal_boost': 0.0,
+                'reasoning': 'Error in spike detection'
+            }
+    
+    def _smart_timing_filter(self, reversal_prob: float, features: Dict[str, float], volume_spike_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        🎯 SMART TIMING FILTER: Filter false reversals from real opportunities
+        
+        Real reversals require:
+        - Volume confirmation
+        - Volatility confirmation
+        - Trend exhaustion
+        - Proper timing
+        """
+        try:
+            volume_ratio = features.get('volume_ratio', 1.0)
+            volatility = features.get('volatility', 0.03)
+            trend_strength = abs(features.get('trend_strength', 0.0))
+            rsi = features.get('rsi', 50.0)
+            
+            # Start with base reversal probability
+            filtered_prob = reversal_prob
+            confidence_adjustments = []
+            
+            # Check 1: Volume Confirmation
+            if reversal_prob > 0.65:  # High reversal signal
+                if volume_ratio < 1.2:
+                    # Weak volume = likely false signal
+                    filtered_prob *= 0.7  # -30% confidence
+                    confidence_adjustments.append(f"Weak volume ({volume_ratio:.1f}x) → -30% confidence")
+                elif volume_ratio > 2.0:
+                    # Strong volume = confirm signal
+                    filtered_prob *= 1.15  # +15% confidence
+                    confidence_adjustments.append(f"Strong volume ({volume_ratio:.1f}x) → +15% confidence")
+            
+            # Check 2: Volatility Confirmation
+            if reversal_prob > 0.65:
+                if volatility < 0.015:
+                    # Too calm = likely false signal (no real movement)
+                    filtered_prob *= 0.6  # -40% confidence
+                    confidence_adjustments.append(f"Low volatility ({volatility:.2%}) → -40% confidence")
+                elif volatility > 0.05:
+                    # High volatility = confirm signal (real movement)
+                    filtered_prob *= 1.1  # +10% confidence
+                    confidence_adjustments.append(f"High volatility ({volatility:.2%}) → +10% confidence")
+            
+            # Check 3: Trend Exhaustion
+            if reversal_prob > 0.60:
+                if trend_strength < 0.03:
+                    # No strong trend = nothing to reverse
+                    filtered_prob *= 0.5  # -50% confidence
+                    confidence_adjustments.append(f"Weak trend ({trend_strength:.2%}) → -50% confidence")
+                elif trend_strength > 0.07:
+                    # Very strong trend = high exhaustion potential
+                    filtered_prob *= 1.2  # +20% confidence
+                    confidence_adjustments.append(f"Strong trend ({trend_strength:.2%}) → +20% confidence")
+            
+            # Check 4: RSI Extreme Confirmation
+            if reversal_prob > 0.60:
+                if 45 < rsi < 55:
+                    # Neutral RSI = no extreme to reverse from
+                    filtered_prob *= 0.6  # -40% confidence
+                    confidence_adjustments.append(f"Neutral RSI ({rsi:.0f}) → -40% confidence")
+                elif rsi > 75 or rsi < 25:
+                    # Extreme RSI = strong reversal potential
+                    filtered_prob *= 1.25  # +25% confidence
+                    confidence_adjustments.append(f"Extreme RSI ({rsi:.0f}) → +25% confidence")
+            
+            # Check 5: Volume Spike Integration
+            if volume_spike_data.get('volume_spike_detected', False):
+                spike_boost = volume_spike_data.get('reversal_boost', 0.0)
+                filtered_prob += spike_boost
+                confidence_adjustments.append(f"Volume spike boost → +{spike_boost*100:.0f}% confidence")
+            
+            # Clamp to valid range
+            filtered_prob = max(0.10, min(filtered_prob, 0.95))
+            
+            # Determine if signal passes filter
+            is_real_reversal = False
+            filter_threshold = 0.70 if reversal_prob < 0.70 else 0.65  # Lower threshold for already strong signals
+            
+            if filtered_prob >= filter_threshold:
+                # Additional checks for very high confidence
+                if volume_ratio >= 1.2 and volatility >= 0.015 and (rsi > 70 or rsi < 30 or trend_strength > 0.03):
+                    is_real_reversal = True
+            
+            return {
+                'filtered_reversal_prob': filtered_prob,
+                'original_prob': reversal_prob,
+                'is_real_reversal': is_real_reversal,
+                'confidence_adjustments': confidence_adjustments,
+                'filter_passed': is_real_reversal,
+                'reasoning': ' | '.join(confidence_adjustments) if confidence_adjustments else 'No adjustments needed'
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Smart timing filter failed: {e}")
+            return {
+                'filtered_reversal_prob': reversal_prob,
+                'original_prob': reversal_prob,
+                'is_real_reversal': reversal_prob > 0.70,
+                'confidence_adjustments': [],
+                'filter_passed': reversal_prob > 0.70,
+                'reasoning': 'Filter error, using original probability'
+            }
+
     def _calculate_dynamic_reversal_risk(self, raw_prob: float, features: Dict[str, float]) -> float:
-        """Calculate market-adaptive reversal risk instead of raw model probability"""
+        """Calculate market-adaptive reversal risk instead of raw model probability
+        
+        🎯 ENHANCED: Now includes volume spike detection and smart timing filter
+        """
         try:
             # Use 90-day quantiles instead of absolute thresholds
             # This prevents the model from being overly conservative
@@ -866,27 +1047,46 @@ class EnterpriseTradingEngine:
             volatility = features.get("volatility", 0.05)
             trend_strength = features.get("trend_strength", 0.0)
             
-            # Base adjustment: cap extreme predictions
-            adjusted_prob = min(raw_prob, 0.85)  # Cap at 85% instead of allowing 99.99%
+            # 🚀 DAY TRADING FIX: Higher cap to catch strong reversals
+            adjusted_prob = min(raw_prob, 0.90)  # Cap at 90% (was 85%)
             
-            # RSI-based adjustment (overbought INCREASES reversal risk)
-            if rsi > 75:  # OVERBOUGHT = HIGH REVERSAL RISK (Bitcoin at top!)
-                adjusted_prob *= 1.3  # INCREASE reversal risk by 30%
-            elif rsi < 25:  # OVERSOLD = LOW REVERSAL RISK (good buy opportunity)
-                adjusted_prob *= 0.7  # Reduce reversal risk by 30%
+            # RSI-based adjustment (overbought INCREASES reversal opportunity!)
+            if rsi > 75:  # OVERBOUGHT = HIGH REVERSAL OPPORTUNITY (Bitcoin at top!)
+                adjusted_prob *= 1.4  # INCREASE reversal signal by 40% (was 30%)
+            elif rsi < 25:  # OVERSOLD = HIGH REVERSAL OPPORTUNITY (Bitcoin at bottom!)
+                adjusted_prob *= 1.4  # INCREASE reversal signal by 40% (was reduction!)
             
-            # Volatility adjustment (high volatility = higher reversal risk)
+            # Volatility adjustment (high volatility = more reversal opportunities)
             if volatility > 0.08:  # High volatility
-                adjusted_prob = min(adjusted_prob * 1.2, 0.9)
+                adjusted_prob = min(adjusted_prob * 1.3, 0.95)  # Amplify (was 1.2)
             elif volatility < 0.02:  # Low volatility
-                adjusted_prob *= 0.8
+                adjusted_prob *= 0.9  # Less dramatic reduction (was 0.8)
             
-            # Trend strength adjustment (strong trends reduce reversal risk)
+            # Trend strength adjustment (strong trends still valid, but don't kill reversal signal)
             if abs(trend_strength) > 0.05:  # Strong trend
-                adjusted_prob *= 0.75
+                adjusted_prob *= 0.85  # Less dramatic reduction (was 0.75)
             
-            # Final bounds for professional trading
-            return max(0.1, min(adjusted_prob, 0.75))  # Keep between 10%-75%
+            # 🎯 ENHANCED: Apply volume spike detection
+            volume_spike_data = self._enhanced_volume_spike_detection(features)
+            if volume_spike_data.get('volume_spike_detected', False):
+                spike_boost = volume_spike_data.get('reversal_boost', 0.0)
+                adjusted_prob += spike_boost
+                logger.info(f"🔥 VOLUME SPIKE: {volume_spike_data.get('spike_type')} → +{spike_boost*100:.0f}% reversal boost")
+            
+            # Clamp before filtering
+            adjusted_prob = max(0.15, min(adjusted_prob, 0.95))
+            
+            # 🎯 ENHANCED: Apply smart timing filter
+            filter_result = self._smart_timing_filter(adjusted_prob, features, volume_spike_data)
+            final_prob = filter_result['filtered_reversal_prob']
+            
+            if filter_result['filter_passed']:
+                logger.info(f"✅ REAL REVERSAL: {final_prob:.1%} (original: {raw_prob:.1%}) | {filter_result['reasoning']}")
+            else:
+                logger.debug(f"⚠️ FILTERED: {final_prob:.1%} (from {adjusted_prob:.1%}) | {filter_result['reasoning']}")
+            
+            # 🎯 DAY TRADING: Keep between 15%-95% (was 15%-85%, expanded for strong signals)
+            return max(0.15, min(final_prob, 0.95))
             
         except Exception as e:
             logger.error(f"Dynamic reversal risk calculation failed: {e}")
@@ -1278,9 +1478,9 @@ class EnterpriseTradingEngine:
             # Use unified threshold for consistency
             conf_check = confidence >= self.thresholds.confidence.BUY_THRESHOLD  # 65% confidence required
             
-            # SCALPING: High reversal probability = OPPORTUNITY for quick profits!
+            # 🎯 DAY TRADING: High reversal probability = OPPORTUNITY for quick profits!
             # ✅ PROFESSIONAL: Risk threshold delegated to DynamicRiskManager
-            reversal_opportunity = reversal_prob > 0.55  # 55%+ reversal = OPPORTUNITY (was 60%)
+            reversal_opportunity = reversal_prob > 0.50  # 50%+ reversal = OPPORTUNITY (was 55%)
             reversal_check = reversal_opportunity  # Opportunity-based (risk delegated)
             
             filter_check = filter_score > 0.08  # SCALPING: Lower filter threshold (was 0.15)
@@ -1289,12 +1489,19 @@ class EnterpriseTradingEngine:
             
             logger.info(f"DAY TRADING CHECKS - conf:{conf_check}, reversal_opp:{reversal_opportunity}, filter:{filter_check}, timing_buy:{timing_buy_check}, timing_sell:{timing_sell_check}")
             
-            # DAY TRADING: Special logic for extreme oversold/overbought conditions
+            # 🎯 DAY TRADING: Special logic for extreme oversold/overbought conditions
             # Bind to actual RSI/BB to avoid mislabeling
             rsi = float(features.get("rsi", 50.0))
             bb_pos = float(features.get("bb_position", features.get("bollinger_position", 0.5)))
-            extreme_oversold_buy = (reversal_prob > 0.65 and timing_score > 0.0 and rsi < 30 and bb_pos < 0.2)
-            extreme_overbought_sell = (reversal_prob > 0.65 and timing_score < 0.0 and rsi > 70 and bb_pos > 0.8)
+            
+            # 🚀 STRONG REVERSAL BOOST: High reversal signal = high confidence!
+            strong_reversal = reversal_prob > 0.70  # 70%+ reversal is STRONG signal
+            if strong_reversal:
+                confidence = min(confidence * 1.15, 0.95)  # +15% confidence boost for strong reversals
+                logger.info(f"🚀 STRONG REVERSAL DETECTED: {reversal_prob:.1%} → confidence boosted to {confidence:.1%}")
+            
+            extreme_oversold_buy = (reversal_prob > 0.60 and timing_score > 0.0 and rsi < 30 and bb_pos < 0.2)  # Lowered from 0.65
+            extreme_overbought_sell = (reversal_prob > 0.60 and timing_score < 0.0 and rsi > 70 and bb_pos > 0.8)  # Lowered from 0.65
             
             # DAY TRADING: Aggressive entry for extreme conditions (bypass filter check)
             if conf_check and reversal_check:

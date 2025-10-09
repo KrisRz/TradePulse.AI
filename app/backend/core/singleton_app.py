@@ -132,6 +132,19 @@ class SingletonTradingApp:
                 logger.error(f"❌ Failed to start WebSocket service: {ws_err}")
                 # Non-fatal - continue startup
             
+            # Step 2.5: Configure Kalman Filter for price noise reduction
+            try:
+                from app.backend.services.kalman_price_filter import enable_kalman_filter
+                if self.settings.KALMAN_FILTER_ENABLED:
+                    enable_kalman_filter(True)
+                    logger.info(f"✅ Kalman Filter ENABLED (smoothing_strength={self.settings.KALMAN_SMOOTHING_STRENGTH})")
+                else:
+                    enable_kalman_filter(False)
+                    logger.info("📊 Kalman Filter DISABLED (using raw prices)")
+            except Exception as kf_err:
+                logger.warning(f"⚠️ Kalman Filter configuration failed: {kf_err}")
+                # Non-fatal - continue without Kalman filtering
+            
             # Step 3: Check DynamoDB connectivity (non-fatal)
             await self._check_database_connectivity()
             # If DB not yet reachable, start background reconnect loop

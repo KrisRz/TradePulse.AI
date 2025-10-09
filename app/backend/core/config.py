@@ -129,6 +129,29 @@ class Settings(BaseSettings):
     MAX_POSITION_SIZE_PERCENTAGE: float = Field(default=25.0, env="MAX_POSITION_SIZE_PERCENTAGE")
     DEFAULT_STOP_LOSS_PERCENTAGE: float = Field(default=2.0, env="DEFAULT_STOP_LOSS_PERCENTAGE")
     DEFAULT_TAKE_PROFIT_PERCENTAGE: float = Field(default=4.0, env="DEFAULT_TAKE_PROFIT_PERCENTAGE")
+    
+    # 🎯 DAY TRADING: Kalman Filter for noise reduction
+    KALMAN_FILTER_ENABLED: bool = Field(default=True, env="KALMAN_FILTER_ENABLED")
+    KALMAN_SMOOTHING_STRENGTH: float = Field(default=0.8, env="KALMAN_SMOOTHING_STRENGTH")  # 0.5-2.0 range
+
+    # 🧠 DAY TRADING: Continuous Learning - Fast Optimization
+    DAY_TRADING_LEARNING_MODE: bool = Field(default=True, env="DAY_TRADING_LEARNING_MODE")
+    # Fast optimization cycles (2h instead of 24h for day trading)
+    LEARNING_OPTIMIZATION_HOURS: float = Field(default=2.0, env="LEARNING_OPTIMIZATION_HOURS")  # 2h for day trading
+    # Lower sample requirements (5-8 positions instead of 20)
+    LEARNING_MIN_SAMPLES: int = Field(default=6, env="LEARNING_MIN_SAMPLES")  # 6 positions for day trading
+    # Auto-apply confidence threshold (lower for faster adaptation)
+    LEARNING_CONFIDENCE_THRESHOLD: float = Field(default=0.70, env="LEARNING_CONFIDENCE_THRESHOLD")  # 70% (was 75%)
+    # Model monitoring cycles (6h instead of 12h)
+    LEARNING_MODEL_MONITORING_HOURS: float = Field(default=6.0, env="LEARNING_MODEL_MONITORING_HOURS")
+    # Weighted learning - recency weight factor (higher = more weight to recent data)
+    LEARNING_RECENCY_WEIGHT: float = Field(default=1.5, env="LEARNING_RECENCY_WEIGHT")  # 1.5x weight for newest data
+    # Confidence decay per hour (old recommendations lose confidence)
+    LEARNING_CONFIDENCE_DECAY_PER_HOUR: float = Field(default=0.02, env="LEARNING_CONFIDENCE_DECAY_PER_HOUR")  # -2%/hour
+    # Quick reaction mode - emergency optimization for critical issues
+    LEARNING_QUICK_REACTION_ENABLED: bool = Field(default=True, env="LEARNING_QUICK_REACTION_ENABLED")
+    # Quick reaction threshold - min loss % to trigger emergency optimization
+    LEARNING_QUICK_REACTION_LOSS_PCT: float = Field(default=3.0, env="LEARNING_QUICK_REACTION_LOSS_PCT")  # -3% triggers emergency
 
     # Duplicate suppression defaults (can be overridden by runtime config)
     DUP_ACTIVE_WINDOW_SEC: int = Field(default=30, env="DUP_ACTIVE_WINDOW_SEC")

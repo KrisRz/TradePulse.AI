@@ -2175,6 +2175,24 @@ class IntelligentEntryEngine:
         signal_confidence = signal_data.get("confidence", 0.5)
         signal_action = signal_data.get("action", "HOLD")
         
+        # 🎯 DAY TRADING: REVERSAL CONFIDENCE BOOST
+        # Check reversal signal from Enterprise Engine Layer 3
+        layer_analysis = signal_data.get("layer_analysis", {})
+        reversal_data = layer_analysis.get("layer_3_reversal", {})
+        reversal_prob = reversal_data.get("reversal_probability", 0.0)
+        
+        # HIGH REVERSAL = HIGH OPPORTUNITY FOR DAY TRADING!
+        if reversal_prob > 0.65:  # 65%+ reversal is strong signal
+            reversal_boost = 0.15  # +15% confidence boost
+            old_confidence = signal_confidence
+            signal_confidence = min(signal_confidence + reversal_boost, 0.95)
+            logger.info(f"🚀 HIGH REVERSAL BOOST: {reversal_prob:.1%} reversal → confidence {old_confidence:.1%} → {signal_confidence:.1%}")
+        elif reversal_prob > 0.55:  # 55%+ reversal is good signal
+            reversal_boost = 0.08  # +8% confidence boost
+            old_confidence = signal_confidence
+            signal_confidence = min(signal_confidence + reversal_boost, 0.90)
+            logger.info(f"📈 MODERATE REVERSAL BOOST: {reversal_prob:.1%} reversal → confidence {old_confidence:.1%} → {signal_confidence:.1%}")
+        
         # ENHANCED: Historical validation check
         historical_validation_score = 0.0
         if self.historical_context:

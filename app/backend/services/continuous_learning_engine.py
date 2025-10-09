@@ -32,6 +32,7 @@ from pathlib import Path
 
 from app.backend.core.database import get_database_client
 from app.backend.core.runtime_config import runtime_config_store
+from app.backend.core.config import get_settings
 from app.backend.utils.model_io import prepare_features_for_prediction, validate_model_features
 
 logger = logging.getLogger(__name__)
@@ -94,11 +95,27 @@ class ContinuousLearningEngine:
     
     def __init__(self):
         self.db_client = get_database_client()
+        self.settings = get_settings()
         self.auto_optimization_enabled = True
         self.last_optimization_time = datetime.min
-        self.optimization_cooldown_hours = 24  # Wait 24h between optimizations
-        self.min_samples_for_learning = 20  # Minimum positions for statistical significance
-        self.confidence_threshold = 0.75  # Minimum confidence for auto-apply
+        
+        # 🎯 DAY TRADING: Fast optimization cycles (2h instead of 24h)
+        self.day_trading_mode = self.settings.DAY_TRADING_LEARNING_MODE
+        self.optimization_cooldown_hours = self.settings.LEARNING_OPTIMIZATION_HOURS  # 2h for day trading
+        self.min_samples_for_learning = self.settings.LEARNING_MIN_SAMPLES  # 6 positions for day trading
+        self.confidence_threshold = self.settings.LEARNING_CONFIDENCE_THRESHOLD  # 0.70 for faster adaptation
+        
+        # Weighted learning - recency factor
+        self.recency_weight_factor = self.settings.LEARNING_RECENCY_WEIGHT  # 1.5x for newest data
+        
+        # Confidence decay for old recommendations
+        self.confidence_decay_per_hour = self.settings.LEARNING_CONFIDENCE_DECAY_PER_HOUR  # -2%/hour
+        
+        # Quick reaction mode for critical losses
+        self.quick_reaction_enabled = self.settings.LEARNING_QUICK_REACTION_ENABLED
+        self.quick_reaction_loss_threshold = self.settings.LEARNING_QUICK_REACTION_LOSS_PCT  # -3%
+        self.last_quick_reaction_time = datetime.min
+        
         self.optimization_history: List[Dict[str, Any]] = []
         self.current_parameters: Dict[str, Any] = {}
         self.is_initialized = False
@@ -107,11 +124,12 @@ class ContinuousLearningEngine:
         # Model learning components
         self.model_performance_history: List[Dict[str, Any]] = []
         self.last_model_update: datetime = datetime.min
-        self.model_update_cooldown_hours = 12  # Check for model updates every 12 hours
-        self.min_samples_for_retraining = 500  # Minimum samples for model retraining
+        self.model_update_cooldown_hours = self.settings.LEARNING_MODEL_MONITORING_HOURS  # 6h for day trading
+        self.min_samples_for_retraining = 100 if self.day_trading_mode else 500  # Lower for day trading
         self.performance_decay_threshold = 0.05  # 5% performance drop triggers retraining
 
-        logger.info("🧠 Continuous Learning Engine created - awaiting initialization")
+        mode_str = "DAY TRADING MODE (2h cycles)" if self.day_trading_mode else "STANDARD MODE (24h cycles)"
+        logger.info(f"🧠 Continuous Learning Engine created - {mode_str} - awaiting initialization")
     
     async def initialize(self):
         """Initialize the continuous learning engine"""
@@ -137,9 +155,15 @@ class ContinuousLearningEngine:
             
             print("=" * 80)
             print("✅ CONTINUOUS LEARNING ENGINE: Fully initialized!")
+            mode_label = "🎯 DAY TRADING MODE" if self.day_trading_mode else "📊 STANDARD MODE"
+            print(mode_label)
             print(f"📊 Auto-optimization: {self.auto_optimization_enabled}")
-            print(f"🔄 Optimization interval: {self.optimization_cooldown_hours}h")
-            print(f"📈 Min samples for learning: {self.min_samples_for_learning}")
+            print(f"🔄 Optimization interval: {self.optimization_cooldown_hours}h (was 24h)")
+            print(f"📈 Min samples for learning: {self.min_samples_for_learning} (was 20)")
+            print(f"🎯 Confidence threshold: {self.confidence_threshold:.0%} (was 75%)")
+            print(f"🔥 Quick reaction mode: {self.quick_reaction_enabled}")
+            print(f"⚡ Recency weight factor: {self.recency_weight_factor}x")
+            print(f"📉 Confidence decay: {self.confidence_decay_per_hour:.1%}/hour")
             print("=" * 80)
             
             logger.info("✅ Continuous Learning Engine initialized and running")
@@ -159,30 +183,49 @@ class ContinuousLearningEngine:
             asyncio.create_task(self._periodic_model_monitoring_loop())
             logger.info("🤖 Model monitoring loop started")
             
+            # 🎯 Start smart ML enhancement tasks
+            asyncio.create_task(self._periodic_smart_ml_optimization())
+            logger.info("🤖 Smart ML optimization loop started (meta-learner + regime adaptation)")
+            
         except Exception as e:
             logger.error(f"Failed to start learning tasks: {e}")
             raise
     
     async def _periodic_optimization_loop(self):
-        """Periodic optimization loop - runs every hour"""
+        """Periodic optimization loop - adaptive interval based on day trading mode"""
+        # 🎯 DAY TRADING: 2h cycle = 120min, check every 15min
+        # STANDARD: 24h cycle = 1440min, check every 60min
+        check_interval_minutes = 15 if self.day_trading_mode else 60
+        check_interval_seconds = check_interval_minutes * 60
+        total_cycle_minutes = int(self.optimization_cooldown_hours * 60)
+        checks_per_cycle = total_cycle_minutes // check_interval_minutes
+        
+        mode_label = "DAY TRADING (2h)" if self.day_trading_mode else "STANDARD (24h)"
         print("=" * 80)
-        print("🔄 CONTINUOUS LEARNING: Optimization loop STARTED")
-        print("⏰ Check interval: Every 1 hour (3600s)")
+        print(f"🔄 CONTINUOUS LEARNING: Optimization loop STARTED - {mode_label}")
+        print(f"⏰ Check interval: Every {check_interval_minutes}min")
+        print(f"🔄 Full cycle: {total_cycle_minutes}min ({self.optimization_cooldown_hours}h)")
         print("📊 Auto-optimization: ENABLED" if self.auto_optimization_enabled else "⚠️ Auto-optimization: DISABLED")
         print("=" * 80)
-        logger.info("🔄 CONTINUOUS LEARNING: Optimization loop started (1h interval)")
+        logger.info(f"🔄 CONTINUOUS LEARNING: Optimization loop started ({self.optimization_cooldown_hours}h interval)")
         
         cycle_count = 0
         while self.is_running:
             try:
                 cycle_count += 1
                 
-                # Log heartbeat every 5 minutes
-                for i in range(12):  # 12 * 5min = 60min
-                    await asyncio.sleep(300)  # 5 minutes
-                    if i % 3 == 0:  # Every 15 minutes
-                        print(f"🧠 CONTINUOUS LEARNING: Loop #{cycle_count} active - {(i+1)*5}min/{60}min")
-                        logger.info(f"🧠 CONTINUOUS LEARNING: Heartbeat - Loop #{cycle_count} at {(i+1)*5}min")
+                # Log heartbeat and check for optimization
+                for i in range(checks_per_cycle):
+                    await asyncio.sleep(check_interval_seconds)
+                    elapsed_minutes = (i + 1) * check_interval_minutes
+                    
+                    # Log heartbeat every few checks
+                    if self.day_trading_mode and i % 2 == 0:  # Every 30min for day trading
+                        print(f"🧠 CONTINUOUS LEARNING: Loop #{cycle_count} active - {elapsed_minutes}min/{total_cycle_minutes}min")
+                        logger.info(f"🧠 CONTINUOUS LEARNING: Heartbeat - Loop #{cycle_count} at {elapsed_minutes}min")
+                    elif not self.day_trading_mode and i % 3 == 0:  # Every 3h for standard
+                        print(f"🧠 CONTINUOUS LEARNING: Loop #{cycle_count} active - {elapsed_minutes}min/{total_cycle_minutes}min")
+                        logger.info(f"🧠 CONTINUOUS LEARNING: Heartbeat - Loop #{cycle_count} at {elapsed_minutes}min")
                 
                 # Now do the actual optimization check
                 if self.auto_optimization_enabled:
@@ -204,11 +247,19 @@ class ContinuousLearningEngine:
             except Exception as e:
                 print(f"❌ CONTINUOUS LEARNING: Loop #{cycle_count} error: {e}")
                 logger.error(f"❌ CONTINUOUS LEARNING: Loop #{cycle_count} error: {e}")
-                await asyncio.sleep(300)  # Wait 5 minutes on error
+                await asyncio.sleep(check_interval_seconds)  # Wait one interval on error
     
     async def _check_and_optimize(self):
         """Check if optimization is needed and perform it"""
         try:
+            # 🚨 QUICK REACTION MODE: Check for critical losses (bypass cooldown)
+            if self.quick_reaction_enabled:
+                quick_reaction_triggered = await self._check_quick_reaction_conditions()
+                if quick_reaction_triggered:
+                    logger.warning("🚨 QUICK REACTION MODE: Critical losses detected - forcing emergency optimization")
+                    await self.analyze_and_optimize(force_optimization=True, auto_apply_recommendations=True)
+                    return
+            
             # FIXED: Handle first-time optimization (datetime.min case)
             if self.last_optimization_time == datetime.min:
                 logger.info("🚀 First-time optimization - bypassing cooldown")
@@ -227,6 +278,83 @@ class ContinuousLearningEngine:
             
         except Exception as e:
             logger.error(f"Error in check and optimize: {e}")
+    
+    async def _check_quick_reaction_conditions(self) -> bool:
+        """
+        Check for critical performance issues that require immediate optimization
+        🚨 QUICK REACTION MODE: Bypass cooldown if losses exceed threshold
+        """
+        try:
+            # Check quick reaction cooldown (min 30min between emergency optimizations)
+            quick_reaction_cooldown_minutes = 30
+            time_since_last_quick = datetime.now() - self.last_quick_reaction_time
+            if time_since_last_quick.total_seconds() < (quick_reaction_cooldown_minutes * 60):
+                return False
+            
+            # Get recent position results (last 2 hours for day trading)
+            lookback_hours = 2 if self.day_trading_mode else 6
+            recent_results = await self._get_recent_position_results(days=0)  # Get all
+            cutoff_time = datetime.now() - timedelta(hours=lookback_hours)
+            
+            # Filter to recent positions
+            recent_positions = []
+            for result in recent_results:
+                try:
+                    closed_at = datetime.fromisoformat(result.get('closed_at', ''))
+                    if closed_at >= cutoff_time:
+                        recent_positions.append(result)
+                except (ValueError, TypeError):
+                    continue
+            
+            # Need minimum positions to evaluate
+            min_positions = 3 if self.day_trading_mode else 5
+            if len(recent_positions) < min_positions:
+                return False
+            
+            # Calculate recent performance
+            total_pnl_pct = 0.0
+            losing_positions = 0
+            
+            for result in recent_positions:
+                pnl_pct = result.get('pnl_percentage', 0.0)
+                total_pnl_pct += pnl_pct
+                if pnl_pct < 0:
+                    losing_positions += 1
+            
+            avg_pnl_pct = total_pnl_pct / len(recent_positions)
+            loss_rate = losing_positions / len(recent_positions)
+            
+            # 🚨 CRITICAL CONDITION 1: Average loss exceeds threshold (-3%)
+            if avg_pnl_pct < -self.quick_reaction_loss_threshold:
+                logger.warning(f"🚨 QUICK REACTION: Critical average loss {avg_pnl_pct:.2f}% (threshold: -{self.quick_reaction_loss_threshold}%)")
+                self.last_quick_reaction_time = datetime.now()
+                return True
+            
+            # 🚨 CRITICAL CONDITION 2: Very high loss rate (>75% losing positions)
+            if loss_rate > 0.75 and len(recent_positions) >= min_positions:
+                logger.warning(f"🚨 QUICK REACTION: Critical loss rate {loss_rate:.1%} ({losing_positions}/{len(recent_positions)} positions)")
+                self.last_quick_reaction_time = datetime.now()
+                return True
+            
+            # 🚨 CRITICAL CONDITION 3: Multiple consecutive losses
+            consecutive_losses = 0
+            for result in sorted(recent_positions, key=lambda r: r.get('closed_at', ''), reverse=True):
+                if result.get('pnl_percentage', 0.0) < 0:
+                    consecutive_losses += 1
+                else:
+                    break
+            
+            critical_consecutive = 4 if self.day_trading_mode else 3
+            if consecutive_losses >= critical_consecutive:
+                logger.warning(f"🚨 QUICK REACTION: {consecutive_losses} consecutive losses detected")
+                self.last_quick_reaction_time = datetime.now()
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to check quick reaction conditions: {e}")
+            return False
     
     async def _load_state(self):
         """Load learning engine state from database"""
@@ -373,45 +501,187 @@ class ContinuousLearningEngine:
             logger.error(f"❌ Failed to load position results: {e}")
             return []
     
+    def _calculate_recency_weights(self, position_results: List[Dict[str, Any]]) -> Dict[str, float]:
+        """
+        Calculate recency-based weights for positions
+        🎯 DAY TRADING: Newer positions get higher weight (1.5x for newest)
+        """
+        weights = {}
+        
+        try:
+            if not position_results:
+                return weights
+            
+            # Sort by closed_at timestamp (newest first)
+            sorted_results = sorted(
+                position_results,
+                key=lambda r: datetime.fromisoformat(r.get('closed_at', datetime.min.isoformat())),
+                reverse=True
+            )
+            
+            # Calculate age in hours for each position
+            now = datetime.now()
+            for result in sorted_results:
+                try:
+                    closed_at = datetime.fromisoformat(result.get('closed_at', ''))
+                    age_hours = (now - closed_at).total_seconds() / 3600
+                    
+                    # Apply exponential decay based on age
+                    # weight = recency_factor ^ (age_hours / 24)
+                    # Newer = higher weight, older = lower weight
+                    weight = self.recency_weight_factor ** (-age_hours / 24.0)
+                    weight = max(0.1, min(weight, self.recency_weight_factor))  # Clamp between 0.1 and factor
+                    
+                    position_id = result.get('position_id', str(id(result)))
+                    weights[position_id] = weight
+                    
+                except (ValueError, TypeError):
+                    # Fallback to neutral weight
+                    position_id = result.get('position_id', str(id(result)))
+                    weights[position_id] = 1.0
+            
+            logger.debug(f"🎯 WEIGHTED LEARNING: Calculated {len(weights)} recency weights (factor={self.recency_weight_factor}x)")
+            return weights
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to calculate recency weights: {e}")
+            return {}
+    
+    def _weighted_success_rate(self, results: List[Dict[str, Any]], weights: Dict[str, float]) -> float:
+        """Calculate weighted success rate"""
+        if not results:
+            return 0.0
+        
+        total_weight = 0.0
+        weighted_successes = 0.0
+        
+        for result in results:
+            position_id = result.get('position_id', str(id(result)))
+            weight = weights.get(position_id, 1.0)
+            total_weight += weight
+            if result.get('was_successful', False):
+                weighted_successes += weight
+        
+        return weighted_successes / total_weight if total_weight > 0 else 0.0
+    
+    def _weighted_mean(self, values: List[float], results: List[Dict[str, Any]], weights: Dict[str, float]) -> float:
+        """Calculate weighted mean of values"""
+        if not values or not results:
+            return 0.0
+        
+        total_weight = 0.0
+        weighted_sum = 0.0
+        
+        for i, result in enumerate(results):
+            if i >= len(values):
+                break
+            position_id = result.get('position_id', str(id(result)))
+            weight = weights.get(position_id, 1.0)
+            total_weight += weight
+            weighted_sum += values[i] * weight
+        
+        return weighted_sum / total_weight if total_weight > 0 else 0.0
+
     async def _generate_recommendations(self, position_results: List[Dict[str, Any]]) -> List[OptimizationRecommendation]:
-        """Generate optimization recommendations based on position analysis"""
+        """Generate optimization recommendations based on position analysis with recency weighting"""
         recommendations = []
         
         try:
-            # Analyze success rates by different parameters
-            success_rate = sum(1 for r in position_results if r.get('was_successful', False)) / len(position_results)
-            avg_pnl = statistics.mean([r.get('pnl_absolute', 0) for r in position_results])
+            # 🎯 DAY TRADING: Calculate recency weights (newer positions = higher weight)
+            weights = self._calculate_recency_weights(position_results)
             
-            # Analyze by risk level
-            risk_analysis = await self._analyze_by_risk_level(position_results)
+            # Analyze success rates by different parameters (with weighted metrics)
+            success_rate = self._weighted_success_rate(position_results, weights)
+            pnl_values = [r.get('pnl_absolute', 0) for r in position_results]
+            avg_pnl = self._weighted_mean(pnl_values, position_results, weights)
+            
+            logger.info(f"📊 Weighted metrics: success_rate={success_rate:.1%}, avg_pnl=${avg_pnl:.2f}")
+            
+            # Analyze by risk level (with weights)
+            risk_analysis = await self._analyze_by_risk_level(position_results, weights)
             if risk_analysis:
                 recommendations.extend(risk_analysis)
             
-            # Analyze by time in position
-            time_analysis = await self._analyze_time_in_position(position_results)
+            # Analyze by time in position (with weights)
+            time_analysis = await self._analyze_time_in_position(position_results, weights)
             if time_analysis:
                 recommendations.extend(time_analysis)
             
-            # Analyze by confidence levels
-            confidence_analysis = await self._analyze_confidence_levels(position_results)
+            # Analyze by confidence levels (with weights)
+            confidence_analysis = await self._analyze_confidence_levels(position_results, weights)
             if confidence_analysis:
                 recommendations.extend(confidence_analysis)
             
-            # Analyze pattern performance
-            pattern_analysis = await self._analyze_pattern_performance(position_results)
+            # Analyze pattern performance (with weights)
+            pattern_analysis = await self._analyze_pattern_performance(position_results, weights)
             if pattern_analysis:
                 recommendations.extend(pattern_analysis)
             
-            logger.info(f"🎯 Generated {len(recommendations)} optimization recommendations")
+            # 🎯 Apply confidence decay to old recommendations
+            recommendations = self._apply_confidence_decay(recommendations)
+            
+            logger.info(f"🎯 Generated {len(recommendations)} weighted optimization recommendations")
             return recommendations
             
         except Exception as e:
             logger.error(f"❌ Failed to generate recommendations: {e}")
             return []
     
-    async def _analyze_by_risk_level(self, results: List[Dict[str, Any]]) -> List[OptimizationRecommendation]:
-        """Analyze performance by risk assessment level"""
+    def _apply_confidence_decay(self, recommendations: List[OptimizationRecommendation]) -> List[OptimizationRecommendation]:
+        """
+        Apply confidence decay to recommendations based on time
+        🎯 DAY TRADING: Old recommendations lose confidence over time (-2%/hour)
+        """
+        try:
+            now = datetime.now()
+            decayed_recommendations = []
+            
+            for rec in recommendations:
+                # Check if recommendation has timestamp (from stored state)
+                hours_since_creation = 0.0
+                
+                # For newly created recommendations, confidence remains unchanged
+                # For stored recommendations in current_parameters, apply decay
+                if rec.parameter_name in self.current_parameters:
+                    param_info = self.current_parameters[rec.parameter_name]
+                    if 'applied_at' in param_info:
+                        try:
+                            applied_at = datetime.fromisoformat(param_info['applied_at'])
+                            hours_since_creation = (now - applied_at).total_seconds() / 3600
+                        except (ValueError, TypeError):
+                            pass
+                
+                # Apply exponential confidence decay
+                decay_factor = self.confidence_decay_per_hour * hours_since_creation
+                decayed_confidence = max(0.1, rec.confidence - decay_factor)  # Min 10% confidence
+                
+                # Update recommendation with decayed confidence
+                decayed_rec = OptimizationRecommendation(
+                    parameter_name=rec.parameter_name,
+                    current_value=rec.current_value,
+                    recommended_value=rec.recommended_value,
+                    confidence=decayed_confidence,
+                    reason=rec.reason + (f" [confidence decayed by {decay_factor:.1%} over {hours_since_creation:.1f}h]" if hours_since_creation > 0 else ""),
+                    expected_improvement=rec.expected_improvement,
+                    risk_level=rec.risk_level
+                )
+                
+                decayed_recommendations.append(decayed_rec)
+                
+                if hours_since_creation > 0:
+                    logger.debug(f"🔻 CONFIDENCE DECAY: {rec.parameter_name} {rec.confidence:.1%} → {decayed_confidence:.1%} after {hours_since_creation:.1f}h")
+            
+            return decayed_recommendations
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to apply confidence decay: {e}")
+            return recommendations
+    
+    async def _analyze_by_risk_level(self, results: List[Dict[str, Any]], weights: Dict[str, float] = None) -> List[OptimizationRecommendation]:
+        """Analyze performance by risk assessment level with weighted metrics"""
         recommendations = []
+        if weights is None:
+            weights = {}
         
         try:
             # Group by risk level
@@ -422,16 +692,19 @@ class ContinuousLearningEngine:
                     risk_groups[risk] = []
                 risk_groups[risk].append(result)
             
-            # Analyze each risk level
+            # Analyze each risk level (with weighted metrics)
             best_risk_level = None
             best_success_rate = 0
             
             for risk_level, group_results in risk_groups.items():
-                if len(group_results) < 5:  # Need minimum samples
+                min_samples = 3 if self.day_trading_mode else 5  # Lower threshold for day trading
+                if len(group_results) < min_samples:
                     continue
                     
-                success_rate = sum(1 for r in group_results if r.get('was_successful', False)) / len(group_results)
-                avg_pnl = statistics.mean([r.get('pnl_absolute', 0) for r in group_results])
+                # 🎯 Use weighted success rate
+                success_rate = self._weighted_success_rate(group_results, weights)
+                pnl_values = [r.get('pnl_absolute', 0) for r in group_results]
+                avg_pnl = self._weighted_mean(pnl_values, group_results, weights)
                 
                 if success_rate > best_success_rate:
                     best_success_rate = success_rate
@@ -457,9 +730,11 @@ class ContinuousLearningEngine:
             logger.error(f"❌ Risk level analysis failed: {e}")
             return []
     
-    async def _analyze_time_in_position(self, results: List[Dict[str, Any]]) -> List[OptimizationRecommendation]:
-        """Analyze optimal time in position"""
+    async def _analyze_time_in_position(self, results: List[Dict[str, Any]], weights: Dict[str, float] = None) -> List[OptimizationRecommendation]:
+        """Analyze optimal time in position with weighted metrics"""
         recommendations = []
+        if weights is None:
+            weights = {}
         
         try:
             # Analyze time vs success rate correlation
@@ -493,9 +768,11 @@ class ContinuousLearningEngine:
             logger.error(f"❌ Time analysis failed: {e}")
             return []
     
-    async def _analyze_confidence_levels(self, results: List[Dict[str, Any]]) -> List[OptimizationRecommendation]:
-        """Analyze AI confidence vs success correlation"""
+    async def _analyze_confidence_levels(self, results: List[Dict[str, Any]], weights: Dict[str, float] = None) -> List[OptimizationRecommendation]:
+        """Analyze AI confidence vs success correlation with weighted metrics"""
         recommendations = []
+        if weights is None:
+            weights = {}
         
         try:
             # Group by confidence ranges
@@ -510,11 +787,13 @@ class ContinuousLearningEngine:
                 else:
                     confidence_groups['low'].append(result)
             
-            # Calculate success rates for each group
+            # Calculate success rates for each group (with weighted metrics)
             group_stats = {}
             for group_name, group_results in confidence_groups.items():
-                if len(group_results) >= 3:
-                    success_rate = sum(1 for r in group_results if r.get('was_successful', False)) / len(group_results)
+                min_samples = 2 if self.day_trading_mode else 3  # Lower threshold for day trading
+                if len(group_results) >= min_samples:
+                    # 🎯 Use weighted success rate
+                    success_rate = self._weighted_success_rate(group_results, weights)
                     group_stats[group_name] = success_rate
             
             # Recommend confidence threshold adjustment
@@ -541,9 +820,11 @@ class ContinuousLearningEngine:
             logger.error(f"❌ Confidence analysis failed: {e}")
             return []
     
-    async def _analyze_pattern_performance(self, results: List[Dict[str, Any]]) -> List[OptimizationRecommendation]:
-        """Analyze pattern performance and recommend blacklisting poor performers"""
+    async def _analyze_pattern_performance(self, results: List[Dict[str, Any]], weights: Dict[str, float] = None) -> List[OptimizationRecommendation]:
+        """Analyze pattern performance and recommend blacklisting poor performers with weighted metrics"""
         recommendations = []
+        if weights is None:
+            weights = {}
         
         try:
             # Group by patterns (if available)
@@ -555,10 +836,12 @@ class ContinuousLearningEngine:
                         pattern_groups[pattern] = []
                     pattern_groups[pattern].append(result)
             
-            # Find underperforming patterns
+            # Find underperforming patterns (with weighted metrics)
             for pattern, pattern_results in pattern_groups.items():
-                if len(pattern_results) >= 5:  # Minimum samples
-                    success_rate = sum(1 for r in pattern_results if r.get('was_successful', False)) / len(pattern_results)
+                min_samples = 3 if self.day_trading_mode else 5  # Lower threshold for day trading
+                if len(pattern_results) >= min_samples:
+                    # 🎯 Use weighted success rate
+                    success_rate = self._weighted_success_rate(pattern_results, weights)
                     
                     # Blacklist patterns with very low success rates
                     if success_rate < 0.3:  # Less than 30% success
@@ -649,23 +932,32 @@ class ContinuousLearningEngine:
             return LearningMetrics()
 
     async def _periodic_model_monitoring_loop(self):
-        """Periodic model monitoring loop - runs every 12 hours"""
+        """Periodic model monitoring loop - adaptive interval based on day trading mode"""
+        # 🎯 DAY TRADING: 6h cycle, check every 1h
+        # STANDARD: 12h cycle, check every 2h
+        check_interval_hours = 1 if self.day_trading_mode else 2
+        check_interval_seconds = check_interval_hours * 3600
+        total_hours = int(self.model_update_cooldown_hours)
+        checks_per_cycle = total_hours // check_interval_hours
+        
+        mode_label = "DAY TRADING (6h)" if self.day_trading_mode else "STANDARD (12h)"
         print("=" * 80)
-        print("🤖 CONTINUOUS LEARNING: Model monitoring loop STARTED")
-        print("⏰ Check interval: Every 12 hours")
+        print(f"🤖 CONTINUOUS LEARNING: Model monitoring loop STARTED - {mode_label}")
+        print(f"⏰ Check interval: Every {check_interval_hours}h")
+        print(f"🔄 Full cycle: {total_hours}h")
         print("=" * 80)
-        logger.info("🤖 CONTINUOUS LEARNING: Model monitoring loop started (12h interval)")
+        logger.info(f"🤖 CONTINUOUS LEARNING: Model monitoring loop started ({total_hours}h interval)")
         
         cycle_count = 0
         while self.is_running:
             try:
                 cycle_count += 1
                 
-                # Log heartbeat every 2 hours
-                for i in range(6):  # 6 * 2h = 12h
-                    await asyncio.sleep(7200)  # 2 hours
-                    hours_elapsed = (i + 1) * 2
-                    print(f"🤖 CONTINUOUS LEARNING: Model monitoring #{cycle_count} - {hours_elapsed}h/{12}h")
+                # Log heartbeat at intervals
+                for i in range(checks_per_cycle):
+                    await asyncio.sleep(check_interval_seconds)
+                    hours_elapsed = (i + 1) * check_interval_hours
+                    print(f"🤖 CONTINUOUS LEARNING: Model monitoring #{cycle_count} - {hours_elapsed}h/{total_hours}h")
                     logger.info(f"🤖 CONTINUOUS LEARNING: Model monitoring heartbeat #{cycle_count} at {hours_elapsed}h")
 
                 if self.auto_optimization_enabled:
@@ -676,11 +968,12 @@ class ContinuousLearningEngine:
                     await self._check_and_update_models()
                     print(f"✅ CONTINUOUS LEARNING: Model monitoring #{cycle_count} - Check completed")
 
-                    # Also perform portfolio cleanup every 12 hours
+                    # Also perform portfolio cleanup
                     try:
                         from ..professional_portfolio import cleanup_old_portfolio_instances
-                        await cleanup_old_portfolio_instances(max_age_hours=24)
-                        logger.info("🧹 Portfolio cleanup completed")
+                        cleanup_hours = 12 if self.day_trading_mode else 24
+                        await cleanup_old_portfolio_instances(max_age_hours=cleanup_hours)
+                        logger.info(f"🧹 Portfolio cleanup completed ({cleanup_hours}h threshold)")
                     except Exception as cleanup_error:
                         logger.debug(f"Portfolio cleanup skipped: {cleanup_error}")
                 else:
@@ -694,6 +987,64 @@ class ContinuousLearningEngine:
             except Exception as e:
                 print(f"❌ CONTINUOUS LEARNING: Model monitoring #{cycle_count} error: {e}")
                 logger.error(f"❌ CONTINUOUS LEARNING: Model monitoring #{cycle_count} error: {e}")
+                await asyncio.sleep(check_interval_seconds)  # Wait one interval on error
+
+    async def _periodic_smart_ml_optimization(self):
+        """
+        Periodic smart ML optimization loop - runs every 2h
+        Updates meta-learner weights and regime-specific configs
+        """
+        print("=" * 80)
+        print("🤖 SMART ML OPTIMIZER: Loop STARTED")
+        print("⏰ Check interval: Every 2 hours")
+        print("=" * 80)
+        logger.info("🤖 SMART ML OPTIMIZER: Loop started (2h interval)")
+        
+        cycle_count = 0
+        while self.is_running:
+            try:
+                cycle_count += 1
+                
+                # Wait 2 hours between optimization cycles
+                await asyncio.sleep(7200)  # 2 hours
+                
+                if self.auto_optimization_enabled:
+                    print("=" * 80)
+                    print(f"🤖 SMART ML OPTIMIZER: Cycle #{cycle_count} - Optimizing...")
+                    print("=" * 80)
+                    logger.info(f"🤖 SMART ML OPTIMIZER: Cycle #{cycle_count} - Running optimization...")
+                    
+                    # 1. Update ensemble meta-learner weights
+                    try:
+                        from .ensemble_meta_learner import get_ensemble_meta_learner
+                        meta_learner = await get_ensemble_meta_learner()
+                        await meta_learner.update_layer_weights(force=False)
+                        logger.info("✅ Meta-learner weights updated")
+                    except Exception as meta_err:
+                        logger.error(f"❌ Meta-learner update failed: {meta_err}")
+                    
+                    # 2. Optimize regime-specific configurations
+                    try:
+                        from .regime_adaptive_engine import get_regime_adaptive_engine
+                        regime_engine = await get_regime_adaptive_engine()
+                        await regime_engine.optimize_regime_configs(force=False)
+                        logger.info("✅ Regime configurations optimized")
+                    except Exception as regime_err:
+                        logger.error(f"❌ Regime optimization failed: {regime_err}")
+                    
+                    print(f"✅ SMART ML OPTIMIZER: Cycle #{cycle_count} - Optimization completed")
+                    logger.info(f"✅ SMART ML OPTIMIZER: Cycle #{cycle_count} - Completed")
+                else:
+                    print(f"⚠️ SMART ML OPTIMIZER: Cycle #{cycle_count} - Auto-optimization DISABLED")
+                    logger.warning(f"⚠️ SMART ML OPTIMIZER: Cycle #{cycle_count} - Skipped (disabled)")
+
+            except asyncio.CancelledError:
+                print("🛑 SMART ML OPTIMIZER: Loop CANCELLED")
+                logger.info("🛑 SMART ML OPTIMIZER: Loop cancelled")
+                break
+            except Exception as e:
+                print(f"❌ SMART ML OPTIMIZER: Cycle #{cycle_count} error: {e}")
+                logger.error(f"❌ SMART ML OPTIMIZER: Cycle #{cycle_count} error: {e}")
                 await asyncio.sleep(3600)  # Wait 1 hour on error
 
     async def _check_and_update_models(self):

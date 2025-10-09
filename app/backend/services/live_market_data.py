@@ -21,6 +21,8 @@ from .websocket_deduplicator import (
     init_websocket_deduplication
 )
 from ..config.trading_symbols import normalize_symbol, get_binance_streams, get_canonical_symbol
+# 🎯 DAY TRADING: Kalman Filter for noise reduction
+from .kalman_price_filter import get_kalman_filter, is_kalman_enabled
 # from app.backend.core.connection_manager import get_bitcoin_price, get_bitcoin_klines  # Removed circular import
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,10 @@ class LiveMarketDataService:
 		self.candle_history = {}
 		self.max_history = 15000  # 3x more for enterprise accuracy (10+ hours)
 		
+		# 🎯 DAY TRADING: Kalman Filter for price noise reduction
+		self.kalman_filter = get_kalman_filter(adaptive=True, smoothing_strength=0.8)
+		self.raw_price_history = deque(maxlen=100)  # Track noise reduction
+		
 		# Callbacks for real-time updates
 		self.ticker_callbacks = []
 		self.candle_callbacks = []
@@ -60,6 +66,9 @@ class LiveMarketDataService:
 		self.cb_active = {}
 		self.cb_threshold_on = 3.5
 		self.cb_threshold_off = 2.0
+		
+		if is_kalman_enabled():
+			logger.info("✅ Kalman Filter ENABLED for price noise reduction")
 	
 	async def _populate_cache_from_db(self):
 		"""Pre-populate cache with recent DB data for LSTM performance"""
@@ -372,16 +381,35 @@ class LiveMarketDataService:
 							# Normalize symbol from WebSocket data
 							normalized_symbol = normalize_symbol(ticker_data["s"])
 							
-							# Update current ticker
+							# 🎯 DAY TRADING: Kalman Filter for noise reduction
+							raw_price = float(ticker_data["c"])
+							self.raw_price_history.append(raw_price)
+							
+							# Apply Kalman filtering if enabled
+							if self.kalman_filter and is_kalman_enabled():
+								smoothed_price = self.kalman_filter.update(raw_price)
+								
+								# Log noise reduction periodically
+								if len(self.raw_price_history) % 100 == 0:
+									noise_reduction = self.kalman_filter.get_noise_reduction()
+									if noise_reduction:
+										logger.info(f"🔧 Kalman: {noise_reduction:.1f}% noise reduction, "
+												   f"raw=${raw_price:.2f}, smoothed=${smoothed_price:.2f}")
+							else:
+								smoothed_price = raw_price
+							
+							# Update current ticker with BOTH raw and smoothed prices
 							self.current_ticker = {
 								"symbol": normalized_symbol,
-								"price": float(ticker_data["c"]),
+								"price": smoothed_price,  # Main price is smoothed
+								"price_raw": raw_price,   # Raw price for comparison
 								"price_change": float(ticker_data["P"]),
 								"price_change_percent": float(ticker_data["P"]),
 								"high": float(ticker_data["h"]),
 								"low": float(ticker_data["l"]),
 								"volume": float(ticker_data["v"]),
-								"timestamp": time.time()  # Use numeric timestamp for compatibility
+								"timestamp": time.time(),  # Use numeric timestamp for compatibility
+								"kalman_filtered": self.kalman_filter is not None and is_kalman_enabled()
 							}
 							
 							# Notify callbacks

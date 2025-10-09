@@ -150,9 +150,9 @@ class DayTradingEngine:
             TradingMode.DAY_TRADING: TradingModeConfig(
                 mode=TradingMode.DAY_TRADING,
                 analysis_interval=8,        # Base interval (adaptive in _analysis_loop)
-                position_duration=900,      # Informational only
+                position_duration=900,      # Informational only (time stop disabled, AI decides)
                 confidence_threshold=0.30,  # Delegated to ConfidenceThresholds
-                max_positions=int(getattr(s, "MAX_CONCURRENT_POSITIONS", 12)),
+                max_positions=15,           # 🎯 INCREASED: 15 positions (was 12) for more opportunities
                 position_size_pct=0.015,   # Delegated to Kelly Criterion
                 stop_loss_pct=0.004,       # Delegated to Exit Engine
                 take_profit_pct=0.003      # Delegated to Exit Engine
@@ -558,12 +558,14 @@ class DayTradingEngine:
             except Exception:
                 pass
 
-            # ULTRA-AGGRESSIVE SCALPING: Minimal duplicate prevention for rapid trading
+            # 🎯 DAY TRADING OPTIMIZED: Much shorter windows for catching multiple reversals
             adapt_active_delta = max(active_delta, 1.0 * realized_vol_5m)  # Very tolerant
             adapt_closed_delta = max(closed_delta * 3.0, 1.2 * realized_vol_5m)  # Extremely tolerant for re-entry  
-            adapt_active_window = max(10, int(active_window * (0.5 if realized_vol_5m > 0.0015 else 0.8)))  # Shorter active window
-            # MICRO-SCALPING: Absolute minimum re-entry cooldown
-            adapt_closed_window = max(5, int(closed_window * (0.2 if realized_vol_5m > 0.0015 else 0.3)))  # 5s minimum for micro-trades
+            
+            # 🚀 SHORTENED WINDOWS: 2min active, 1min closed (was 5min, 30min)
+            # Base windows set to 120s and 60s respectively (from runtime config)
+            adapt_active_window = max(10, 120)  # 2 minutes active window (fixed, not adaptive)
+            adapt_closed_window = max(5, 60)    # 1 minute closed window (fixed, not adaptive)
 
             # Check recent positions (active) within adaptive window
             for position in portfolio.get_active_positions():

@@ -705,31 +705,37 @@ class IntelligentExitEngine:
             if trigger:
                 return {"should_exit": True, "reason": "atr_trailing", "atr": float(atr), "stop_level": float(stop_level)}
 
-            # PROFESSIONAL: Adaptive time stop based on DYNAMIC market regime
+            # 🎯 DAY TRADING FIX: Time stop only as EXTREME safety net (not hard exit!)
+            # Let AI/reversal detection make the smart exit decisions
             age_hours = self._calculate_position_age(position_data)
+            age_minutes = age_hours * 60.0
             
-            # Get dynamic time multiplier from market regime
-            if time_stop_minutes is None:
-                try:
-                    # Use dynamic time multiplier from market regime classification
-                    time_multiplier = self.current_dynamic_thresholds.time_multiplier if self.current_dynamic_thresholds else 1.0
-                    
-                    # Base position duration from day trading engine if available
-                    try:
-                        from app.backend.services.day_trading_engine import get_day_trading_engine
-                        engine = await get_day_trading_engine()
-                        mode_config = engine.mode_configs[engine.current_mode]
-                        base_duration_minutes = mode_config.position_duration / 60
-                    except Exception:
-                        base_duration_minutes = 60  # Default 60 minutes for day trading
-                    
-                    time_stop_minutes = int(base_duration_minutes * time_multiplier)
-                    logger.info(f"🕐 Dynamic time stop: {time_stop_minutes}min (base: {base_duration_minutes:.0f}min × regime multiplier: {time_multiplier:.1f}x)")
-                except Exception:
-                    time_stop_minutes = 60   # Fallback for day trading (1 hour)
+            # Calculate current PnL to determine if position is losing
+            entry_price = position_data.get("entry_price", current_price)
+            position_type = position_data.get("type", "LONG").upper()
             
-            if age_hours * 60.0 >= time_stop_minutes:
-                return {"should_exit": True, "reason": "time_stop", "atr": float(atr), "time_limit_minutes": time_stop_minutes}
+            if position_type == "LONG":
+                pnl_pct = (current_price - entry_price) / entry_price if entry_price > 0 else 0
+            else:  # SHORT
+                pnl_pct = (entry_price - current_price) / entry_price if entry_price > 0 else 0
+            
+            # 🚨 EXTREME SAFETY NET: Only force exit if position is old AND losing
+            # This prevents positions from being stuck forever in bad situations
+            extreme_time_limit_minutes = 240  # 4 hours (not 15 minutes!)
+            
+            if age_minutes >= extreme_time_limit_minutes:
+                # Only force exit if position is LOSING
+                if pnl_pct < -0.002:  # Position losing more than 0.2%
+                    logger.warning(f"🚨 EXTREME TIME STOP: Position open {age_minutes:.0f}min (4h+) and losing {pnl_pct*100:.2f}%")
+                    return {"should_exit": True, "reason": "extreme_time_stop_safety", "atr": float(atr), "age_minutes": age_minutes, "pnl_pct": pnl_pct}
+                else:
+                    # Position in profit or breakeven - let it run!
+                    logger.info(f"✅ Position open {age_minutes:.0f}min but profitable ({pnl_pct*100:.2f}%) - letting it run")
+            
+            # 📊 SOFT SIGNAL: Add position age as context for AI layers (not hard exit)
+            # This is logged but doesn't force an exit - AI decides based on all factors
+            if age_minutes > 60:  # Over 1 hour
+                logger.debug(f"📊 Position age context: {age_minutes:.0f}min (AI will consider in exit analysis)")
 
             return {"should_exit": False}
         except Exception:
