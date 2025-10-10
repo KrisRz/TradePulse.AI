@@ -1021,23 +1021,23 @@ class EnterpriseTradingEngine:
             filtered_prob = reversal_prob
             confidence_adjustments = []
             
-            # Check 1: Volume Confirmation
+            # Check 1: Volume Confirmation (BITCOIN SCALPING OPTIMIZED)
             if reversal_prob > 0.65:  # High reversal signal
-                if volume_ratio < 1.2:
-                    # Weak volume = likely false signal
-                    filtered_prob *= 0.7  # -30% confidence
-                    confidence_adjustments.append(f"Weak volume ({volume_ratio:.1f}x) → -30% confidence")
+                if volume_ratio < 0.8:  # Very weak volume (was 1.2)
+                    # Extremely weak volume = likely false signal
+                    filtered_prob *= 0.85  # -15% confidence (was -30%, too harsh!)
+                    confidence_adjustments.append(f"Weak volume ({volume_ratio:.1f}x) → -15% confidence")
                 elif volume_ratio > 2.0:
                     # Strong volume = confirm signal
                     filtered_prob *= 1.15  # +15% confidence
                     confidence_adjustments.append(f"Strong volume ({volume_ratio:.1f}x) → +15% confidence")
             
-            # Check 2: Volatility Confirmation
+            # Check 2: Volatility Confirmation (BITCOIN SCALPING OPTIMIZED)
             if reversal_prob > 0.65:
-                if volatility < 0.015:
+                if volatility < 0.010:  # Very low volatility (was 0.015 = 1.5%, now 1.0%)
                     # Too calm = likely false signal (no real movement)
-                    filtered_prob *= 0.6  # -40% confidence
-                    confidence_adjustments.append(f"Low volatility ({volatility:.2%}) → -40% confidence")
+                    filtered_prob *= 0.80  # -20% confidence (was -40%, too harsh!)
+                    confidence_adjustments.append(f"Low volatility ({volatility:.2%}) → -20% confidence")
                 elif volatility > 0.05:
                     # High volatility = confirm signal (real movement)
                     filtered_prob *= 1.1  # +10% confidence
@@ -1126,11 +1126,11 @@ class EnterpriseTradingEngine:
             elif rsi < 25:  # OVERSOLD = HIGH REVERSAL OPPORTUNITY (Bitcoin at bottom!)
                 adjusted_prob *= 1.4  # INCREASE reversal signal by 40% (was reduction!)
             
-            # Volatility adjustment (high volatility = more reversal opportunities)
+            # Volatility adjustment (high volatility = more reversal opportunities) - BITCOIN SCALPING OPTIMIZED
             if volatility > 0.08:  # High volatility
                 adjusted_prob = min(adjusted_prob * 1.3, 0.95)  # Amplify (was 1.2)
-            elif volatility < 0.02:  # Low volatility
-                adjusted_prob *= 0.9  # Less dramatic reduction (was 0.8)
+            elif volatility < 0.010:  # Very low volatility (was 0.02 = 2%, now 1.0% - aligned with Check 2)
+                adjusted_prob *= 0.95  # Minimal reduction (was 0.9, too harsh for normal Bitcoin conditions)
             
             # Trend strength adjustment (strong trends still valid, but don't kill reversal signal)
             if abs(trend_strength) > 0.05:  # Strong trend

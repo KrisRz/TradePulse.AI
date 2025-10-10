@@ -191,10 +191,10 @@ class IntelligentEntryEngine:
         self.phase2_duration = 2.0  # Phase 2: 2 minutes - normal operation with higher thresholds
         self.phase3_start = 3.0     # Phase 3: 3+ minutes - full optimization
         
-        # PHASE-BASED THRESHOLDS for gradual confidence building
-        self.phase1_confidence_threshold = 0.75  # Higher threshold during initial warmup
-        self.phase2_confidence_threshold = 0.70  # Medium threshold during phase 2
-        self.phase3_confidence_threshold = 0.65  # Normal threshold after full warmup
+        # PHASE-BASED THRESHOLDS for gradual confidence building (BITCOIN SCALPING OPTIMIZED)
+        self.phase1_confidence_threshold = 0.60  # Medium threshold during initial warmup (was 0.75, too high!)
+        self.phase2_confidence_threshold = 0.58  # Slightly lower during phase 2 (was 0.70)
+        self.phase3_confidence_threshold = 0.55  # Normal threshold after full warmup (was 0.65)
         
         # MINIMUM DATA REQUIREMENTS for each phase
         self.min_price_history_basic = 5   # Phase 1: 5 points = 60 seconds at 12s intervals
@@ -2296,9 +2296,9 @@ class IntelligentEntryEngine:
                 phase_consensus_thresh = 0.65  # FIXED: Lower threshold for mean-reversion in phase 1
                 logger.info(f"🎯 MEAN-REVERSION DETECTED: Lowered phase-1 consensus to {phase_consensus_thresh}")
             else:
-                phase_consensus_thresh = 0.75  # Higher consensus required during Phase 1 for other strategies
+                phase_consensus_thresh = 0.60  # Moderate consensus during Phase 1 for Bitcoin scalping (was 0.75, too strict!)
         elif phase == 2:
-            phase_consensus_thresh = 0.60  # Medium consensus required during Phase 2 (was 0.72)
+            phase_consensus_thresh = 0.58  # Medium consensus required during Phase 2 (was 0.60)
         
         # Enhanced checks with phase-based and exploratory support
         meets_consensus = enter_votes > wait_votes and consensus_score > phase_consensus_thresh
