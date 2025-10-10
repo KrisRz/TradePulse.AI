@@ -335,7 +335,7 @@ export default function SystemStatusDashboard() {
         name: 'Virtual Portfolio',
         status: isHealthy ? 'healthy' : 'warning',
         message: activePositions > 0 
-          ? `${activePositions} active positions, $${totalValue.toLocaleString()} total`
+          ? `${activePositions} active position${activePositions !== 1 ? 's' : ''}, $${totalValue.toLocaleString()} total`
           : `Ready - $${cashBalance.toLocaleString()} available balance`,
         lastCheck: new Date().toLocaleTimeString(),
         details: data
