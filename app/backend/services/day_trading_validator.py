@@ -326,6 +326,23 @@ class DayTradingValidator:
     def _validate_risk_reward(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
         """Validate risk-reward ratio for day trading (ADAPTIVE with ATR fallback)"""
         try:
+            # ═══════════════════════════════════════════════════════════════════════════
+            # 🚨 PROFESSIONAL FIX (Oct 2025): LOWER R/R FOR SELL SIGNALS
+            # ═══════════════════════════════════════════════════════════════════════════
+            # SELL signals (shorting overbought) naturally have better R/R due to:
+            # - Reversal from top = asymmetric downside
+            # - Shorter profit targets (quick scalp)
+            # - Market structure favors reversals
+            # Adjusting R/R requirement: dynamic → 1.45 for SELL only
+            # ═══════════════════════════════════════════════════════════════════════════
+            min_rr = params['min_risk_reward_ratio']
+            
+            if setup.action == "SELL" and min_rr > 1.45:
+                original_rr = min_rr
+                min_rr = 1.45  # Lower threshold for SELL
+                logger.info(f"📊 SELL SIGNAL R/R ADJUSTMENT: {original_rr:.2f}:1 → {min_rr:.2f}:1 (reversal trading)")
+            # ═══════════════════════════════════════════════════════════════════════════
+            
             # PROFESSIONAL: If no S/R levels, use ATR-based targets (industry standard)
             if setup.resistance == 0 or setup.support == 0:
                 logger.info("📊 Using ATR-based risk-reward (no S/R levels)")
@@ -337,7 +354,6 @@ class DayTradingValidator:
                 potential_loss = atr_pct  # 1x ATR stop loss
                 
                 risk_reward = potential_profit / potential_loss  # Should be 2.0
-                min_rr = params['min_risk_reward_ratio']
                 
                 if risk_reward < min_rr:
                     return False, f"ATR-based RR too low ({risk_reward:.2f}:1 < {min_rr:.2f}:1)"
@@ -352,7 +368,6 @@ class DayTradingValidator:
                 return False, "Invalid support level (zero risk)"
             
             risk_reward = potential_profit / potential_loss
-            min_rr = params['min_risk_reward_ratio']
             
             # DAY TRADING: Skip R/R check for HIGH CONFIDENCE (80%+) signals
             # When AI is very confident, trust the signal even with tight S/R levels

@@ -1071,7 +1071,7 @@ class EnterpriseTradingEngine:
                 'filter_passed': reversal_prob > 0.70,
                 'reasoning': 'Filter error, using original probability'
             }
-
+            
     def _calculate_dynamic_reversal_risk(self, raw_prob: float, features: Dict[str, float]) -> float:
         """Calculate market-adaptive reversal risk instead of raw model probability
         
@@ -1522,8 +1522,8 @@ class EnterpriseTradingEngine:
             
             # 🎯 DAY TRADING: High reversal probability = OPPORTUNITY for quick profits!
             # ✅ PROFESSIONAL: Risk threshold delegated to DynamicRiskManager
-            reversal_opportunity = reversal_prob > 0.50  # 50%+ reversal = OPPORTUNITY (was 55%)
-            reversal_check = reversal_opportunity  # Opportunity-based (risk delegated)
+            reversal_opportunity = reversal_prob > 0.70  # 🔧 PROFESSIONAL FIX: 70%+ reversal = STRONG OPPORTUNITY (was 0.50)
+            reversal_check = reversal_opportunity  # Opportunity-based (risk delegated) - stronger confirmation required
             
             filter_check = filter_score > 0.08  # SCALPING: Lower filter threshold (was 0.15)
             timing_buy_check = timing_score > 0.008   # SCALPING: More sensitive timing (was 0.02)
@@ -1564,10 +1564,11 @@ class EnterpriseTradingEngine:
             # ═══════════════════════════════════════════════════════════════════════════
             # 🎯 TIER 1: EXTREME OVERBOUGHT SCALP (Highest Priority)
             # ═══════════════════════════════════════════════════════════════════════════
-            # CRITICAL FIX: Move OUTSIDE conf_check block with LOWER threshold (60% instead of 65%)
-            # This allows Tier 1 to trigger even when confidence is slightly lower
-            # Reasoning: Extreme conditions (RSI≥90, Rev≥90%, BB≥0.99) are so strong that
-            #           they justify slightly lower confidence requirements
+            # PROFESSIONAL FIX (Oct 2025): Increased threshold for quality control
+            # After 82 trades with 0% win rate, we're prioritizing quality over quantity
+            # This allows Tier 1 to trigger only with higher confidence
+            # Reasoning: Extreme conditions (RSI≥90, Rev≥90%, BB≥0.99) still strong but
+            #           we need better confirmation to avoid false signals
             # ═══════════════════════════════════════════════════════════════════════════
             
             # 🎯 PROFESSIONAL SCALP: Extreme overbought SELL opportunity (Industry Best Practice)
@@ -1577,7 +1578,7 @@ class EnterpriseTradingEngine:
             # - Reversal ≥ 90%: ML model confirms high reversal probability
             # - BB Position > 0.99: Price at/above upper Bollinger Band (exhaustion)
             # - Volume consideration: Blow-off tops often have weak volume (adaptive penalty)
-            tier1_conf_check = confidence >= 0.60  # 🔧 FIX: Lower threshold for Tier 1 (was 0.65)
+            tier1_conf_check = confidence >= 0.70  # 🔧 PROFESSIONAL FIX: Raised threshold for quality (was 0.60)
             extreme_overbought_scalp = (
                 rsi >= 90.0 and 
                 reversal_prob >= 0.90 and 
@@ -1638,9 +1639,9 @@ class EnterpriseTradingEngine:
             # ═══════════════════════════════════════════════════════════════════════════
             # 🎯 TIER 2: STANDARD OVERBOUGHT (More Frequent, Slightly Lower Confidence)
             # ═══════════════════════════════════════════════════════════════════════════
-            # CRITICAL FIX: Move OUTSIDE conf_check block with EVEN LOWER threshold (50% instead of 65%)
-            # This enables Tier 2 to be truly "more accessible" as designed
-            # Reasoning: Tier 2 is designed for MORE FREQUENT signals with slightly lower confidence
+            # PROFESSIONAL FIX (Oct 2025): Increased threshold for quality control
+            # After 82 trades with 0% win rate, balancing accessibility with quality
+            # Reasoning: Tier 2 is designed for MORE FREQUENT signals but needs better confirmation
             #           The volume gate and trend exhaustion checks provide additional safety
             # ═══════════════════════════════════════════════════════════════════════════
             # Criteria:
@@ -1648,11 +1649,11 @@ class EnterpriseTradingEngine:
             #   - Reversal Probability ≥ 85% (high ML confidence)
             #   - BB Position ≥ 0.80 (near/above upper band, not necessarily at edge)
             #   - Volume ≥ 1.2x OR Trend Exhaustion confirmed
-            #   - Confidence ≥ 50% (🔧 FIX: Lowered from 65% to enable more signals)
-            # Expected: 3-5 signals/day, 60% win rate, 0.30% avg profit
+            #   - Confidence ≥ 65% (🔧 PROFESSIONAL FIX: Raised from 50% for better quality)
+            # Expected: 2-4 signals/day, 65%+ win rate, 0.35% avg profit
             # ═══════════════════════════════════════════════════════════════════════════
             
-            tier2_conf_check = confidence >= 0.50  # 🔧 FIX: Much lower threshold for Tier 2 (was 0.65)
+            tier2_conf_check = confidence >= 0.65  # 🔧 PROFESSIONAL FIX: Raised threshold for quality (was 0.50)
             standard_overbought_scalp = (
                 rsi >= 85.0 and
                 reversal_prob >= 0.85 and

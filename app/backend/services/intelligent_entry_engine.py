@@ -912,6 +912,35 @@ class IntelligentEntryEngine:
                     pass
             logger.info("✅ PIPELINE DEBUG: Entry Engine - Live market data retrieved successfully")
             
+            # ═══════════════════════════════════════════════════════════════════════════
+            # 🚨 PROFESSIONAL FIX (Oct 2025): DOWNTREND PROTECTION
+            # ═══════════════════════════════════════════════════════════════════════════
+            # After 82 BUY trades in downtrend with 0% win rate, we're blocking BUY signals
+            # in strong downtrends to prevent "buying the dip" losses
+            # ═══════════════════════════════════════════════════════════════════════════
+            signal_action = signal_data.get("action", "HOLD")
+            trend_strength = market_data.get("trend_strength", 0.0)
+            
+            if signal_action == "BUY" and trend_strength < -0.3:
+                logger.warning(f"🚫 DOWNTREND PROTECTION: Blocking BUY signal in strong downtrend (trend={trend_strength:.2f})")
+                logger.warning(f"   Market is trending DOWN - waiting for trend reversal or SELL opportunities")
+                return EntryAnalysisResult(
+                    should_enter=False,
+                    confidence=0.0,
+                    entry_reason=EntryReason.POOR_TIMING,
+                    entry_quality=EntryQuality.POOR,
+                    optimal_entry_price=float(current_price),
+                    position_size_recommendation=0.0,
+                    risk_score=1.0,
+                    timing_score=0.0,
+                    layer_analysis={"downtrend_protection": True, "trend_strength": trend_strength},
+                    market_conditions={"trend": "strong_downtrend", "action_blocked": "BUY"},
+                    reasoning=f"BUY blocked in strong downtrend (trend={trend_strength:.2f})",
+                    analysis_time_ms=0.0,
+                    timestamp=datetime.now(timezone.utc)
+                )
+            # ═══════════════════════════════════════════════════════════════════════════
+            
             # ENHANCED: Add historical market context
             logger.info("📊 PIPELINE DEBUG: Entry Engine - Processing historical market context...")
             if self.historical_context:
