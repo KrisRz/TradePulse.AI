@@ -107,8 +107,9 @@ class DayTradingValidator:
         
         # ATR percentiles cache (calculated from historical data)
         # These are statistical baselines, not magic numbers
+        # 🔧 FIX (Oct 2025): LOWERED p25 from 1.5% to 1.0% for day trading flexibility
         self.atr_percentiles = {
-            'p25': 0.015,  # 1.5% (Bitcoin 25th percentile)
+            'p25': 0.010,  # 1.0% (Bitcoin 25th percentile) - DAY TRADING: Allow lower volatility
             'p50': 0.025,  # 2.5% (Bitcoin median)
             'p75': 0.040,  # 4.0% (Bitcoin 75th percentile)
             'p95': 0.070   # 7.0% (Bitcoin 95th percentile)

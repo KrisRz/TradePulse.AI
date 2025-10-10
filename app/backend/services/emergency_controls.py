@@ -125,7 +125,7 @@ class EmergencyControlSystem:
             ),
             CircuitBreakerType.VOLUME: CircuitBreakerConfig(
                 breaker_type=CircuitBreakerType.VOLUME,
-                threshold=5.0,       # 5x normal volume
+                threshold=7.5,       # 7.5x normal volume (DAY TRADING: Allow more volume spikes for scalping)
                 cooldown_seconds=180, # 3 minutes
                 auto_recovery=True,
                 enabled=True

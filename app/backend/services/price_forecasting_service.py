@@ -391,6 +391,7 @@ class PriceForecastingService:
                 features.get("adx", 25.0)
             ], dtype=np.float32)
         elif timeframe in ["4h", "24h"]:
+            # 🔧 FIX: Use 16 features to match model input shape (was 19 - causing Matrix error)
             feature_vector = np.array([
                 features.get("close", 0.0),
                 features.get("volume", 0.0),
@@ -403,14 +404,11 @@ class PriceForecastingService:
                 features.get("price_change_24h", 0.0),
                 features.get("ema_20", features.get("close", 0.0)),
                 features.get("ema_50", features.get("close", 0.0)),
-                features.get("ema_200", features.get("close", 0.0)),
                 features.get("atr", features.get("close", 0.0) * 0.02),
                 features.get("stoch_k", 50.0),
                 features.get("stoch_d", 50.0),
                 features.get("obv", 0.0),
-                features.get("adx", 25.0),
-                features.get("cci", 0.0),
-                features.get("mfi", 50.0)
+                features.get("adx", 25.0)
             ], dtype=np.float32)
         else:
             raise ValueError(f"Unknown timeframe: {timeframe}")
