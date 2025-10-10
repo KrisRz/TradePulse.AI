@@ -1127,12 +1127,20 @@ class ProfessionalPortfolio:
 
         # Simplified Sharpe ratio (annualized) - convert to float
         if total_trades > 0:
-            returns = [float(pos.realized_pnl) / float(pos.entry_price) / float(pos.size) for pos in self.closed_positions]
-            avg_return = float(sum(returns) / len(returns))
-            import math
-            variance = sum((r - avg_return) ** 2 for r in returns) / len(returns)
-            return_std = math.sqrt(variance)
-            sharpe_ratio = (avg_return / return_std) * 15.87 if return_std > 0 else 0.0  # Sqrt(252) for annualization
+            # SAFETY: Skip positions with zero size or entry_price to avoid division by zero
+            returns = [
+                float(pos.realized_pnl) / float(pos.entry_price) / float(pos.size) 
+                for pos in self.closed_positions 
+                if float(pos.entry_price) > 0 and float(pos.size) > 0
+            ]
+            if returns:  # Only calculate if we have valid returns
+                avg_return = float(sum(returns) / len(returns))
+                import math
+                variance = sum((r - avg_return) ** 2 for r in returns) / len(returns)
+                return_std = math.sqrt(variance)
+                sharpe_ratio = (avg_return / return_std) * 15.87 if return_std > 0 else 0.0  # Sqrt(252) for annualization
+            else:
+                sharpe_ratio = 0.0
         else:
             sharpe_ratio = 0.0
         
