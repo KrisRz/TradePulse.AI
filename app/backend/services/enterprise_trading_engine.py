@@ -1550,22 +1550,6 @@ class EnterpriseTradingEngine:
                 confidence *= 0.85  # REDUCE confidence by 15% (penalty for filtered signal)
                 logger.warning(f"⚠️ STRONG REVERSAL FILTERED: {reversal_prob:.1%} failed smart timing filter → confidence reduced to {confidence:.1%}")
             
-            extreme_oversold_buy = (reversal_prob > 0.60 and timing_score > 0.0 and rsi < 30 and bb_pos < 0.2)  # Lowered from 0.65
-            extreme_overbought_sell = (reversal_prob > 0.60 and timing_score < 0.0 and rsi > 70 and bb_pos > 0.8)  # Lowered from 0.65
-            
-            # DAY TRADING: Aggressive entry for extreme conditions (bypass filter check)
-            if conf_check and reversal_check:
-                if extreme_oversold_buy:
-                    logger.info(f"🚀 DAY TRADING SIGNAL: BUY (extreme_oversold_reversal - rsi={rsi:.1f}, bb_pos={bb_pos:.2f})")
-                    # 📊 METRICS: Track extreme oversold BUY signal
-                    self._track_signal_metrics("BUY", confidence, rsi, reversal_prob, signal_type="extreme_oversold")
-                    return "BUY", confidence
-                elif extreme_overbought_sell:
-                    logger.info(f"🚀 DAY TRADING SIGNAL: SELL (extreme_overbought_reversal - rsi={rsi:.1f}, bb_pos={bb_pos:.2f})")
-                    # 📊 METRICS: Track extreme overbought SELL signal (legacy path)
-                    self._track_signal_metrics("SELL", confidence, rsi, reversal_prob, signal_type="extreme_overbought")
-                    return "SELL", confidence
-            
             # 🚨 CRITICAL FIX: RSI safety checks - prevent buying at extreme overbought/oversold
             # NEVER buy when RSI > 80 (extremely overbought) - high probability of reversal DOWN
             # NEVER sell when RSI < 20 (extremely oversold) - high probability of reversal UP
@@ -1577,6 +1561,15 @@ class EnterpriseTradingEngine:
             if rsi_oversold_danger:
                 logger.warning(f"🚨 RSI SAFETY: RSI={rsi:.1f} is EXTREMELY OVERSOLD - Blocking SELL signals, only BUY allowed")
             
+            # ═══════════════════════════════════════════════════════════════════════════
+            # 🎯 TIER 1: EXTREME OVERBOUGHT SCALP (Highest Priority)
+            # ═══════════════════════════════════════════════════════════════════════════
+            # CRITICAL FIX: Move OUTSIDE conf_check block with LOWER threshold (60% instead of 65%)
+            # This allows Tier 1 to trigger even when confidence is slightly lower
+            # Reasoning: Extreme conditions (RSI≥90, Rev≥90%, BB≥0.99) are so strong that
+            #           they justify slightly lower confidence requirements
+            # ═══════════════════════════════════════════════════════════════════════════
+            
             # 🎯 PROFESSIONAL SCALP: Extreme overbought SELL opportunity (Industry Best Practice)
             # This is the CORE of reversal day trading - profiting from tops rolling over
             # Conditions aligned with professional scalping standards:
@@ -1584,11 +1577,12 @@ class EnterpriseTradingEngine:
             # - Reversal ≥ 90%: ML model confirms high reversal probability
             # - BB Position > 0.99: Price at/above upper Bollinger Band (exhaustion)
             # - Volume consideration: Blow-off tops often have weak volume (adaptive penalty)
+            tier1_conf_check = confidence >= 0.60  # 🔧 FIX: Lower threshold for Tier 1 (was 0.65)
             extreme_overbought_scalp = (
                 rsi >= 90.0 and 
                 reversal_prob >= 0.90 and 
                 bb_pos >= 0.99 and
-                conf_check  # Still require minimum confidence
+                tier1_conf_check  # Independent confidence check
             )
             
             if extreme_overbought_scalp:
@@ -1644,20 +1638,26 @@ class EnterpriseTradingEngine:
             # ═══════════════════════════════════════════════════════════════════════════
             # 🎯 TIER 2: STANDARD OVERBOUGHT (More Frequent, Slightly Lower Confidence)
             # ═══════════════════════════════════════════════════════════════════════════
+            # CRITICAL FIX: Move OUTSIDE conf_check block with EVEN LOWER threshold (50% instead of 65%)
+            # This enables Tier 2 to be truly "more accessible" as designed
+            # Reasoning: Tier 2 is designed for MORE FREQUENT signals with slightly lower confidence
+            #           The volume gate and trend exhaustion checks provide additional safety
+            # ═══════════════════════════════════════════════════════════════════════════
             # Criteria:
             #   - RSI ≥ 85 (strong overbought, but not extreme)
             #   - Reversal Probability ≥ 85% (high ML confidence)
             #   - BB Position ≥ 0.80 (near/above upper band, not necessarily at edge)
             #   - Volume ≥ 1.2x OR Trend Exhaustion confirmed
-            #   - Confidence ≥ 70%
+            #   - Confidence ≥ 50% (🔧 FIX: Lowered from 65% to enable more signals)
             # Expected: 3-5 signals/day, 60% win rate, 0.30% avg profit
             # ═══════════════════════════════════════════════════════════════════════════
             
+            tier2_conf_check = confidence >= 0.50  # 🔧 FIX: Much lower threshold for Tier 2 (was 0.65)
             standard_overbought_scalp = (
                 rsi >= 85.0 and
                 reversal_prob >= 0.85 and
                 bb_pos >= 0.80 and
-                conf_check  # Minimum confidence threshold
+                tier2_conf_check  # Independent confidence check
             )
             
             if standard_overbought_scalp:
@@ -1666,7 +1666,9 @@ class EnterpriseTradingEngine:
                 trend_strength = float(features.get("trend_strength", 0.0))
                 
                 # Check for trend exhaustion (weakening trend at overbought levels)
-                trend_exhaustion = (trend_strength < 0.4 and rsi >= 88.0)
+                # 🔧 FIX: Adjusted threshold from <0.4 to <0.6 (more realistic for overbought conditions)
+                # At RSI≥88, even a 52% trend strength indicates exhaustion approaching
+                trend_exhaustion = (trend_strength < 0.6 and rsi >= 88.0)
                 
                 # Volume gate: Require 1.2x volume OR trend exhaustion
                 volume_gate_passed = (volume_ratio >= 1.2) or trend_exhaustion
@@ -1721,6 +1723,29 @@ class EnterpriseTradingEngine:
                     self._track_signal_metrics("SELL", sell_confidence, rsi, reversal_prob, signal_type="standard_overbought")
                     
                     return "SELL", sell_confidence
+            
+            # ═══════════════════════════════════════════════════════════════════════════
+            # 🎯 LEGACY EXTREME CONDITIONS (for backwards compatibility)
+            # ═══════════════════════════════════════════════════════════════════════════
+            # These are the original extreme condition checks that require full conf_check
+            # Kept for backwards compatibility with existing behavior
+            # ═══════════════════════════════════════════════════════════════════════════
+            
+            extreme_oversold_buy = (reversal_prob > 0.60 and timing_score > 0.0 and rsi < 30 and bb_pos < 0.2)
+            extreme_overbought_sell = (reversal_prob > 0.60 and timing_score < 0.0 and rsi > 70 and bb_pos > 0.8)
+            
+            # DAY TRADING: Aggressive entry for extreme conditions (bypass filter check)
+            if conf_check and reversal_check:
+                if extreme_oversold_buy:
+                    logger.info(f"🚀 DAY TRADING SIGNAL: BUY (extreme_oversold_reversal - rsi={rsi:.1f}, bb_pos={bb_pos:.2f})")
+                    # 📊 METRICS: Track extreme oversold BUY signal
+                    self._track_signal_metrics("BUY", confidence, rsi, reversal_prob, signal_type="extreme_oversold")
+                    return "BUY", confidence
+                elif extreme_overbought_sell:
+                    logger.info(f"🚀 DAY TRADING SIGNAL: SELL (extreme_overbought_reversal - rsi={rsi:.1f}, bb_pos={bb_pos:.2f})")
+                    # 📊 METRICS: Track extreme overbought SELL signal (legacy path)
+                    self._track_signal_metrics("SELL", confidence, rsi, reversal_prob, signal_type="extreme_overbought")
+                    return "SELL", confidence
             
             # Standard day trading: Confidence + reversal + filter + timing + RSI safety
             if conf_check and reversal_check and filter_check:
