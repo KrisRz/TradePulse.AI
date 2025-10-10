@@ -135,6 +135,12 @@ class DayTradingEngine:
         # Duplicate suppression burst tracker (timestamps of suppressions)
         self._dupe_suppress_ts: List[float] = []
         
+        # 🔮 LAYER 7: Price Prediction Tracking (Day Trading ML Enhancement)
+        self.prediction_cache = {}  # Cache predictions (5-minute TTL)
+        self.prediction_accuracy_tracker = []  # Track prediction vs actual prices
+        self.last_prediction_time = 0
+        self.prediction_update_interval = 300  # 5 minutes
+        
         # ✅ PROFESSIONAL: Use adaptive config from day_trading_config.py
         from app.backend.core.config import get_settings
         s = get_settings()

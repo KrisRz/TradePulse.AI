@@ -64,6 +64,10 @@ class EnterpriseTradingEngine:
         # Market data service
         self.market_service = None
         
+        # 🔮 PRICE FORECASTING SERVICE (Layer 7 - ML Price Prediction)
+        # Professional day trading optimization - predicts price 1h/4h/24h ahead
+        self.price_forecasting_service = None
+        
         # 📊 MONITORING METRICS: Track signal generation performance
         # Industry best practice: Monitor what you manage
         self.signal_metrics = {
@@ -134,6 +138,24 @@ class EnterpriseTradingEngine:
                 logger.warning(f"⚠️ Market data service failed: {market_error}")
                 logger.warning("⚠️ PIPELINE DEBUG: Enterprise Trading Engine - Market data service failed, continuing without")
                 self.market_service = None
+            
+            # 🔮 LAYER 7: Initialize Price Forecasting Service (ML Price Prediction)
+            logger.info("🔮 PIPELINE DEBUG: Enterprise Trading Engine - Initializing Price Forecasting Service...")
+            try:
+                from app.backend.services.price_forecasting_service import PriceForecastingService
+                
+                # Create forecasting service and share our LSTM models (prevent duplicate loading)
+                self.price_forecasting_service = PriceForecastingService()
+                
+                # Share LSTM models if we have them (avoid recursion errors from duplicate loading)
+                await self.price_forecasting_service.initialize(shared_models=self.models)
+                
+                logger.info("✅ Price Forecasting Service initialized (Layer 7)")
+                logger.info("✅ PIPELINE DEBUG: Enterprise Trading Engine - Price predictions enabled (1h/4h/24h)")
+            except Exception as forecast_error:
+                logger.warning(f"⚠️ Price Forecasting Service failed: {forecast_error}")
+                logger.warning("⚠️ PIPELINE DEBUG: Enterprise Trading Engine - Continuing without price predictions")
+                self.price_forecasting_service = None
             
             self.is_initialized = True
             logger.info("🎯 PIPELINE DEBUG: Enterprise Trading Engine - READY FOR OPERATIONS")
@@ -258,14 +280,19 @@ class EnterpriseTradingEngine:
                 else:
                     logger.warning(f"⚠️ {display_name} model file not found: {filename}")
             
-            # LSTM/TF models (Layer 2) - ENABLED with safe loading
+            # LSTM/TF models (Layer 2 + Layer 7) - ENABLED with safe loading
             logger.info("🔄 Loading LSTM models with recursion prevention...")
             
             try:
                 # Load LSTM models with safe wrapper
+                # Layer 2: Short-term (1m, 5m) for immediate signals
+                # Layer 7: Day trading horizons (1h, 4h, 24h) for price forecasting
                 lstm_models = {
-                    "lstm_1m": "lstm_1m.h5",
-                    "lstm_5m": "lstm_5m.h5"
+                    "lstm_1m": "lstm_1m.h5",    # Layer 2: 1-minute signals
+                    "lstm_5m": "lstm_5m.h5",    # Layer 2: 5-minute signals
+                    "lstm_1h": "lstm_1h.h5",    # Layer 7: 1-hour price prediction
+                    "lstm_4h": "lstm_4h.h5",    # Layer 7: 4-hour price prediction
+                    "lstm_24h": "lstm_24h.h5"   # Layer 7: 24-hour price prediction
                 }
                 
                 for model_key, filename in lstm_models.items():
@@ -611,6 +638,10 @@ class EnterpriseTradingEngine:
         # Layer 6: Adaptive Timing
         timing_score = self._layer_6_adaptive_timing(features)
         results["layer_6_timing"] = timing_score
+        
+        # Layer 7: Price Prediction (ML Forecasting for Day Trading)
+        price_predictions = await self._layer_7_price_prediction(features)
+        results["layer_7_predictions"] = price_predictions
         
         # Attach raw features for downstream decision context (RSI/BB checks for labels)
         results["features"] = features.copy()
@@ -1476,6 +1507,101 @@ class EnterpriseTradingEngine:
             logger.error(f"Layer 6 error: {e}")
             return {"timing_score": 0.0, "model_used": False}
     
+    async def _layer_7_price_prediction(self, features: Dict[str, float]) -> Dict[str, Any]:
+        """
+        Layer 7: ML Price Prediction (Day Trading Optimization)
+        
+        Predicts price 1h, 4h, 24h ahead using existing LSTM models.
+        Provides confidence intervals, trend direction, and probability distributions.
+        
+        Returns:
+            Dict with predictions for each horizon, aggregate insights, and confidence boost
+        """
+        try:
+            # Check if forecasting service is available
+            if not self.price_forecasting_service:
+                logger.debug("⚠️ Price Forecasting Service not available - skipping predictions")
+                return self._create_empty_predictions()
+            
+            current_price = features.get("close", 0.0)
+            if current_price <= 0:
+                logger.warning("⚠️ Invalid current price - skipping predictions")
+                return self._create_empty_predictions()
+            
+            # Get price predictions
+            logger.debug("🔮 Layer 7: Generating price predictions...")
+            forecast = await self.price_forecasting_service.predict_prices(
+                current_price=current_price,
+                features=features,
+                horizons=["1h", "4h", "24h"]
+            )
+            
+            # Extract predictions
+            pred_1h = forecast.predictions_1h
+            pred_4h = forecast.predictions_4h
+            pred_24h = forecast.predictions_24h
+            aggregate = forecast.aggregate
+            
+            # Log predictions
+            if pred_1h:
+                logger.info(f"🔮 LAYER 7 - 1h prediction: ${pred_1h.price_target:.2f} ({pred_1h.expected_move_pct:+.2f}%, confidence: {pred_1h.confidence:.1%})")
+            if pred_4h:
+                logger.info(f"🔮 LAYER 7 - 4h prediction: ${pred_4h.price_target:.2f} ({pred_4h.expected_move_pct:+.2f}%, confidence: {pred_4h.confidence:.1%})")
+            if pred_24h:
+                logger.info(f"🔮 LAYER 7 - 24h prediction: ${pred_24h.price_target:.2f} ({pred_24h.expected_move_pct:+.2f}%, confidence: {pred_24h.confidence:.1%})")
+            
+            logger.info(f"🔮 LAYER 7 - Aggregate: {aggregate['short_term_bias']} ({aggregate['momentum_strength']}), confidence_boost: {aggregate['confidence_boost']:+.2f}")
+            
+            # Return comprehensive prediction data
+            return {
+                "predictions_1h": {
+                    "price_target": pred_1h.price_target if pred_1h else 0.0,
+                    "confidence": pred_1h.confidence if pred_1h else 0.0,
+                    "expected_move_pct": pred_1h.expected_move_pct if pred_1h else 0.0,
+                    "trend_direction": pred_1h.trend_direction if pred_1h else "sideways",
+                    "probability_up": pred_1h.probability_up if pred_1h else 0.5
+                } if pred_1h else None,
+                "predictions_4h": {
+                    "price_target": pred_4h.price_target if pred_4h else 0.0,
+                    "confidence": pred_4h.confidence if pred_4h else 0.0,
+                    "expected_move_pct": pred_4h.expected_move_pct if pred_4h else 0.0,
+                    "trend_direction": pred_4h.trend_direction if pred_4h else "sideways",
+                    "probability_up": pred_4h.probability_up if pred_4h else 0.5
+                } if pred_4h else None,
+                "predictions_24h": {
+                    "price_target": pred_24h.price_target if pred_24h else 0.0,
+                    "confidence": pred_24h.confidence if pred_24h else 0.0,
+                    "expected_move_pct": pred_24h.expected_move_pct if pred_24h else 0.0,
+                    "trend_direction": pred_24h.trend_direction if pred_24h else "sideways",
+                    "probability_up": pred_24h.probability_up if pred_24h else 0.5
+                } if pred_24h else None,
+                "aggregate": aggregate,
+                "metadata": forecast.metadata,
+                "model_used": True
+            }
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Layer 7 (Price Prediction) error: {e}")
+            return self._create_empty_predictions()
+    
+    def _create_empty_predictions(self) -> Dict[str, Any]:
+        """Create empty predictions when forecasting unavailable"""
+        return {
+            "predictions_1h": None,
+            "predictions_4h": None,
+            "predictions_24h": None,
+            "aggregate": {
+                "short_term_bias": "neutral",
+                "momentum_strength": "weak",
+                "reversal_risk": 0.50,
+                "optimal_entry_timing": "neutral",
+                "recommended_action": "HOLD",
+                "confidence_boost": 0.0
+            },
+            "metadata": {"is_enabled": False},
+            "model_used": False
+        }
+    
     def _calculate_final_decision(self, layer_results: Dict[str, Any]) -> Tuple[str, float, str]:
         """PHASE 1A: Calculate final trading decision with exploratory signals"""
         try:
@@ -1495,7 +1621,8 @@ class EnterpriseTradingEngine:
                 timing_score,
                 reversal_prob,
                 filter_score,
-                layer_results.get("features", {})
+                layer_results.get("features", {}),
+                layer_results  # Pass full layer results for price predictions access
             )
             if primary_signal[0] != "HOLD":
                 return primary_signal[0], primary_signal[1], "primary"
@@ -1514,9 +1641,37 @@ class EnterpriseTradingEngine:
             logger.error(f"Final decision calculation error: {e}")
             return "HOLD", 0.5, "error"
             
-    def _calculate_primary_signal(self, confidence: float, timing_score: float, reversal_prob: float, filter_score: float, features: Dict[str, float]) -> Tuple[str, float]:
-        """Calculate primary signal with professional criteria using unified thresholds"""
+    def _calculate_primary_signal(self, confidence: float, timing_score: float, reversal_prob: float, filter_score: float, features: Dict[str, float], layer_results: Optional[Dict[str, Any]] = None) -> Tuple[str, float]:
+        """
+        Calculate primary signal with professional criteria using unified thresholds
+        
+        Enhanced with Layer 7 Price Predictions for day trading optimization.
+        """
         try:
+            # ═══════════════════════════════════════════════════════════════════════════
+            # 🔮 LAYER 7: PRICE PREDICTION CONFIDENCE BOOST (Day Trading Enhancement)
+            # ═══════════════════════════════════════════════════════════════════════════
+            # Use ML price predictions to boost/reduce confidence before other checks
+            # This is professional practice: "What will price do next?" informs "Should I trade?"
+            # ═══════════════════════════════════════════════════════════════════════════
+            predictions_boost = 0.0
+            prediction_available = False
+            
+            if layer_results and "layer_7_predictions" in layer_results:
+                predictions = layer_results["layer_7_predictions"]
+                if predictions and predictions.get("model_used", False):
+                    aggregate = predictions.get("aggregate", {})
+                    predictions_boost = aggregate.get("confidence_boost", 0.0)
+                    prediction_available = True
+                    
+                    if predictions_boost != 0.0:
+                        old_confidence = confidence
+                        confidence = min(confidence + predictions_boost, 0.95)
+                        logger.info(f"🔮 LAYER 7 BOOST: Price predictions {'support' if predictions_boost > 0 else 'contradict'} signal")
+                        logger.info(f"   Confidence: {old_confidence:.1%} → {confidence:.1%} ({predictions_boost:+.1%})")
+                        logger.info(f"   Prediction bias: {aggregate.get('short_term_bias', 'neutral')}")
+            # ═══════════════════════════════════════════════════════════════════════════
+            
             # Use unified threshold for consistency
             conf_check = confidence >= self.thresholds.confidence.BUY_THRESHOLD  # 65% confidence required
             

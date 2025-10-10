@@ -2222,6 +2222,26 @@ class IntelligentEntryEngine:
             signal_confidence = min(signal_confidence + reversal_boost, 0.90)
             logger.info(f"📈 MODERATE REVERSAL BOOST: {reversal_prob:.1%} reversal → confidence {old_confidence:.1%} → {signal_confidence:.1%}")
         
+        # ═══════════════════════════════════════════════════════════════════════════
+        # 🔮 LAYER 7: PRICE PREDICTION BOOST (Day Trading ML Enhancement)
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Use price predictions to further refine entry confidence
+        # This adds ML intelligence: "Where will price be in 1h/4h?"
+        # ═══════════════════════════════════════════════════════════════════════════
+        predictions_data = layer_analysis.get("layer_7_predictions", {})
+        if predictions_data and predictions_data.get("model_used", False):
+            aggregate = predictions_data.get("aggregate", {})
+            prediction_boost = aggregate.get("confidence_boost", 0.0)
+            
+            if prediction_boost != 0.0:
+                old_conf = signal_confidence
+                signal_confidence = min(signal_confidence + prediction_boost, 0.95)
+                logger.info(f"🔮 PRICE PREDICTION BOOST: ML forecasts {'support' if prediction_boost > 0 else 'contradict'} signal")
+                logger.info(f"   Confidence: {old_conf:.1%} → {signal_confidence:.1%} ({prediction_boost:+.1%})")
+                logger.info(f"   Short-term bias: {aggregate.get('short_term_bias', 'neutral')}")
+                logger.info(f"   Momentum: {aggregate.get('momentum_strength', 'weak')}")
+        # ═══════════════════════════════════════════════════════════════════════════
+        
         # ENHANCED: Historical validation check
         historical_validation_score = 0.0
         if self.historical_context:
@@ -2390,8 +2410,64 @@ class IntelligentEntryEngine:
         except Exception:
             pass
         
+        # ═══════════════════════════════════════════════════════════════════════════
+        # 🔮 LAYER 7: "WAIT FOR DIP" LOGIC (ML Price Prediction Enhancement)
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Check price predictions before entry - if price will drop, WAIT
+        # This is professional day trading: patience = profit
+        # ═══════════════════════════════════════════════════════════════════════════
+        wait_for_better_price = False
+        prediction_reason = ""
+        
+        if predictions_data and predictions_data.get("model_used", False):
+            pred_1h = predictions_data.get("predictions_1h", {})
+            pred_4h = predictions_data.get("predictions_4h", {})
+            
+            if pred_1h and pred_4h:
+                move_1h = pred_1h.get("expected_move_pct", 0.0)
+                move_4h = pred_4h.get("expected_move_pct", 0.0)
+                trend_1h = pred_1h.get("trend_direction", "sideways")
+                conf_1h = pred_1h.get("confidence", 0.0)
+                
+                # 🚫 WAIT FOR DIP: If BUY signal but price predicted to drop in 1h
+                if signal_action == "BUY" and move_1h < -0.3 and conf_1h > 0.65:
+                    wait_for_better_price = True
+                    prediction_reason = f"Price predicted to drop {move_1h:.2f}% in 1h - waiting for better entry"
+                    logger.warning(f"⏳ WAIT FOR DIP: {prediction_reason}")
+                
+                # 🚫 WAIT FOR BOUNCE: If SELL signal but price predicted to rise in 1h
+                elif signal_action == "SELL" and move_1h > +0.3 and conf_1h > 0.65:
+                    wait_for_better_price = True
+                    prediction_reason = f"Price predicted to rise {move_1h:.2f}% in 1h - waiting for better entry"
+                    logger.warning(f"⏳ WAIT FOR BOUNCE: {prediction_reason}")
+                
+                # ✅ RIDE THE WAVE: If trend aligns, extra confidence
+                elif signal_action == "BUY" and trend_1h == "up" and move_1h > +0.5 and conf_1h > 0.70:
+                    wave_boost = 0.05  # +5% additional confidence
+                    signal_confidence = min(signal_confidence + wave_boost, 0.95)
+                    logger.info(f"🌊 RIDE THE WAVE: Price predicted to rise {move_1h:.2f}% in 1h → confidence +{wave_boost:.1%}")
+                
+                elif signal_action == "SELL" and trend_1h == "down" and move_1h < -0.5 and conf_1h > 0.70:
+                    wave_boost = 0.05  # +5% additional confidence
+                    signal_confidence = min(signal_confidence + wave_boost, 0.95)
+                    logger.info(f"🌊 RIDE THE WAVE: Price predicted to drop {move_1h:.2f}% in 1h → confidence +{wave_boost:.1%}")
+        # ═══════════════════════════════════════════════════════════════════════════
+        
         # FINAL DECISION with exploratory-friendly criteria
-        if meets_consensus and meets_confidence and timing_ok and meets_signal:
+        if wait_for_better_price:
+            # BLOCK entry if predictions suggest waiting
+            decision = {
+                "should_enter": False,
+                "confidence": signal_confidence,
+                "reason": "wait_for_better_price",
+                "consensus_score": consensus_score,
+                "historical_validation": historical_validation_score,
+                "risk_score": risk_score,
+                "timing_score": timing_score,
+                "layer_votes": {"enter": enter_votes, "wait": wait_votes},
+                "prediction_reason": prediction_reason
+            }
+        elif meets_consensus and meets_confidence and timing_ok and meets_signal:
             decision = {
                 "should_enter": True,
                 "confidence": signal_confidence,  # Use original signal confidence, not consensus
