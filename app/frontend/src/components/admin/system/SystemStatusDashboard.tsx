@@ -321,12 +321,19 @@ export default function SystemStatusDashboard() {
       
       const data = await apiClient.portfolio.getOverview();
       
+      // DEBUG: Log what we actually receive from API
+      console.log('🔍 SYSTEM STATUS DEBUG: Raw API response:', data);
+      console.log('🔍 SYSTEM STATUS DEBUG: portfolio_summary =', data.portfolio_summary);
+      console.log('🔍 SYSTEM STATUS DEBUG: data.status =', data.status);
+      
       // Fix: /api/admin/virtual-portfolio returns nested structure in portfolio_summary
       const summary = data.portfolio_summary || {};
       const totalValue = summary.total_value || 0;
       const totalPortfolios = data.total_portfolios || 0;
       const cashBalance = summary.balance || 0;
       const activePositions = (data.active_positions || []).length;
+      
+      console.log('🔍 SYSTEM STATUS DEBUG: Extracted values - cashBalance:', cashBalance, 'totalValue:', totalValue, 'isHealthy:', (totalValue > 0 || cashBalance > 0));
       
       // Service is healthy if we can connect and get data, even with 0 portfolios
       const isHealthy = totalValue > 0 || cashBalance > 0;

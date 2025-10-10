@@ -1949,15 +1949,24 @@ async def get_virtual_portfolio(
         summary = await portfolio.get_portfolio_summary()
         
         # Extract data from correct structure
-        logger.info(f"🔍 DEBUG summary structure: portfolio_value={summary.get('portfolio_value')}")
+        logger.info(f"🔍 DEBUG /api/admin/virtual-portfolio called")
+        logger.info(f"🔍 DEBUG summary keys: {summary.keys() if summary else 'NO SUMMARY'}")
+        logger.info(f"🔍 DEBUG portfolio_value: {summary.get('portfolio_value')}")
+        
+        portfolio_value = summary.get("portfolio_value", {})
+        logger.info(f"🔍 DEBUG portfolio_value type: {type(portfolio_value)}, content: {portfolio_value}")
+        
+        cash_balance = portfolio_value.get("cash", 0) if isinstance(portfolio_value, dict) else 0
+        logger.info(f"🔍 DEBUG cash_balance extracted: {cash_balance}")
+        
         portfolio_summary = {
-            "balance": summary.get("portfolio_value", {}).get("cash", 0),
-            "total_value": summary.get("portfolio_value", {}).get("total", 0),
+            "balance": cash_balance,
+            "total_value": portfolio_value.get("total", 0) if isinstance(portfolio_value, dict) else 0,
             "total_pnl": summary.get("performance", {}).get("total_pnl", 0),
             "win_rate": summary.get("trading_stats", {}).get("win_rate", 0),
             "total_trades": summary.get("trading_stats", {}).get("total_trades", 0)
         }
-        logger.info(f"🔍 DEBUG portfolio_summary: {portfolio_summary}")
+        logger.info(f"🔍 DEBUG FINAL portfolio_summary being returned: {portfolio_summary}")
         
         active_positions = []  # TODO: Get from portfolio.positions
         recent_trades = []  # TODO: Get from portfolio.closed_positions
