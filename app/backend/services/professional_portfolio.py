@@ -80,7 +80,7 @@ class ProfessionalPosition:
     @property
     def unrealized_pnl_percentage(self) -> Decimal:
         """Calculate unrealized P&L percentage"""
-        if self.entry_price == 0:
+        if self.entry_price == 0 or self.size == 0:
             return Decimal('0')
         
         return (self.unrealized_pnl / (self.entry_price * self.size)) * Decimal('100')
@@ -521,7 +521,7 @@ class ProfessionalPortfolio:
                     outcome=outcome,
                     was_successful=realized_pnl > 0,
                     pnl_absolute=float(realized_pnl),
-                    pnl_percentage=float((realized_pnl / (position.entry_price * position.size)) * 100),
+                    pnl_percentage=float((realized_pnl / (position.entry_price * position.size)) * 100) if position.entry_price > 0 and position.size > 0 else 0.0,
                     time_in_position_minutes=int((position.exit_time - position.entry_time).total_seconds() / 60),
                     entry_price=float(position.entry_price),
                     exit_price=float(position.exit_price),
