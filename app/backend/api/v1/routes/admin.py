@@ -1949,6 +1949,7 @@ async def get_virtual_portfolio(
         summary = await portfolio.get_portfolio_summary()
         
         # Extract data from correct structure
+        logger.info(f"🔍 DEBUG summary structure: portfolio_value={summary.get('portfolio_value')}")
         portfolio_summary = {
             "balance": summary.get("portfolio_value", {}).get("cash", 0),
             "total_value": summary.get("portfolio_value", {}).get("total", 0),
@@ -1956,6 +1957,7 @@ async def get_virtual_portfolio(
             "win_rate": summary.get("trading_stats", {}).get("win_rate", 0),
             "total_trades": summary.get("trading_stats", {}).get("total_trades", 0)
         }
+        logger.info(f"🔍 DEBUG portfolio_summary: {portfolio_summary}")
         
         active_positions = []  # TODO: Get from portfolio.positions
         recent_trades = []  # TODO: Get from portfolio.closed_positions
