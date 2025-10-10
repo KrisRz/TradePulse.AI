@@ -1087,12 +1087,13 @@ class ProfessionalPortfolio:
         total_pnl = unrealized_pnl + realized_pnl
 
         # Daily P&L - convert to float with safety check
-        daily_starting_balance_safe = self.daily_starting_balance or Decimal('0')
+        daily_starting_balance_safe = self.daily_starting_balance or Decimal('1')  # Avoid division by zero
         daily_pnl = total_value - float(daily_starting_balance_safe)
 
-        # Percentage calculations - convert to float
-        total_pnl_pct = float((Decimal(str(total_pnl)) / self.initial_balance) * Decimal('100'))
-        daily_pnl_pct = float((Decimal(str(daily_pnl)) / daily_starting_balance_safe) * Decimal('100'))
+        # Percentage calculations - convert to float (with division by zero protection)
+        initial_balance_safe = self.initial_balance or Decimal('1')  # Avoid division by zero
+        total_pnl_pct = float((Decimal(str(total_pnl)) / initial_balance_safe) * Decimal('100'))
+        daily_pnl_pct = float((Decimal(str(daily_pnl)) / daily_starting_balance_safe) * Decimal('100')) if daily_starting_balance_safe > 0 else 0.0
 
         # Trade statistics
         total_trades = len(self.closed_positions)
