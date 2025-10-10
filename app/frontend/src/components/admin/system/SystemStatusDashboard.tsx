@@ -1,3 +1,4 @@
+// Version 1.0.1 - Fixed portfolio balance reading (2025-10-10)
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { 
   CheckCircle, 
