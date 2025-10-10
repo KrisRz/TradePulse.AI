@@ -1,5 +1,7 @@
-// Version 1.0.1 - Fixed portfolio balance reading (2025-10-10)
 import { useState, useEffect, useRef } from 'preact/hooks';
+
+// System Status Dashboard v1.0.2 - Force rebuild 2025-10-10
+const DASHBOARD_VERSION = '1.0.2';
 import { 
   CheckCircle, 
   XCircle, 
