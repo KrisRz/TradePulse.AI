@@ -1,6 +1,8 @@
 # ============================================================================
-# Historical Market Context Cache Table
-# Auto-deletes data older than 90 days (TTL)
+# Historical Market Context Cache Table (Day Trading Optimized)
+# - Uses last 14 days of data for relevant intraday patterns
+# - Refreshes every 4 hours for fresh pattern calculations
+# - Auto-deletes data older than 14 days (TTL)
 # ============================================================================
 
 resource "aws_dynamodb_table" "market_context_cache" {
@@ -20,8 +22,8 @@ resource "aws_dynamodb_table" "market_context_cache" {
     type = "S"
   }
 
-  # TTL to auto-delete data older than 90 days
-  # App must set 'ttl' field = current_timestamp + 90 days (7776000 seconds)
+  # TTL to auto-delete data older than 14 days (day trading mode)
+  # App sets 'ttl' field = current_timestamp + 14 days (1209600 seconds)
   ttl {
     attribute_name = "ttl"
     enabled        = true
@@ -32,12 +34,12 @@ resource "aws_dynamodb_table" "market_context_cache" {
     Project     = var.project_name
     Environment = var.environment
     ManagedBy   = "Terraform"
-    Purpose     = "Historical market context (90-day data)"
+    Purpose     = "Historical market context (14-day data, day trading optimized)"
   }
 }
 
 output "market_context_cache_table_name" {
-  description = "Market context cache table name"
+  description = "Market context cache table name (day trading: 14D/4h refresh)"
   value       = aws_dynamodb_table.market_context_cache.name
 }
 

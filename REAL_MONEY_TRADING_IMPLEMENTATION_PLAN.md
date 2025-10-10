@@ -1,50 +1,1288 @@
 # 🚀 REAL MONEY TRADING - COMPLETE IMPLEMENTATION PLAN
 
-**TradePulse.AI - Automated AI Trading Application**  
-**From Virtual Portfolio to Live Bitcoin Trading**
+**TradePulse.AI - Automated AI Day Trading Application**  
+**AWS-Deployed | Real Bitcoin Execution | Professional Grade**
 
 ---
 
 ## 📋 TABLE OF CONTENTS
 
-1. [Overview & Strategy](#overview--strategy)
-2. [Trading Execution Architecture](#trading-execution-architecture)
-3. [User Interface Design](#user-interface-design)
-4. [Backend Implementation](#backend-implementation)
-5. [Safety & Risk Management](#safety--risk-management)
-6. [Step-by-Step Implementation Guide](#step-by-step-implementation-guide)
-7. [Testing & Deployment](#testing--deployment)
-8. [User Workflows](#user-workflows)
+1. [Current Architecture Analysis](#1-current-architecture-analysis)
+2. [Real Trading Integration Plan](#2-real-trading-integration-plan)
+3. [Day Trading Optimization](#3-day-trading-optimization)
+4. [AWS Deployment Updates](#4-aws-deployment-updates)
+5. [Implementation Parts Breakdown](#5-implementation-parts-breakdown)
+6. [User Interface Design](#6-user-interface-design)
+7. [Testing & Validation](#7-testing--validation)
+8. [Deployment & Monitoring](#8-deployment--monitoring)
 
 ---
 
-## 1. OVERVIEW & STRATEGY
+## 1. CURRENT ARCHITECTURE ANALYSIS
 
-### 1.1 Current State
-- ✅ Virtual Portfolio fully functional with DynamoDB Local
-- ✅ AI Brain Controller generating trading signals
-- ✅ 6-Layer AI decision system operational
-- ✅ Binance API integration for market data (read-only)
-- ✅ Professional risk management systems
+### 1.1 AWS Production Environment
 
-### 1.2 Goal
-Transform TradePulse.AI into a **live automated AI trading system** that:
-- Executes real Bitcoin trades on Binance Spot Exchange
-- Allows user to switch from Virtual to Real Trading mode
-- Provides minimal but essential controls (start/stop AI, buy now, set limits)
-- Maximizes automation while keeping user in control
-- Maintains professional safety standards
+**Infrastructure (Terraform-managed):**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AWS PRODUCTION                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  CloudFront (CDN)                                           │
+│      ↓                                                       │
+│  S3 Bucket (Frontend: Astro + React)                       │
+│      │                                                       │
+│      └──> /api/* ──> App Runner (Backend: FastAPI)         │
+│                           ↓                                  │
+│                      Port 9002                              │
+│                      2 vCPU, 4GB RAM                        │
+│                      Auto-scaling 1-10 instances            │
+│                           ↓                                  │
+│                      DynamoDB Tables:                       │
+│                      - signals                              │
+│                      - portfolio                            │
+│                      - positions                            │
+│                      - analytics                            │
+│                      - brain_state                          │
+│                      - runtime                              │
+│                      - market_data                          │
+│                           ↓                                  │
+│                      SSM Parameter Store:                   │
+│                      - /tradepulse/binance/api_key         │
+│                      - /tradepulse/binance/api_secret      │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
 
-### 1.3 Trading Philosophy
-**"Automated AI Trading with Human Oversight"**
-- AI makes 95% of trading decisions automatically
-- User sets: profit targets, stop losses, position size limits
-- User can: start/stop AI, manual buy/sell, emergency stop
-- System handles: signal generation, execution, position management
+CI/CD: GitHub Actions → ECR → App Runner
+Region: eu-west-2 (London)
+Domain: tradepulseai.co.uk
+```
+
+**Current Services:**
+- ✅ **App Runner**: Backend container orchestration
+- ✅ **DynamoDB**: NoSQL database (production tables)
+- ✅ **ECR**: Docker image registry
+- ✅ **CloudFront**: CDN for frontend
+- ✅ **Route53**: DNS management
+- ✅ **SSM**: Secrets management (Binance keys)
+- ✅ **IAM**: Role-based access control
+- ✅ **CloudWatch**: Logging and monitoring
+
+### 1.2 Current Backend Architecture
+
+**FastAPI Application (main.py):**
+```python
+app/backend/
+├── main.py                          # Entry point (uvicorn)
+├── core/
+│   ├── application.py               # FastAPI app factory
+│   ├── config.py                    # Environment config
+│   └── singleton_app.py             # Lease-based singleton
+├── brain/
+│   ├── brain_controller.py          # FSM orchestrator
+│   ├── brain_state.py               # State management
+│   └── brain_events.py              # Event system
+├── services/
+│   ├── enterprise_trading_engine.py # 6-layer AI (SIGNALS)
+│   ├── day_trading_engine.py        # 15-sec cycles (COORDINATOR)
+│   ├── intelligent_entry_engine.py  # Entry optimization
+│   ├── intelligent_exit_engine.py   # Exit management
+│   ├── binance_hybrid_client.py     # WebSocket + REST (READ-ONLY)
+│   ├── live_market_data.py          # Real-time data
+│   ├── professional_portfolio.py    # VIRTUAL positions
+│   ├── dynamic_risk_manager.py      # Risk controls
+│   └── emergency_controls.py        # Circuit breakers
+└── api/
+    └── v1/
+        └── routes/
+            ├── trading.py           # Virtual trading endpoints
+            └── signals.py           # Signal logs
+```
+
+**Key Components:**
+1. **Brain Controller** (FSM):
+   - States: BOOT → WARMUP → RUNNING → HALT
+   - Orchestrates all engines
+   - Manages trading lifecycle
+
+2. **Day Trading Engine**:
+   - Mode: DAY_TRADING (15-second cycles)
+   - Session-aware (Asian/European/American)
+   - High-frequency signal generation
+   - Coordinates: Enterprise → Entry → Exit engines
+
+3. **Enterprise Trading Engine** (6-Layer AI):
+   - Layer 1-3: ML models (LGBM, RF, DNN)
+   - Layer 4-5: Confidence & Quality assessment
+   - Layer 6: Adaptive Support/Resistance
+   - Outputs: TradingSignal objects
+
+4. **Binance Hybrid Client**:
+   - WebSocket: Real-time market data
+   - REST: Fallback + historical data
+   - **CURRENT**: Read-only (no order placement)
+   - **NEED**: Add write operations for real trading
+
+5. **Professional Portfolio**:
+   - **CURRENT**: Virtual positions in DynamoDB
+   - **NEED**: Real trading executor integration
+
+### 1.3 What's Missing for Real Trading
+
+```
+GAPS TO FILL:
+
+❌ 1. Real Trading Executor Service
+   - Execute market BUY/SELL orders on Binance
+   - Place stop-loss and take-profit orders
+   - Manage real positions vs virtual
+
+❌ 2. Order Management System
+   - Track pending/filled/cancelled orders
+   - Sync Binance orders with DynamoDB
+   - Handle order callbacks
+
+❌ 3. Real Portfolio Service
+   - Fetch real USDT/BTC balance from Binance
+   - Store in DynamoDB real_portfolio table
+   - Separate from virtual_portfolio
+
+❌ 4. Trading Mode Switch
+   - User setting: VIRTUAL or REAL
+   - Brain controller mode awareness
+   - Safety validation before real execution
+
+❌ 5. New DynamoDB Tables
+   - real_portfolio
+   - real_positions
+   - real_trades
+   - real_orders
+   - trading_settings
+
+❌ 6. New API Endpoints
+   - POST /api/real-trading/buy
+   - POST /api/real-trading/sell
+   - GET  /api/real-trading/balance
+   - POST /api/real-trading/emergency-stop
+
+❌ 7. Frontend Real Trading Tab
+   - Enable RealTradingAdmin.tsx
+   - Connect to real trading APIs
+   - Live balance display
+   - Manual buy/sell controls
+
+❌ 8. Terraform Updates
+   - Add new DynamoDB tables
+   - Update IAM policies for Binance execution
+   - Add environment variables
+```
 
 ---
 
-## 2. TRADING EXECUTION ARCHITECTURE
+## 2. REAL TRADING INTEGRATION PLAN
+
+### 2.1 Trading Philosophy: Day Trading Focus
+
+**Strategy**: Automated intraday Bitcoin trading with AI signals
+
+**Characteristics:**
+- **Holding Period**: 30 minutes to 4 hours
+- **Analysis Cycle**: 15 seconds (day_trading_engine)
+- **Trades Per Day**: 5-15 (depending on volatility)
+- **Position Size**: 5% of portfolio per trade
+- **Stop-Loss**: -3% (tight for day trading)
+- **Take-Profit**: +8-10% (realistic intraday targets)
+- **Session Focus**: EU/US overlap (highest liquidity)
+
+**Why Day Trading:**
+- ✅ Matches existing `day_trading_engine.py` design
+- ✅ Quick profit/loss resolution (close all by EOD)
+- ✅ Lower overnight risk
+- ✅ High signal frequency (15-sec analysis)
+- ✅ Optimal for AI pattern recognition
+
+### 2.2 Execution Flow (Current vs New)
+
+**CURRENT (Virtual Portfolio):**
+```
+Signal Generated (EnterpriseTradingEngine)
+      ↓
+Entry Engine (optimal entry point)
+      ↓
+Risk Manager (validate safety)
+      ↓
+📝 Store virtual position in DynamoDB
+      ↓
+Exit Engine monitors for exit conditions
+      ↓
+📝 Update virtual position (P&L calculated)
+```
+
+**NEW (Real Money Trading):**
+```
+Signal Generated (EnterpriseTradingEngine)
+      ↓
+Entry Engine (optimal entry point)
+      ↓
+Risk Manager (validate safety)
+      ↓
+🔀 CHECK TRADING MODE:
+   │
+   ├─ VIRTUAL → Virtual Portfolio Service (current flow)
+   │
+   └─ REAL → Real Trading Executor (NEW)
+              ↓
+              🚨 Pre-Execution Safety Checks:
+              - Position size < 10%
+              - Daily loss limit not hit
+              - Balance sufficient
+              - Confidence ≥ 70%
+              ↓
+              ✅ Execute on Binance:
+              - POST /api/v3/order (market buy)
+              - Store order_id
+              ↓
+              📝 Store in real_positions table
+              ↓
+              🛡️ Set Stop-Loss & Take-Profit:
+              - POST stop_loss_limit order
+              - POST take_profit_limit order
+              ↓
+              📊 Monitor position real-time
+              ↓
+              Exit triggered:
+              - Stop-loss hit (-3%)
+              - Take-profit hit (+10%)
+              - AI exit signal
+              - End of day (close all)
+              ↓
+              🔴 Execute SELL on Binance
+              ↓
+              📝 Update real_positions (closed)
+              📝 Store in real_trades (history)
+              📝 Update real_portfolio balance
+```
+
+### 2.3 Where Trades Execute
+
+**Trading Venue**: Binance Spot Exchange  
+**API Endpoint**: `https://api.binance.com/api/v3`  
+**Execution Location**: AWS App Runner (eu-west-2)
+
+**Why Binance:**
+- ✅ Already integrated (`binance_hybrid_client.py`)
+- ✅ Keys stored in AWS SSM
+- ✅ Lowest fees (0.1% spot trading)
+- ✅ Highest BTC/USDT liquidity
+- ✅ Professional API with all order types
+- ✅ Testnet available for testing
+
+**Trading Pair**: BTC/USDT
+- Base: Bitcoin (BTC)
+- Quote: Tether USD (USDT) - stablecoin
+- User funds account with USDT
+- AI buys/sells BTC using USDT
+
+---
+
+## 3. DAY TRADING OPTIMIZATION
+
+### 3.1 Current Day Trading Engine
+
+**File**: `app/backend/services/day_trading_engine.py`
+
+**Configuration:**
+```python
+TradingMode.DAY_TRADING:
+    analysis_interval: 15 seconds    # Signal generation frequency
+    position_duration: 1800 seconds  # 30 min target hold
+    confidence_threshold: 0.70       # Min 70% AI confidence
+    max_positions: 3                 # Max concurrent trades
+    position_size_pct: 5.0          # 5% of portfolio per trade
+    stop_loss_pct: -3.0             # -3% stop loss
+    take_profit_pct: 10.0           # +10% take profit
+```
+
+**Trading Sessions (UTC):**
+```python
+ASIAN:    21:00-06:00  (Tokyo, Sydney)
+EUROPEAN: 06:00-14:00  (London, Frankfurt)  
+AMERICAN: 14:00-21:00  (New York, Chicago)
+
+# OVERLAP PERIODS (Best for day trading):
+EU_US:    12:00-16:00  ⭐ HIGHEST LIQUIDITY
+```
+
+**Current Features:**
+- ✅ 15-second analysis cycles
+- ✅ Session-aware optimization
+- ✅ Coordinates 3 engines (Enterprise, Entry, Exit)
+- ✅ High-frequency signal generation
+- ✅ Intraday position management
+
+### 3.2 Day Trading Enhancements for Real Money
+
+**Enhancement 1: End-of-Day Position Closure**
+```python
+# Add to day_trading_engine.py
+
+async def close_all_positions_eod(self):
+    """
+    Close all positions at end of trading day
+    
+    Day Trading Rule: Never hold positions overnight
+    Execution: 20:45 UTC (15 min before Asian session)
+    """
+    if self.trading_mode == "REAL":
+        open_positions = await self.real_executor.get_open_positions()
+        
+        for position in open_positions:
+            logger.info(f"🌙 EOD: Closing position {position['symbol']}")
+            await self.real_executor.execute_market_sell(
+                symbol=position['symbol'],
+                quantity=position['quantity']
+            )
+        
+        logger.info("✅ All positions closed for end of day")
+```
+
+**Enhancement 2: Session-Based Execution**
+```python
+# Optimize execution timing based on session liquidity
+
+async def should_execute_now(self, signal: TradingSignal) -> bool:
+    """Only execute during high-liquidity sessions"""
+    current_session = self.get_current_session()
+    
+    # BEST SESSIONS for day trading (tight spreads, high volume)
+    if current_session in [
+        TradingSession.OVERLAP_EU_US,      # ⭐ Best
+        TradingSession.AMERICAN,            # Good
+        TradingSession.EUROPEAN             # Good
+    ]:
+        return True
+    
+    # AVOID low liquidity sessions (wider spreads, slippage)
+    if current_session == TradingSession.ASIAN:
+        logger.warning("⚠️ Low liquidity - Asian session")
+        return False
+    
+    return True
+```
+
+**Enhancement 3: Rapid Exit Monitoring**
+```python
+# Check exit conditions every 5 seconds for day trading
+
+async def monitor_position_rapid(self, position_id: str):
+    """
+    Day trading requires rapid exit monitoring
+    Check every 5 seconds vs 30 seconds for swing trading
+    """
+    while True:
+        position = await self.get_position(position_id)
+        
+        # Check if stop-loss or take-profit hit
+        if position['pnl_percent'] <= -3.0:
+            await self.execute_stop_loss(position_id)
+            break
+        
+        if position['pnl_percent'] >= 10.0:
+            await self.execute_take_profit(position_id)
+            break
+        
+        await asyncio.sleep(5)  # 5 sec for day trading
+```
+
+### 3.3 Day Trading Safety Features
+
+**Daily Trading Limits:**
+```python
+DAY_TRADING_LIMITS = {
+    "max_trades_per_day": 15,           # Avoid overtrading
+    "max_daily_loss": -5.0,             # -5% max loss per day
+    "max_position_size": 10.0,          # 10% max per position
+    "min_time_between_trades": 60,      # 1 min cooldown
+    "close_all_at": "20:45:00",         # Close all by 20:45 UTC
+    "no_trading_weekends": True,        # Pause Sat/Sun
+}
+```
+
+**Circuit Breakers:**
+```python
+# Day trading specific circuit breakers
+
+1. Rapid Loss CB:
+   - Trigger: 3 consecutive losses in 15 minutes
+   - Action: Pause trading for 1 hour
+
+2. Daily Loss CB:
+   - Trigger: -5% daily P&L
+   - Action: Close all + stop for rest of day
+
+3. Volatility CB:
+   - Trigger: BTC moves >5% in 5 minutes
+   - Action: Pause new entries, hold exits only
+```
+
+---
+
+## 4. AWS DEPLOYMENT UPDATES
+
+### 4.1 New DynamoDB Tables (Terraform)
+
+**File**: `infra/dynamodb-real-trading.tf` (NEW)
+
+```terraform
+# Real Money Trading DynamoDB Tables
+
+# 1. Real Portfolio Table
+resource "aws_dynamodb_table" "real_portfolio" {
+  name           = "${var.project_name}_real_portfolio"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "user_id"
+  range_key      = "portfolio_id"
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "portfolio_id"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = false
+  }
+
+  tags = {
+    Name = "${var.project_name}-real-portfolio"
+    Type = "real-trading"
+  }
+}
+
+# 2. Real Positions Table
+resource "aws_dynamodb_table" "real_positions" {
+  name           = "${var.project_name}_real_positions"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "position_id"
+  range_key      = "timestamp"
+
+  attribute {
+    name = "position_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "S"
+  }
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  # GSI for querying by user
+  global_secondary_index {
+    name            = "user_id_index"
+    hash_key        = "user_id"
+    range_key       = "timestamp"
+    projection_type = "ALL"
+  }
+
+  # GSI for querying open positions
+  global_secondary_index {
+    name            = "status_index"
+    hash_key        = "status"
+    range_key       = "timestamp"
+    projection_type = "ALL"
+  }
+
+  tags = {
+    Name = "${var.project_name}-real-positions"
+    Type = "real-trading"
+  }
+}
+
+# 3. Real Trades Table (Execution History)
+resource "aws_dynamodb_table" "real_trades" {
+  name           = "${var.project_name}_real_trades"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "trade_id"
+  range_key      = "timestamp"
+
+  attribute {
+    name = "trade_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "S"
+  }
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  # GSI for trade history by user
+  global_secondary_index {
+    name            = "user_trades_index"
+    hash_key        = "user_id"
+    range_key       = "timestamp"
+    projection_type = "ALL"
+  }
+
+  tags = {
+    Name = "${var.project_name}-real-trades"
+    Type = "real-trading"
+  }
+}
+
+# 4. Real Orders Table (Binance Orders)
+resource "aws_dynamodb_table" "real_orders" {
+  name           = "${var.project_name}_real_orders"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "order_id"
+
+  attribute {
+    name = "order_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  # GSI for user orders
+  global_secondary_index {
+    name            = "user_orders_index"
+    hash_key        = "user_id"
+    range_key       = "order_id"
+    projection_type = "ALL"
+  }
+
+  # GSI for order status
+  global_secondary_index {
+    name            = "status_orders_index"
+    hash_key        = "status"
+    range_key       = "order_id"
+    projection_type = "ALL"
+  }
+
+  tags = {
+    Name = "${var.project_name}-real-orders"
+    Type = "real-trading"
+  }
+}
+
+# 5. Trading Settings Table
+resource "aws_dynamodb_table" "trading_settings" {
+  name           = "${var.project_name}_trading_settings"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "user_id"
+  range_key      = "setting_key"
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "setting_key"
+    type = "S"
+  }
+
+  tags = {
+    Name = "${var.project_name}-trading-settings"
+    Type = "real-trading"
+  }
+}
+```
+
+### 4.2 IAM Policy Updates
+
+**File**: `infra/iam.tf` (UPDATE)
+
+```terraform
+# Add DynamoDB permissions for real trading tables
+
+resource "aws_iam_policy" "real_trading_dynamodb" {
+  name        = "${var.project_name}-real-trading-dynamodb"
+  description = "DynamoDB access for real trading tables"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          aws_dynamodb_table.real_portfolio.arn,
+          aws_dynamodb_table.real_positions.arn,
+          aws_dynamodb_table.real_trades.arn,
+          aws_dynamodb_table.real_orders.arn,
+          aws_dynamodb_table.trading_settings.arn,
+          "${aws_dynamodb_table.real_positions.arn}/index/*",
+          "${aws_dynamodb_table.real_trades.arn}/index/*",
+          "${aws_dynamodb_table.real_orders.arn}/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Attach to App Runner instance role
+resource "aws_iam_role_policy_attachment" "app_runner_real_trading" {
+  role       = aws_iam_role.app_runner_instance.name
+  policy_arn = aws_iam_policy.real_trading_dynamodb.arn
+}
+```
+
+### 4.3 App Runner Environment Variables
+
+**File**: `infra/app-runner.tf` (UPDATE)
+
+```terraform
+# Add to runtime_environment_variables section
+
+resource "aws_apprunner_service" "backend" {
+  # ... existing config ...
+  
+  source_configuration {
+    image_repository {
+      image_configuration {
+        runtime_environment_variables = {
+          # ... existing vars ...
+          
+          # Real Trading Configuration
+          ENABLE_REAL_TRADING           = "true"
+          TRADING_MODE_DEFAULT          = "VIRTUAL"  # Start in VIRTUAL mode
+          REAL_TRADING_ENABLED          = "true"     # Allow switching to REAL
+          
+          # DynamoDB Table Names
+          REAL_PORTFOLIO_TABLE          = aws_dynamodb_table.real_portfolio.name
+          REAL_POSITIONS_TABLE          = aws_dynamodb_table.real_positions.name
+          REAL_TRADES_TABLE             = aws_dynamodb_table.real_trades.name
+          REAL_ORDERS_TABLE             = aws_dynamodb_table.real_orders.name
+          TRADING_SETTINGS_TABLE        = aws_dynamodb_table.trading_settings.name
+          
+          # Day Trading Settings
+          DAY_TRADING_MAX_TRADES        = "15"
+          DAY_TRADING_MAX_DAILY_LOSS    = "-5.0"
+          DAY_TRADING_CLOSE_ALL_AT      = "20:45:00"
+          DAY_TRADING_MIN_CONFIDENCE    = "0.70"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## 5. IMPLEMENTATION PARTS BREAKDOWN
+
+### 🎯 PART 1: Real Trading Executor Service
+
+**Duration**: 2-3 days  
+**Priority**: CRITICAL  
+**Location**: `app/backend/services/real_trading_executor.py` (NEW)
+
+**Subtasks:**
+
+**1.1 Core Executor Class** (4 hours)
+```python
+class RealTradingExecutor:
+    """Execute real trades on Binance from AWS"""
+    
+    def __init__(self):
+        # Load Binance keys from AWS SSM
+        self.api_key = self._load_from_ssm('/tradepulse/binance/api_key')
+        self.secret_key = self._load_from_ssm('/tradepulse/binance/api_secret')
+        
+        # Binance API client
+        self.base_url = "https://api.binance.com"
+        self.session = None
+        
+        # DynamoDB clients
+        self.db = boto3.resource('dynamodb', region_name='eu-west-2')
+        self.positions_table = self.db.Table('tradepulse_real_positions')
+        self.trades_table = self.db.Table('tradepulse_real_trades')
+        self.orders_table = self.db.Table('tradepulse_real_orders')
+```
+
+**1.2 HMAC Signature Generator** (2 hours)
+```python
+def _generate_signature(self, query_string: str) -> str:
+    """Generate HMAC SHA256 signature for Binance authenticated requests"""
+    return hmac.new(
+        self.secret_key.encode('utf-8'),
+        query_string.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+
+async def _make_signed_request(self, method: str, endpoint: str, params: Dict):
+    """Make authenticated request to Binance API"""
+    params['timestamp'] = int(time.time() * 1000)
+    query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+    signature = self._generate_signature(query_string)
+    params['signature'] = signature
+    
+    headers = {'X-MBX-APIKEY': self.api_key}
+    # Execute request...
+```
+
+**1.3 Market Order Execution** (4 hours)
+```python
+async def execute_market_buy(
+    self,
+    symbol: str,
+    quote_amount: float  # USDT to spend
+) -> TradeResult:
+    """
+    Execute market BUY order on Binance
+    Called from day_trading_engine when AI generates BUY signal
+    """
+    result = await self._make_signed_request(
+        "POST",
+        "/api/v3/order",
+        {
+            "symbol": symbol,
+            "side": "BUY",
+            "type": "MARKET",
+            "quoteOrderQty": quote_amount,  # Buy $X worth of BTC
+        }
+    )
+    
+    # Parse order result
+    trade = TradeResult(
+        order_id=result['orderId'],
+        symbol=result['symbol'],
+        quantity=float(result['executedQty']),
+        price=float(result['fills'][0]['price']),
+        commission=float(result['fills'][0]['commission']),
+        status=result['status']
+    )
+    
+    # Store in DynamoDB
+    await self._store_trade(trade)
+    
+    return trade
+
+async def execute_market_sell(
+    self,
+    symbol: str,
+    quantity: float  # BTC amount to sell
+) -> TradeResult:
+    """Execute market SELL order on Binance"""
+    # Similar to buy...
+```
+
+**1.4 Stop-Loss & Take-Profit Orders** (4 hours)
+```python
+async def place_stop_loss_order(
+    self,
+    symbol: str,
+    quantity: float,
+    stop_price: float,
+    limit_price: float
+) -> str:
+    """
+    Place stop-loss order after buying
+    Automatically sells if price drops to stop_price
+    """
+    result = await self._make_signed_request(
+        "POST",
+        "/api/v3/order",
+        {
+            "symbol": symbol,
+            "side": "SELL",
+            "type": "STOP_LOSS_LIMIT",
+            "timeInForce": "GTC",
+            "quantity": quantity,
+            "stopPrice": stop_price,
+            "price": limit_price,
+        }
+    )
+    
+    order_id = result['orderId']
+    await self._store_order(result)
+    
+    return order_id
+
+async def place_take_profit_order(
+    self,
+    symbol: str,
+    quantity: float,
+    stop_price: float,
+    limit_price: float
+) -> str:
+    """Place take-profit order - sells when target reached"""
+    # Similar to stop-loss...
+```
+
+**1.5 Order Status & Management** (3 hours)
+```python
+async def get_order_status(self, symbol: str, order_id: str) -> Dict:
+    """Check if stop-loss or take-profit order was filled"""
+    result = await self._make_signed_request(
+        "GET",
+        "/api/v3/order",
+        {"symbol": symbol, "orderId": order_id}
+    )
+    return result
+
+async def cancel_order(self, symbol: str, order_id: str):
+    """Cancel pending order"""
+    await self._make_signed_request(
+        "DELETE",
+        "/api/v3/order",
+        {"symbol": symbol, "orderId": order_id}
+    )
+
+async def cancel_all_orders(self, symbol: str):
+    """Emergency cancel all pending orders"""
+    await self._make_signed_request(
+        "DELETE",
+        "/api/v3/openOrders",
+        {"symbol": symbol}
+    )
+```
+
+**1.6 DynamoDB Integration** (3 hours)
+```python
+async def _store_trade(self, trade: TradeResult):
+    """Store executed trade in DynamoDB"""
+    self.trades_table.put_item(Item={
+        'trade_id': f"trade_{trade.order_id}",
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'user_id': 'user_001',  # Default user
+        'order_id': trade.order_id,
+        'symbol': trade.symbol,
+        'side': trade.side,
+        'type': trade.type,
+        'quantity': Decimal(str(trade.quantity)),
+        'price': Decimal(str(trade.price)),
+        'commission': Decimal(str(trade.commission)),
+        'status': trade.status,
+        'mode': 'REAL'
+    })
+
+async def _store_order(self, order: Dict):
+    """Store order in DynamoDB"""
+    self.orders_table.put_item(Item={
+        'order_id': str(order['orderId']),
+        'user_id': 'user_001',
+        'symbol': order['symbol'],
+        'side': order['side'],
+        'type': order['type'],
+        'quantity': Decimal(str(order.get('origQty', 0))),
+        'price': Decimal(str(order.get('price', 0))),
+        'stop_price': Decimal(str(order.get('stopPrice', 0))),
+        'status': order['status'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    })
+```
+
+**Testing Checklist for Part 1:**
+- [ ] Load Binance keys from AWS SSM
+- [ ] Generate valid HMAC signature
+- [ ] Execute market buy order on TESTNET
+- [ ] Execute market sell order on TESTNET
+- [ ] Place stop-loss order
+- [ ] Place take-profit order
+- [ ] Check order status
+- [ ] Cancel order
+- [ ] Store trade in DynamoDB
+- [ ] Store order in DynamoDB
+- [ ] Handle API errors gracefully
+
+---
+
+### 🎯 PART 2: Real Portfolio Service
+
+**Duration**: 1-2 days  
+**Priority**: HIGH  
+**Location**: `app/backend/services/real_portfolio_service.py` (NEW)
+
+**Subtasks:**
+
+**2.1 Balance Fetching** (3 hours)
+```python
+class RealPortfolioService:
+    """Manage real portfolio state"""
+    
+    async def get_binance_balance(self) -> Dict[str, float]:
+        """Fetch real-time balance from Binance"""
+        result = await self.executor._make_signed_request(
+            "GET",
+            "/api/v3/account",
+            {}
+        )
+        
+        balances = {}
+        for balance in result['balances']:
+            asset = balance['asset']
+            free = float(balance['free'])
+            if free > 0:
+                balances[asset] = free
+        
+        # balances = {"USDT": 5000.0, "BTC": 0.025}
+        return balances
+    
+    async def sync_portfolio_with_binance(self):
+        """Sync DynamoDB portfolio with Binance account"""
+        balances = await self.get_binance_balance()
+        
+        # Update DynamoDB
+        self.portfolio_table.update_item(
+            Key={'user_id': 'user_001', 'portfolio_id': 'real_portfolio_1'},
+            UpdateExpression="SET usdt_balance = :usdt, btc_balance = :btc, updated_at = :now",
+            ExpressionAttributeValues={
+                ':usdt': Decimal(str(balances.get('USDT', 0))),
+                ':btc': Decimal(str(balances.get('BTC', 0))),
+                ':now': datetime.now(timezone.utc).isoformat()
+            }
+        )
+```
+
+**2.2 Portfolio Summary** (2 hours)
+```python
+async def get_portfolio_summary(self) -> Dict:
+    """Get complete portfolio overview"""
+    # Fetch from Binance
+    balances = await self.get_binance_balance()
+    
+    # Get BTC price
+    btc_price = await get_live_bitcoin_price()
+    
+    # Calculate total value
+    usdt = balances.get('USDT', 0)
+    btc = balances.get('BTC', 0)
+    btc_value_usd = btc * btc_price
+    total_value = usdt + btc_value_usd
+    
+    # Get open positions
+    open_positions = await self._get_open_positions_count()
+    
+    # Get daily P&L
+    daily_pnl = await self._calculate_daily_pnl()
+    
+    return {
+        'total_value': total_value,
+        'usdt_balance': usdt,
+        'btc_balance': btc,
+        'btc_value_usd': btc_value_usd,
+        'open_positions': open_positions,
+        'daily_pnl': daily_pnl,
+        'mode': 'REAL',
+        'last_updated': datetime.now(timezone.utc).isoformat()
+    }
+```
+
+**2.3 Position Management** (4 hours)
+```python
+async def create_position(
+    self,
+    symbol: str,
+    trade_result: TradeResult,
+    stop_loss_order_id: str,
+    take_profit_order_id: str,
+    ai_signal: TradingSignal
+) -> str:
+    """Create position after successful trade execution"""
+    position_id = f"pos_real_{int(time.time()*1000)}"
+    
+    self.positions_table.put_item(Item={
+        'position_id': position_id,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'user_id': 'user_001',
+        'symbol': symbol,
+        'side': 'LONG',
+        'entry_price': Decimal(str(trade_result.price)),
+        'quantity': Decimal(str(trade_result.quantity)),
+        'entry_value': Decimal(str(trade_result.price * trade_result.quantity)),
+        'stop_loss_order_id': stop_loss_order_id,
+        'take_profit_order_id': take_profit_order_id,
+        'stop_loss_price': Decimal(str(trade_result.price * 0.97)),
+        'take_profit_price': Decimal(str(trade_result.price * 1.10)),
+        'ai_confidence': Decimal(str(ai_signal.confidence)),
+        'strategy': ai_signal.reasoning,
+        'status': 'OPEN',
+        'opened_at': datetime.now(timezone.utc).isoformat()
+    })
+    
+    return position_id
+
+async def close_position(
+    self,
+    position_id: str,
+    exit_price: float,
+    exit_reason: str
+):
+    """Close position and calculate P&L"""
+    # Get position
+    position = self.positions_table.get_item(
+        Key={'position_id': position_id}
+    )['Item']
+    
+    # Calculate P&L
+    entry_value = float(position['entry_value'])
+    exit_value = float(position['quantity']) * exit_price
+    pnl = exit_value - entry_value
+    pnl_percent = (pnl / entry_value) * 100
+    
+    # Update position
+    self.positions_table.update_item(
+        Key={'position_id': position_id},
+        UpdateExpression="""
+            SET #status = :closed,
+                exit_price = :exit_price,
+                exit_value = :exit_value,
+                pnl = :pnl,
+                pnl_percent = :pnl_percent,
+                exit_reason = :reason,
+                closed_at = :now
+        """,
+        ExpressionAttributeNames={'#status': 'status'},
+        ExpressionAttributeValues={
+            ':closed': 'CLOSED',
+            ':exit_price': Decimal(str(exit_price)),
+            ':exit_value': Decimal(str(exit_value)),
+            ':pnl': Decimal(str(pnl)),
+            ':pnl_percent': Decimal(str(pnl_percent)),
+            ':reason': exit_reason,
+            ':now': datetime.now(timezone.utc).isoformat()
+        }
+    )
+    
+    return pnl, pnl_percent
+```
+
+**Testing Checklist for Part 2:**
+- [ ] Fetch Binance account balance
+- [ ] Sync balance to DynamoDB
+- [ ] Get portfolio summary
+- [ ] Create position after trade
+- [ ] Close position with P&L calculation
+- [ ] Query open positions
+- [ ] Query closed positions
+- [ ] Calculate daily P&L
+
+---
+
+### 🎯 PART 3: Trading Mode Integration
+
+**Duration**: 2 days  
+**Priority**: CRITICAL  
+**Location**: Multiple files
+
+**Subtasks:**
+
+**3.1 Trading Settings Service** (3 hours)
+```python
+# app/backend/services/trading_settings_service.py (NEW)
+
+class TradingSettingsService:
+    """Manage user trading settings"""
+    
+    async def get_trading_mode(self, user_id: str = 'user_001') -> str:
+        """Get current trading mode: VIRTUAL or REAL"""
+        result = self.settings_table.get_item(
+            Key={'user_id': user_id, 'setting_key': 'trading_mode'}
+        )
+        
+        if 'Item' in result:
+            return result['Item']['value']
+        
+        # Default to VIRTUAL
+        return 'VIRTUAL'
+    
+    async def set_trading_mode(self, mode: str, user_id: str = 'user_001'):
+        """Switch trading mode (requires 2FA in production)"""
+        if mode not in ['VIRTUAL', 'REAL']:
+            raise ValueError(f"Invalid mode: {mode}")
+        
+        self.settings_table.put_item(Item={
+            'user_id': user_id,
+            'setting_key': 'trading_mode',
+            'value': mode,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        })
+        
+        logger.info(f"🔄 Trading mode switched to {mode}")
+    
+    async def get_ai_config(self, user_id: str = 'user_001') -> Dict:
+        """Get AI trading configuration"""
+        result = self.settings_table.get_item(
+            Key={'user_id': user_id, 'setting_key': 'ai_config'}
+        )
+        
+        if 'Item' in result:
+            return result['Item']['value']
+        
+        # Default config
+        return {
+            'enabled': False,
+            'min_confidence': 0.70,
+            'position_size_percent': 5.0,
+            'take_profit_percent': 10.0,
+            'stop_loss_percent': -3.0,
+            'max_daily_loss_percent': -5.0
+        }
+```
+
+**3.2 Brain Controller Mode Integration** (4 hours)
+```python
+# app/backend/brain/brain_controller.py (UPDATE)
+
+class BrainController:
+    def __init__(self):
+        # ... existing code ...
+        
+        # Trading mode
+        self.settings_service = TradingSettingsService()
+        self.trading_mode = None  # Will be loaded
+        
+        # Executors
+        self.real_executor = None
+        self.virtual_portfolio = None
+    
+    async def initialize(self):
+        # ... existing initialization ...
+        
+        # Load trading mode
+        self.trading_mode = await self.settings_service.get_trading_mode()
+        logger.info(f"🎯 Trading mode: {self.trading_mode}")
+        
+        # Initialize appropriate executor
+        if self.trading_mode == "REAL":
+            self.real_executor = RealTradingExecutor()
+            await self.real_executor.initialize()
+            logger.info("✅ Real trading executor initialized")
+        else:
+            self.virtual_portfolio = get_professional_portfolio()
+            logger.info("✅ Virtual portfolio initialized")
+```
+
+**3.3 Day Trading Engine Mode Integration** (5 hours)
+```python
+# app/backend/services/day_trading_engine.py (UPDATE)
+
+class DayTradingEngine:
+    async def execute_trade_with_mode_check(
+        self,
+        signal: TradingSignal
+    ):
+        """Execute trade based on current mode"""
+        
+        # Get current mode from brain controller
+        mode = self.brain_controller.trading_mode
+        
+        if mode == "REAL":
+            logger.info(f"💰 REAL MODE: Executing trade on Binance")
+            await self._execute_real_trade(signal)
+        else:
+            logger.info(f"📝 VIRTUAL MODE: Simulating trade")
+            await self._execute_virtual_trade(signal)
+    
+    async def _execute_real_trade(self, signal: TradingSignal):
+        """Execute on Binance (REAL MONEY)"""
+        executor = self.brain_controller.real_executor
+        
+        # Pre-execution safety checks
+        safety_ok = await self.safety_validator.validate_trade(signal)
+        if not safety_ok:
+            logger.warning("❌ Safety check failed - trade blocked")
+            return
+        
+        # Execute market buy
+        trade_result = await executor.execute_market_buy(
+            symbol="BTCUSDT",
+            quote_amount=signal.position_size
+        )
+        
+        logger.info(f"✅ BUY executed: {trade_result.quantity} BTC at ${trade_result.price}")
+        
+        # Set stop-loss
+        stop_price = trade_result.price * 0.97  # -3%
+        sl_order_id = await executor.place_stop_loss_order(
+            symbol="BTCUSDT",
+            quantity=trade_result.quantity,
+            stop_price=stop_price,
+            limit_price=stop_price * 0.999
+        )
+        
+        # Set take-profit
+        tp_price = trade_result.price * 1.10  # +10%
+        tp_order_id = await executor.place_take_profit_order(
+            symbol="BTCUSDT",
+            quantity=trade_result.quantity,
+            stop_price=tp_price,
+            limit_price=tp_price * 1.001
+        )
+        
+        # Create position in DynamoDB
+        await self.real_portfolio.create_position(
+            symbol="BTCUSDT",
+            trade_result=trade_result,
+            stop_loss_order_id=sl_order_id,
+            take_profit_order_id=tp_order_id,
+            ai_signal=signal
+        )
+        
+        logger.info(f"✅ Position created with SL={stop_price} TP={tp_price}")
+    
+    async def _execute_virtual_trade(self, signal: TradingSignal):
+        """Execute in virtual portfolio (current implementation)"""
+        await self.virtual_portfolio.execute_virtual_trade(signal)
+```
+
+**Testing Checklist for Part 3:**
+- [ ] Get trading mode from DynamoDB
+- [ ] Set trading mode
+- [ ] Brain controller loads correct mode
+- [ ] Real executor initialized in REAL mode
+- [ ] Virtual portfolio initialized in VIRTUAL mode
+- [ ] Day trading engine routes to correct executor
+- [ ] Safety checks run before real execution
+- [ ] Mode switch triggers executor change
+
+---
+
+### 🎯 PART 4: API Endpoints for Real Trading
+
+**Duration**: 1-2 days  
+**Priority**: HIGH  
+**Location**: `app/backend/api/v1/routes/real_trading.py` (NEW)
+
+**Subtasks:**
+
+**4.1 Basic Endpoints** (4 hours)
 
 ### 2.1 Where to Trade: BINANCE SPOT EXCHANGE
 

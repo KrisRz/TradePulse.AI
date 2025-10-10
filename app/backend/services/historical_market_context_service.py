@@ -121,12 +121,12 @@ class HistoricalMarketContextService:
             return
         
         self.is_loading = True
-        logger.info("🚀 Initializing Historical Market Context Service...")
+        logger.info("🚀 Initializing Historical Market Context Service (DAY TRADING MODE)...")
         
         try:
-            # DAY TRADING: Try DynamoDB first (90-day fresh data)
+            # DAY TRADING: Try DynamoDB first (14-day fresh data, <4h cache)
             if await self._load_from_dynamodb():
-                logger.info("✅ Loaded fresh 90-day data from DynamoDB")
+                logger.info("✅ Loaded fresh 14-day data from DynamoDB (day trading optimized)")
             # PROFESSIONAL: Fetch from Binance if DynamoDB empty (NO local cache fallbacks!)
             else:
                 logger.warning("⚠️ DynamoDB empty - fetching fresh data from Binance API...")
@@ -144,7 +144,7 @@ class HistoricalMarketContextService:
             raise
     
     async def _load_from_dynamodb(self) -> bool:
-        """Load pre-calculated metrics from DynamoDB (90-day fresh data)"""
+        """Load pre-calculated metrics from DynamoDB (14-day fresh data for day trading)"""
         try:
             from app.backend.core.database import DynamoDBClient
             from app.backend.core.config import get_settings
@@ -152,23 +152,23 @@ class HistoricalMarketContextService:
             settings = get_settings()
             client = DynamoDBClient(local_development=settings.is_development)
             
-            # Get cached metrics
+            # Get cached metrics (day trading: 14D period)
             table_name = "market_context_cache"
-            cache_item = client.get_item(table_name, {"symbol": "BTCUSDT", "period": "90D"})
+            cache_item = client.get_item(table_name, {"symbol": "BTCUSDT", "period": "14D"})
             
             if not cache_item:
                 logger.info("   No data in DynamoDB yet")
                 return False
             
-            # FAST ITERATION: 12h cache for rapid AWS testing (was 72h)
+            # DAY TRADING: 4h cache for intraday pattern freshness
             last_updated = float(cache_item.get("last_updated", 0))  # Convert Decimal to float
             age_hours = (datetime.now(timezone.utc).timestamp() - last_updated) / 3600
             
-            # ✅ 12h TTL for faster iteration (was 72h)
-            if age_hours > 12:
-                logger.warning(f"   DynamoDB data is {age_hours:.1f} hours old (>12h), refreshing needed")
+            # ✅ 4h refresh for day trading patterns
+            if age_hours > 4:
+                logger.warning(f"   DynamoDB data is {age_hours:.1f} hours old (>4h), refreshing for day trading")
                 return False
-            elif age_hours > 6:  # ✅ 6h warning (was 24h)
+            elif age_hours > 2:  # ✅ 2h warning
                 logger.info(f"   ℹ️ Using DynamoDB data ({age_hours:.1f}h old, consider refresh)")
             else:
                 logger.info(f"   ✅ Fresh DynamoDB data ({age_hours:.1f}h old)")
@@ -216,7 +216,7 @@ class HistoricalMarketContextService:
             
             logger.info(f"   Loaded {len(self.price_ranges)} price ranges")
             logger.info(f"   Loaded {len(self.pattern_success_rates)} pattern success rates")
-            logger.info(f"   Data age: {age_hours:.1f} hours")
+            logger.info(f"   Data age: {age_hours:.1f} hours (day trading mode: <4h optimal)")
             
             return True
             
@@ -229,15 +229,15 @@ class HistoricalMarketContextService:
         print("=" * 80)
         print("🚀 PROFESSIONAL FALLBACK: Fetching fresh data from Binance API...")
         print("=" * 80)
-        logger.info("🚀 Fetching 90 days of data from Binance API...")
+        logger.info("🚀 Fetching 14 days of data from Binance API (DAY TRADING MODE)...")
         
         try:
             import requests
             from decimal import Decimal
             import math
             
-            # PROFESSIONAL: Dynamic batch calculation
-            target_days = 90
+            # DAY TRADING: Only last 14 days for relevant patterns
+            target_days = 14
             interval = "1h"
             candles_per_day = 24 if interval == "1h" else (1440 if interval == "1m" else 1)
             total_candles_needed = target_days * candles_per_day
@@ -305,8 +305,11 @@ class HistoricalMarketContextService:
             print(f"📊 Price range: ${df['close'].min():,.0f} - ${df['close'].max():,.0f}")
             logger.info(f"📊 Data range: {df.index.min()} to {df.index.max()}")
             
-            # Add technical indicators
+            # Add technical indicators before pattern calculation
+            print("🔧 Adding technical indicators to dataframe...")
+            logger.info("🔧 Adding technical indicators to dataframe...")
             df = await self._add_technical_indicators_to_dataframe(df)
+            print("✅ Technical indicators added successfully")
             
             # Calculate S/R levels for all timeframes
             print("🔍 Calculating S/R levels for all timeframes...")
@@ -314,6 +317,13 @@ class HistoricalMarketContextService:
             
             # Calculate price ranges
             await self._calculate_price_ranges(df)
+            
+            # CRITICAL FIX: Calculate pattern success rates
+            print("📊 Calculating pattern success rates...")
+            logger.info("📊 Calculating pattern success rates...")
+            await self._calculate_pattern_success_rates(df)
+            print(f"✅ Calculated {len(self.pattern_success_rates)} pattern success rates")
+            logger.info(f"✅ Calculated {len(self.pattern_success_rates)} pattern success rates")
             
             # Save to DynamoDB for next time
             await self._save_to_dynamodb(df)
@@ -337,10 +347,14 @@ class HistoricalMarketContextService:
             client = DynamoDBClient(local_development=settings.is_development)
             
             # Prepare cache item
+            now_timestamp = int(datetime.now(timezone.utc).timestamp())
+            ttl_14_days = 14 * 24 * 60 * 60  # 14 days in seconds (day trading mode)
+            
             cache_item = {
                 "symbol": "BTCUSDT",
-                "period": "90D",
-                "last_updated": int(datetime.now(timezone.utc).timestamp()),
+                "period": "14D",  # Day trading: last 14 days only
+                "last_updated": now_timestamp,
+                "ttl": now_timestamp + ttl_14_days,  # Auto-delete after 14 days
                 "support_levels": [Decimal(str(s)) for s in self.support_resistance_levels.get("support_30D", [])],
                 "resistance_levels": [Decimal(str(r)) for r in self.support_resistance_levels.get("resistance_30D", [])],
                 "price_ranges": {},
@@ -358,6 +372,16 @@ class HistoricalMarketContextService:
                     "resistance_levels": [Decimal(str(r)) for r in pr.resistance_levels],
                     "last_updated": int(pr.last_updated.timestamp())
                 }
+            
+            # CRITICAL FIX: Add pattern success rates
+            for pattern_key, pattern_data in self.pattern_success_rates.items():
+                cache_item["pattern_success_rates"][pattern_key] = {
+                    "description": pattern_data.pattern_name,
+                    "success_rate": Decimal(str(pattern_data.success_rate)),
+                    "total_signals": pattern_data.total_occurrences
+                }
+            
+            logger.info(f"💾 Saving {len(self.pattern_success_rates)} pattern success rates to DynamoDB")
             
             # Save to DynamoDB
             table_name = "market_context_cache"
