@@ -474,27 +474,84 @@ class ContinuousLearningEngine:
             raise
     
     async def _get_recent_position_results(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Get recent position results for analysis"""
+        """Get recent position results for analysis - with fallback to portfolio_closed_positions"""
         try:
             if not self.db_client:
                 return []
             
-            # Get all position results
+            # Filter cutoff date - FIXED: Use timezone-aware datetime for comparison
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+            recent_results = []
+            source_table = 'position_results'
+            
+            # Try position_results table first (preferred source)
             all_results = self.db_client.scan_table('position_results')
             
-            # Filter to recent results
-            cutoff_date = datetime.now() - timedelta(days=days)
-            recent_results = []
-            
+            # Filter to recent from position_results
             for result in all_results:
                 try:
-                    result_date = datetime.fromisoformat(result.get('closed_at', ''))
+                    closed_at_str = result.get('closed_at')
+                    if not closed_at_str:
+                        continue
+                    
+                    # Handle both timestamp formats
+                    if isinstance(closed_at_str, (int, float)):
+                        result_date = datetime.fromtimestamp(closed_at_str / 1000)
+                    else:
+                        result_date = datetime.fromisoformat(str(closed_at_str).replace('Z', '+00:00'))
+                    
                     if result_date >= cutoff_date:
-                        recent_results.append(result)
-                except (ValueError, TypeError):
+                        normalized_result = {
+                            'position_id': result.get('position_id'),
+                            'closed_at': closed_at_str if isinstance(closed_at_str, str) else datetime.fromtimestamp(closed_at_str / 1000).isoformat(),
+                            'was_successful': result.get('was_successful', False),
+                            'pnl_absolute': result.get('pnl_absolute', 0),
+                            'pnl_percentage': result.get('pnl_percentage', 0),
+                            'ai_confidence': result.get('ai_confidence', 0.5),
+                            'risk_assessment': result.get('risk_assessment', 'MEDIUM'),
+                            'time_in_position_minutes': result.get('time_in_position_minutes', 0),
+                            'patterns_detected': result.get('patterns_detected', [])
+                        }
+                        recent_results.append(normalized_result)
+                except (ValueError, TypeError) as e:
+                    logger.debug(f"Skipping position_results entry due to parse error: {e}")
                     continue
             
-            logger.info(f"📊 Loaded {len(recent_results)} position results for learning analysis")
+            # FALLBACK: If no recent results from position_results, use portfolio_closed_positions
+            if len(recent_results) == 0:
+                logger.warning("⚠️ No recent data in position_results, using portfolio_closed_positions as fallback")
+                source_table = 'portfolio_closed_positions'
+                all_portfolio_results = self.db_client.scan_table('portfolio_closed_positions')
+                
+                for result in all_portfolio_results:
+                    try:
+                        # Handle portfolio_closed_positions format
+                        closed_at_str = result.get('closed_at') or result.get('exit_time')
+                        if not closed_at_str:
+                            continue
+                        
+                        result_date = datetime.fromisoformat(str(closed_at_str).replace('Z', '+00:00'))
+                        if result_date >= cutoff_date:
+                            # Normalize portfolio format to learning format
+                            # FIXED: Convert Decimals to floats for calculations
+                            realized_pnl = float(result.get('realized_pnl', 0))
+                            normalized_result = {
+                                'position_id': result.get('position_id'),
+                                'closed_at': closed_at_str,
+                                'was_successful': realized_pnl > 0,
+                                'pnl_absolute': realized_pnl,
+                                'pnl_percentage': float(result.get('pnl_percentage', 0)),
+                                'ai_confidence': float(result.get('ai_confidence', 0.5)),
+                                'risk_assessment': 'MEDIUM',
+                                'time_in_position_minutes': float(result.get('duration_minutes', 0)),
+                                'patterns_detected': []
+                            }
+                            recent_results.append(normalized_result)
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"Skipping portfolio entry due to parse error: {e}")
+                        continue
+            
+            logger.info(f"📊 Loaded {len(recent_results)} position results for learning analysis (from {source_table})")
             return recent_results
             
         except Exception as e:
@@ -596,6 +653,44 @@ class ContinuousLearningEngine:
             avg_pnl = self._weighted_mean(pnl_values, position_results, weights)
             
             logger.info(f"📊 Weighted metrics: success_rate={success_rate:.1%}, avg_pnl=${avg_pnl:.2f}")
+            
+            # 🚨 EMERGENCY MODE: Catastrophic performance requires aggressive recommendations
+            if success_rate < 0.10:  # Less than 10% win rate is catastrophic
+                logger.warning(f"🚨 CRITICAL: Win rate only {success_rate:.1%} - generating emergency recommendations")
+                
+                # Emergency recommendation 1: Dramatically increase confidence threshold
+                try:
+                    current_confidence = runtime_config_store.get('min_confidence_threshold') or 0.6
+                except Exception:
+                    current_confidence = 0.6
+                emergency_confidence = max(current_confidence + 0.2, 0.85)  # Raise to at least 85%
+                recommendations.append(OptimizationRecommendation(
+                    parameter_name='min_confidence_threshold',
+                    current_value=current_confidence,
+                    recommended_value=emergency_confidence,
+                    confidence=0.95,
+                    reason=f'🚨 EMERGENCY: Only {success_rate:.1%} win rate with current {current_confidence:.0%} threshold. Need much higher bar for entries.',
+                    expected_improvement=0.4,
+                    risk_level='HIGH'
+                ))
+                
+                # Emergency recommendation 2: Reduce position sizing
+                try:
+                    current_position_size = runtime_config_store.get('position_size_pct') or 1.0
+                except Exception:
+                    current_position_size = 1.0
+                emergency_position_size = current_position_size * 0.5  # Cut in half
+                recommendations.append(OptimizationRecommendation(
+                    parameter_name='position_size_pct',
+                    current_value=current_position_size,
+                    recommended_value=emergency_position_size,
+                    confidence=0.95,
+                    reason=f'🚨 EMERGENCY: {success_rate:.1%} win rate with ${avg_pnl:.2f} avg loss. Reduce exposure immediately.',
+                    expected_improvement=0.5,  # Reduces loss magnitude
+                    risk_level='HIGH'
+                ))
+                
+                logger.warning(f"🚨 EMERGENCY: Generated {len(recommendations)} critical recommendations to stop the bleeding")
             
             # Analyze by risk level (with weights)
             risk_analysis = await self._analyze_by_risk_level(position_results, weights)

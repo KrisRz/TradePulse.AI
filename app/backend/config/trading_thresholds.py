@@ -14,35 +14,37 @@ logger = structlog.get_logger(__name__)
 class ConfidenceThresholds:
     """Unified confidence thresholds for all trading decisions"""
     
-    # PRIMARY SIGNAL THRESHOLDS (Bitcoin scalping optimized)
-    BUY_THRESHOLD: float = 0.45      # 45% confidence required for BUY signals (was 65% - too high!)
-    SELL_THRESHOLD: float = 0.45     # 45% confidence required for SELL signals (was 65% - too high!)
+    # 🚨 EMERGENCY FIX: Raised from catastrophic 45% to 85% after learning engine detected 2.7% win rate
+    # Learning system recommendation: "Only 2.7% win rate with current 60% threshold. Need much higher bar for entries."
+    BUY_THRESHOLD: float = 0.85      # 85% confidence required for BUY signals (EMERGENCY FIX - was 45%!)
+    SELL_THRESHOLD: float = 0.85     # 85% confidence required for SELL signals (EMERGENCY FIX - was 45%!)
     
-    # EXPLORATORY SIGNAL THRESHOLDS (Lower confidence for smaller positions) - JUMP CATCHING
-    EXPLORATORY_BUY: float = 0.25    # 25% confidence for catching Bitcoin dips (was 35%)
-    EXPLORATORY_SELL: float = 0.25   # 25% confidence for catching Bitcoin peaks (was 35%)
+    # EXPLORATORY SIGNAL THRESHOLDS - DISABLED due to catastrophic performance
+    EXPLORATORY_BUY: float = 0.75    # 75% confidence minimum (EMERGENCY FIX - was 25%!)
+    EXPLORATORY_SELL: float = 0.75   # 75% confidence minimum (EMERGENCY FIX - was 25%!)
     
     # HOLD DECISION THRESHOLDS
-    HOLD_LOWER_BOUND: float = 0.35   # Below 35% = potential SELL signal
-    HOLD_UPPER_BOUND: float = 0.65   # Above 65% = potential BUY signal
-    # Between 35% and 65% = HOLD
+    HOLD_LOWER_BOUND: float = 0.70   # Below 70% = potential SELL signal (raised from 35%)
+    HOLD_UPPER_BOUND: float = 0.85   # Above 85% = potential BUY signal (raised from 65%)
+    # Between 70% and 85% = HOLD
     
     # MINIMUM THRESHOLDS (Absolute minimums)
-    ABSOLUTE_MINIMUM: float = 0.30   # Never trade below 30% confidence
+    ABSOLUTE_MINIMUM: float = 0.70   # Never trade below 70% confidence (EMERGENCY FIX - was 30%!)
     
     # SPECIAL THRESHOLDS
-    HIGH_CONFIDENCE: float = 0.80    # High confidence threshold for premium signals
-    CONSENSUS_THRESHOLD: float = 0.55  # Multi-model consensus requirement
+    HIGH_CONFIDENCE: float = 0.90    # High confidence threshold for premium signals (raised from 80%)
+    CONSENSUS_THRESHOLD: float = 0.75  # Multi-model consensus requirement (raised from 55%)
 
 
 @dataclass
 class RiskThresholds:
     """Risk management thresholds"""
     
-    MAX_RISK_PER_TRADE: float = 0.02    # 2% max risk per trade
-    MAX_PORTFOLIO_RISK: float = 0.10    # 10% max portfolio risk
-    STOP_LOSS_THRESHOLD: float = 0.015  # 1.5% stop loss
-    TAKE_PROFIT_THRESHOLD: float = 0.025 # 2.5% take profit
+    # 🚨 EMERGENCY FIX: Cut position sizes by 50% after -$5,117 loss (2.7% win rate)
+    MAX_RISK_PER_TRADE: float = 0.01    # 1% max risk per trade (EMERGENCY FIX - was 2%)
+    MAX_PORTFOLIO_RISK: float = 0.05    # 5% max portfolio risk (EMERGENCY FIX - was 10%)
+    STOP_LOSS_THRESHOLD: float = 0.01   # 1% stop loss (tightened from 1.5%)
+    TAKE_PROFIT_THRESHOLD: float = 0.03  # 3% take profit (widened from 2.5%)
 
 
 @dataclass

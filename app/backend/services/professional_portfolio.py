@@ -499,9 +499,11 @@ class ProfessionalPortfolio:
                 ai_confidence=position.ai_confidence
             )
             
-            # PHASE 4.3: Track position result for continuous learning
+            # PHASE 4.3: Track position result for continuous learning - FIXED: Ensure it actually saves
             try:
                 from app.backend.services.position_result_tracker import get_position_result_tracker, PositionResult, PositionOutcome
+                
+                logger.info(f"📊 Recording position result for learning: {position_id}")
                 
                 # Determine outcome type
                 outcome = PositionOutcome.MANUAL_CLOSE
@@ -538,7 +540,8 @@ class ProfessionalPortfolio:
                 logger.info(f"📊 Position result recorded for continuous learning: {position_id}")
                 
             except Exception as e:
-                logger.warning(f"Continuous learning tracking failed for position {position_id}: {e}")
+                logger.error(f"❌ FAILED to track position result for learning: {e}", exc_info=True)
+                # Don't silently fail - this is critical for learning!
             
             # LEGACY: Also track with performance tracker for compatibility
             try:
