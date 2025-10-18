@@ -105,8 +105,13 @@ singleton_app = get_singleton_app()
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint - always returns 200 if app is running"""
-    return singleton_app.health_status()
+    """Health check endpoint - always returns 200 if app is running (fast response for App Runner)"""
+    return {
+        "status": "healthy",
+        "service": "TradePulse.AI Backend",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "environment": "production"
+    }
 
 @app.get("/ready")
 def readiness_check():

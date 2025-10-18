@@ -26,9 +26,9 @@ COPY app/backend/requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code with proper structure
-COPY . /tmp/project
-RUN mkdir -p /app && cp -r /tmp/project/app /app/ && rm -rf /tmp/project
+# Copy ONLY application backend code (not data/frontend/venv)
+# .dockerignore handles exclusions
+COPY app/backend /app/app/backend/
 
 # --- Runtime Stage ---
 FROM python:3.11-slim AS runtime
@@ -80,5 +80,6 @@ EXPOSE 9002
 # Start command - properly reference main module in app/backend
 CMD ["python", "-m", "uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "9002", "--workers", "1"]
 
-# Cache bust for force rebuild - LAYER 7 FIX + DAY TRADING FLEXIBILITY
-ENV CACHE_BUST=20251010_LAYER7_FIX_DAYTRADING_OPTIMIZED
+# Cache bust for force rebuild - EXIT ENGINE FIX V2 (trackable)
+ENV CACHE_BUST=20251018_EXIT_ENGINE_FIX_V2_TRACKABLE
+ENV VERSION=2025-10-18_16:45_EXIT_ENGINE_FIX

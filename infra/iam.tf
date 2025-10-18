@@ -199,6 +199,15 @@ resource "aws_iam_policy" "app_runner_instance_policy" {
         ]
       },
       {
+        Sid    = "KMSDecryptForSSM"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = ["*"]
+      },
+      {
         Sid    = "DynamoDBAccess"
         Effect = "Allow"
         Action = [
