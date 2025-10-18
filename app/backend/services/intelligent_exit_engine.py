@@ -447,9 +447,11 @@ class IntelligentExitEngine:
         logger.info(f"📊 PIPELINE DEBUG: Exit Engine - Position ID: {position_data.get('position_id', 'Unknown')}")
         logger.info(f"💼 PIPELINE DEBUG: Exit Engine - Position data keys: {list(position_data.keys()) if position_data else 'None'}")
         
-        # ADAPTIVE HYSTERESIS: Use learned parameters (not hardcoded!)
+        # 🎯 SMART POSITION MANAGEMENT: Minimal settling period + AI analysis
         position_id = position_data.get('position_id', '')
         entry_time_str = position_data.get('entry_time')
+        entry_confidence = position_data.get('confidence_score', 0.5)
+        
         if entry_time_str:
             try:
                 if isinstance(entry_time_str, str):
@@ -459,15 +461,30 @@ class IntelligentExitEngine:
                 
                 age_s = (datetime.now(timezone.utc) - entry_time.replace(tzinfo=timezone.utc)).total_seconds()
                 
-                # DAY TRADING: Calculate position metrics as FEATURES for AI decision
-                # NO HARD BLOCKS - let AI models decide based on ALL data!
+                # 🎯 MINIMAL SETTLING PERIOD: Let position settle before AI analysis
+                # This is NOT a time stop - just prevents instant exits during spread settlement
+                # Was: no minimum → Now: 60s minimum (1 minute to let setup develop)
+                MIN_SETTLING_PERIOD_SECONDS = 60
+                
+                if age_s < MIN_SETTLING_PERIOD_SECONDS:
+                    logger.debug(f"⏱️ Position settling: {age_s:.0f}s/{MIN_SETTLING_PERIOD_SECONDS}s - waiting for spread settlement")
+                    return {
+                        "should_exit": False,
+                        "confidence": 0.0,
+                        "reason": "position_settling",
+                        "exit_reason": "waiting_for_setup",
+                        "pnl_percent": 0.0,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                
+                # Calculate position metrics as FEATURES for AI decision
                 current_price = await get_live_bitcoin_price()
                 entry_price = position_data.get('entry_price', current_price)
                 pnl_pct = ((current_price - entry_price) / entry_price) if entry_price else 0.0
                 abs_bp = abs(pnl_pct) * 10000  # Convert to basis points
                 
                 # Store position age and PnL as context for AI (not as hard limits!)
-                logger.info(f"📊 Position context: age={age_s:.0f}s, pnl={abs_bp:.1f}bp - AI will analyze")
+                logger.info(f"📊 Position ready for analysis: age={age_s:.0f}s, pnl={abs_bp:.1f}bp, entry_conf={entry_confidence:.2f}")
                     
             except Exception as e:
                 logger.warning(f"Failed to parse entry time for context: {e}")
@@ -719,23 +736,25 @@ class IntelligentExitEngine:
             else:  # SHORT
                 pnl_pct = (entry_price - current_price) / entry_price if entry_price > 0 else 0
             
-            # 🚨 EXTREME SAFETY NET: Only force exit if position is old AND losing
-            # This prevents positions from being stuck forever in bad situations
-            extreme_time_limit_minutes = 240  # 4 hours (not 15 minutes!)
+            # 🎯 SMART TIME MANAGEMENT: No hard time stops, but add context for AI
+            # Exit decisions are made by 6-layer AI analysis, not by time alone
+            
+            # Log position age for transparency
+            if age_minutes > 30:
+                logger.info(f"📊 Position age: {age_minutes:.1f}min, PnL: {pnl_pct*100:.2f}%")
+            
+            # 🚨 EXTREME SAFETY NET: Only as last resort for stuck positions
+            # This is NOT day trading logic - it's emergency protection
+            extreme_time_limit_minutes = 360  # 6 hours (was 4h, now even more lenient)
             
             if age_minutes >= extreme_time_limit_minutes:
-                # Only force exit if position is LOSING
-                if pnl_pct < -0.002:  # Position losing more than 0.2%
-                    logger.warning(f"🚨 EXTREME TIME STOP: Position open {age_minutes:.0f}min (4h+) and losing {pnl_pct*100:.2f}%")
-                    return {"should_exit": True, "reason": "extreme_time_stop_safety", "atr": float(atr), "age_minutes": age_minutes, "pnl_pct": pnl_pct}
+                # Only force exit if position is LOSING significantly
+                if pnl_pct < -0.01:  # Position losing > 1% (was 0.2%, more lenient now)
+                    logger.warning(f"🚨 EXTREME SAFETY: Position stuck for {age_minutes:.0f}min (6h+) and losing {pnl_pct*100:.2f}%")
+                    return {"should_exit": True, "reason": "extreme_safety_net", "atr": float(atr), "age_minutes": age_minutes, "pnl_pct": pnl_pct}
                 else:
-                    # Position in profit or breakeven - let it run!
-                    logger.info(f"✅ Position open {age_minutes:.0f}min but profitable ({pnl_pct*100:.2f}%) - letting it run")
-            
-            # 📊 SOFT SIGNAL: Add position age as context for AI layers (not hard exit)
-            # This is logged but doesn't force an exit - AI decides based on all factors
-            if age_minutes > 60:  # Over 1 hour
-                logger.debug(f"📊 Position age context: {age_minutes:.0f}min (AI will consider in exit analysis)")
+                    # Position in profit or small loss - let AI decide!
+                    logger.info(f"✅ Long position ({age_minutes:.0f}min) but PnL acceptable ({pnl_pct*100:.2f}%) - AI continues managing")
 
             return {"should_exit": False}
         except Exception:
@@ -1035,7 +1054,7 @@ class IntelligentExitEngine:
             return np.array([0.5] * feature_count, dtype=np.float32)
     
     async def _analyze_reversal_patterns(self, market_data: Dict[str, Any], current_price: float) -> Dict[str, Any]:
-        """Layer 3: Analyze reversal patterns using REAL MODELS"""
+        """Layer 3: Analyze reversal patterns using REAL MODELS - BITCOIN-OPTIMIZED"""
         
         try:
             # Use real reversal detection model from enterprise engine
@@ -1101,55 +1120,77 @@ class IntelligentExitEngine:
                 bollinger_position = market_data.get("bb_position", 0.5)
                 reversal_prob = 0.5  # Default for fallback
         
-            # Calculate reversal signals - ENHANCED FOR BITCOIN TOPS
+            # 🎯 BITCOIN-OPTIMIZED REVERSAL SIGNALS
+            # Fixed: More conservative thresholds to avoid killing good trades
             reversal_signals = 0
             
-            # RSI Analysis (Bitcoin overbought detection)
-            if rsi > 75:  # EXTREME overbought - Bitcoin at top!
+            # RSI Analysis - BITCOIN-ADJUSTED (was 70/75, now 80/85)
+            # Bitcoin regularly trades at RSI 70-80 during uptrends!
+            if rsi > 85:  # EXTREME overbought - real top!
                 reversal_signals += 2  # Strong signal
-            elif rsi > 70:  # Standard overbought
+                logger.debug(f"🔴 EXTREME RSI: {rsi:.1f} > 85 → +2 signals")
+            elif rsi > 80:  # Very overbought - cautious
                 reversal_signals += 1
-            elif rsi < 30:  # Oversold (good buy opportunity)
+                logger.debug(f"⚠️ HIGH RSI: {rsi:.1f} > 80 → +1 signal")
+            elif rsi < 25:  # Extreme oversold
                 reversal_signals -= 1
                 
-            # MACD Analysis (momentum change detection)
-            if macd < -0.01:  # Strong bearish MACD - momentum turning down
+            # MACD Analysis - More conservative (was 0/-0.01, now -0.02/-0.05)
+            # Minor MACD fluctuations are normal noise
+            if macd < -0.05:  # Strong bearish momentum
                 reversal_signals += 2
-            elif macd < 0:  # Bearish MACD
+                logger.debug(f"🔴 STRONG BEARISH MACD: {macd:.4f} < -0.05 → +2 signals")
+            elif macd < -0.02:  # Moderate bearish
                 reversal_signals += 1
+                logger.debug(f"⚠️ BEARISH MACD: {macd:.4f} < -0.02 → +1 signal")
             
-            # Bollinger Bands (price extreme detection)
-            if bollinger_position > 0.85:  # VERY near upper band - extreme top!
+            # Bollinger Bands - More conservative (was 0.8/0.85, now 0.9/0.95)
+            # Price can stay near bands for extended periods
+            if bollinger_position > 0.95:  # Extremely near upper band
                 reversal_signals += 2
-            elif bollinger_position > 0.8:  # Near upper band
+                logger.debug(f"🔴 EXTREME BB: {bollinger_position:.2f} > 0.95 → +2 signals")
+            elif bollinger_position > 0.90:  # Very near upper band
                 reversal_signals += 1
-            elif bollinger_position < 0.2:  # Near lower band
+                logger.debug(f"⚠️ HIGH BB: {bollinger_position:.2f} > 0.90 → +1 signal")
+            elif bollinger_position < 0.15:  # Extreme lower
                 reversal_signals -= 1
                 
-            # Volume Analysis (distribution at tops)
+            # Volume Analysis - More stringent (was 1.5, now 2.0)
+            # Need significant volume spike to confirm distribution
             volume_ratio = features_dict.get("volume_ratio", 1.0) if 'reversal' in self.models else market_data.get("volume_ratio", 1.0)
-            if volume_ratio > 1.5 and rsi > 70:  # High volume + overbought = distribution!
+            if volume_ratio > 2.0 and rsi > 80:  # High volume + extreme overbought
                 reversal_signals += 2
-                logger.info(f"📊 HIGH VOLUME DISTRIBUTION DETECTED: Vol ratio={volume_ratio:.1f}, RSI={rsi:.1f}")
+                logger.info(f"📊 HIGH VOLUME DISTRIBUTION: Vol ratio={volume_ratio:.1f}, RSI={rsi:.1f} → +2 signals")
+            elif volume_ratio > 1.8 and rsi > 85:  # Moderate volume but extreme RSI
+                reversal_signals += 1
             
-            # Determine recommendation - BALANCED FOR BITCOIN VOLATILITY
-            if reversal_signals >= 4:  # Very strong reversal signal - IMMEDIATE EXIT!
+            # 🎯 DAY TRADING FIX: Require MORE signals for Bitcoin volatility
+            # Was: 4+ signals = exit → Now: 6+ signals = exit
+            # Conservative thresholds to avoid killing good trades on noise
+            if reversal_signals >= 6:  # Very strong reversal - multiple confirmations!
                 recommendation = "exit"
                 confidence = 0.9
-                logger.info(f"🚨 VERY STRONG REVERSAL DETECTED: {reversal_signals} signals - IMMEDIATE EXIT!")
-            elif reversal_signals >= 3:  # Strong reversal signal - EXIT
+                logger.info(f"🚨 VERY STRONG REVERSAL: {reversal_signals} signals → IMMEDIATE EXIT!")
+            elif reversal_signals >= 4:  # Strong reversal - confirmed
                 recommendation = "exit"
                 confidence = 0.75
-                logger.info(f"🔴 STRONG REVERSAL DETECTED: {reversal_signals} signals - EXIT!")
-            elif reversal_signals >= 2:  # Medium reversal signal - consider exit
-                recommendation = "exit"
-                confidence = 0.6
-            elif reversal_signals <= -2:  # Strong bullish signal
+                logger.info(f"⚠️ STRONG REVERSAL: {reversal_signals} signals → EXIT")
+            elif reversal_signals >= 3:  # Moderate reversal - caution but hold
+                recommendation = "hold"  # Changed from exit to hold
+                confidence = 0.65
+                logger.debug(f"⚠️ MODERATE signals ({reversal_signals}) - not enough for exit, HOLDING")
+            elif reversal_signals >= 2:  # Weak reversal - normal volatility
+                recommendation = "hold"
+                confidence = 0.5
+                logger.debug(f"📊 WEAK signals ({reversal_signals}) - normal Bitcoin volatility, HOLDING")
+            elif reversal_signals <= -2:  # Strong bullish signal - definitely hold
                 recommendation = "hold"
                 confidence = 0.8
-            else:  # Neutral
+                logger.debug(f"✅ BULLISH signals ({reversal_signals}) - HOLD position")
+            else:  # Neutral - hold
                 recommendation = "hold"
-                confidence = 0.4
+                confidence = 0.5
+                logger.debug(f"➖ NEUTRAL signals ({reversal_signals}) - HOLD")
             
             return {
                 "recommendation": recommendation,
@@ -1383,24 +1424,24 @@ class IntelligentExitEngine:
             adaptive_threshold = 0.55
             regime = "unknown"
         
-        # 🚨 CRITICAL FIX: Check for strong reversal signals FIRST
-        # When reversal layer detects 4+ signals, OVERRIDE voting and force EXIT
+        # 🎯 SMART REVERSAL CHECK: Only force exit on VERY strong signals (6+)
+        # Was: 4+ signals override → Now: 6+ signals override (Bitcoin-adjusted)
         reversal_layer = layer_results.get("layer_3_reversal", {})
         if isinstance(reversal_layer, dict):
             reversal_signals = reversal_layer.get("reversal_signals", 0)
             reversal_confidence = reversal_layer.get("confidence", 0.0)
             
-            if reversal_signals >= 4:  # Very strong reversal - IMMEDIATE EXIT!
+            if reversal_signals >= 6:  # Very strong reversal - IMMEDIATE EXIT!
                 logger.warning(f"🚨 CRITICAL: {reversal_signals} reversal signals detected - FORCING EXIT (confidence={reversal_confidence:.2f})")
                 return {
                     "should_exit": True,
                     "confidence": 0.9,
-                    "reason": "strong_reversal_override",
+                    "reason": "very_strong_reversal_override",
                     "consensus_score": 0.9,
                     "layer_votes": {"exit": "forced", "hold": 0},
                     "reversal_signals": reversal_signals
                 }
-            elif reversal_signals >= 3 and reversal_confidence >= 0.75:  # Strong reversal
+            elif reversal_signals >= 4 and reversal_confidence >= 0.75:  # Strong reversal
                 logger.warning(f"⚠️ STRONG: {reversal_signals} reversal signals - PRIORITIZING EXIT (confidence={reversal_confidence:.2f})")
                 # Don't force, but heavily bias toward exit
                 reversal_override = True

@@ -28,9 +28,11 @@ class DayTradingConfig:
     """
     
     # Analysis timing (adaptive to volatility)
-    base_analysis_interval: int = 8  # seconds
-    min_analysis_interval: int = 5   # minimum (high volatility)
-    max_analysis_interval: int = 15  # maximum (low volatility)
+    # 🎯 BITCOIN DAY TRADING: Slower analysis to avoid overtrading on noise
+    # Was: 8s base / 5s min → Now: 30s base / 20s min (gives trades time to develop)
+    base_analysis_interval: int = 30  # seconds (was 8)
+    min_analysis_interval: int = 20   # minimum (high volatility) (was 5)
+    max_analysis_interval: int = 45   # maximum (low volatility) (was 15)
     
     # Session awareness (Bitcoin trades 24/7, minimal but useful)
     session_boost_enabled: bool = True
