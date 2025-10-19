@@ -55,6 +55,10 @@ class PositionResult:
     patterns_detected: List[str]
     closed_at: datetime
     pattern_analysis_enabled: bool = False
+    # CRITICAL: Add signal info for learning
+    signal_action: Optional[str] = None  # BUY/SELL signal that opened position
+    signal_confidence: Optional[float] = None  # Original signal confidence
+    position_type: Optional[str] = None  # long/short
 
 class PositionResultTracker:
     """
@@ -143,7 +147,11 @@ class PositionResultTracker:
                 'patterns_detected': result.patterns_detected,
                 'pattern_analysis_enabled': result.pattern_analysis_enabled,
                 'closed_at': int(result.closed_at.timestamp() * 1000),  # REQUIRED RANGE KEY: milliseconds since epoch (Number)
-                'recorded_at': datetime.now(timezone.utc).isoformat()
+                'recorded_at': datetime.now(timezone.utc).isoformat(),
+                # CRITICAL: Save signal info for learning
+                'signal_action': result.signal_action,
+                'signal_confidence': Decimal(str(result.signal_confidence)) if result.signal_confidence is not None else None,
+                'position_type': result.position_type
             }
             
             if self.db_client:

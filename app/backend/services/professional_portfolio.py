@@ -516,6 +516,13 @@ class ProfessionalPortfolio:
                 elif "emergency" in reason.lower():
                     outcome = PositionOutcome.EMERGENCY_CLOSE
                 
+                # Extract signal action from AI reasoning
+                signal_action = None
+                if "BUY signal" in position.ai_reasoning or "LONG position" in position.ai_reasoning:
+                    signal_action = "BUY"
+                elif "SELL signal" in position.ai_reasoning or "SHORT position" in position.ai_reasoning:
+                    signal_action = "SELL"
+                
                 # Create position result for learning
                 position_result = PositionResult(
                     position_id=position_id,
@@ -530,7 +537,11 @@ class ProfessionalPortfolio:
                     ai_confidence=position.ai_confidence,
                     risk_assessment="medium",  # Could be enhanced with actual risk assessment
                     patterns_detected=[],  # Could be enhanced with pattern detection
-                    closed_at=position.exit_time
+                    closed_at=position.exit_time,
+                    # CRITICAL: Add signal info for learning
+                    signal_action=signal_action,
+                    signal_confidence=position.ai_confidence,
+                    position_type=position.type.value
                 )
                 
                 # Record for continuous learning

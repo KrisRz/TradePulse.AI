@@ -510,7 +510,11 @@ class ContinuousLearningEngine:
                             'ai_confidence': result.get('ai_confidence', 0.5),
                             'risk_assessment': result.get('risk_assessment', 'MEDIUM'),
                             'time_in_position_minutes': result.get('time_in_position_minutes', 0),
-                            'patterns_detected': result.get('patterns_detected', [])
+                            'patterns_detected': result.get('patterns_detected', []),
+                            # CRITICAL: Add signal info for learning analysis
+                            'signal_action': result.get('signal_action'),
+                            'signal_confidence': result.get('signal_confidence'),
+                            'position_type': result.get('position_type')
                         }
                         recent_results.append(normalized_result)
                 except (ValueError, TypeError) as e:
@@ -535,6 +539,15 @@ class ContinuousLearningEngine:
                             # Normalize portfolio format to learning format
                             # FIXED: Convert Decimals to floats for calculations
                             realized_pnl = float(result.get('realized_pnl', 0))
+                            
+                            # Extract signal action from reasoning if available
+                            signal_action = None
+                            reasoning = result.get('ai_reasoning', '')
+                            if 'BUY signal' in reasoning or 'LONG position' in reasoning:
+                                signal_action = 'BUY'
+                            elif 'SELL signal' in reasoning or 'SHORT position' in reasoning:
+                                signal_action = 'SELL'
+                            
                             normalized_result = {
                                 'position_id': result.get('position_id'),
                                 'closed_at': closed_at_str,
@@ -544,7 +557,11 @@ class ContinuousLearningEngine:
                                 'ai_confidence': float(result.get('ai_confidence', 0.5)),
                                 'risk_assessment': 'MEDIUM',
                                 'time_in_position_minutes': float(result.get('duration_minutes', 0)),
-                                'patterns_detected': []
+                                'patterns_detected': [],
+                                # CRITICAL: Add signal info for learning analysis
+                                'signal_action': signal_action,
+                                'signal_confidence': float(result.get('ai_confidence', 0.5)),
+                                'position_type': result.get('position_type')
                             }
                             recent_results.append(normalized_result)
                     except (ValueError, TypeError) as e:
@@ -711,6 +728,11 @@ class ContinuousLearningEngine:
             pattern_analysis = await self._analyze_pattern_performance(position_results, weights)
             if pattern_analysis:
                 recommendations.extend(pattern_analysis)
+            
+            # Analyze by signal action (BUY vs SELL performance)
+            signal_analysis = await self._analyze_by_signal_action(position_results, weights)
+            if signal_analysis:
+                recommendations.extend(signal_analysis)
             
             # 🎯 Apply confidence decay to old recommendations
             recommendations = self._apply_confidence_decay(recommendations)
@@ -913,6 +935,74 @@ class ContinuousLearningEngine:
             
         except Exception as e:
             logger.error(f"❌ Confidence analysis failed: {e}")
+            return []
+    
+    async def _analyze_by_signal_action(self, results: List[Dict[str, Any]], weights: Dict[str, float] = None) -> List[OptimizationRecommendation]:
+        """Analyze BUY vs SELL signal performance with weighted metrics"""
+        recommendations = []
+        if weights is None:
+            weights = {}
+        
+        try:
+            # Group by signal action
+            buy_positions = [r for r in results if r.get('signal_action') == 'BUY']
+            sell_positions = [r for r in results if r.get('signal_action') == 'SELL']
+            
+            min_samples = 3 if self.day_trading_mode else 5
+            
+            if len(buy_positions) >= min_samples and len(sell_positions) >= min_samples:
+                # Calculate weighted success rates
+                buy_success_rate = self._weighted_success_rate(buy_positions, weights)
+                sell_success_rate = self._weighted_success_rate(sell_positions, weights)
+                
+                # Calculate weighted average P&L
+                buy_pnl_values = [r.get('pnl_absolute', 0) for r in buy_positions]
+                sell_pnl_values = [r.get('pnl_absolute', 0) for r in sell_positions]
+                
+                buy_avg_pnl = self._weighted_mean(buy_pnl_values, buy_positions, weights)
+                sell_avg_pnl = self._weighted_mean(sell_pnl_values, sell_positions, weights)
+                
+                logger.info(f"📊 SIGNAL PERFORMANCE: BUY={buy_success_rate:.1%} ({len(buy_positions)} trades, avg ${buy_avg_pnl:.2f})")
+                logger.info(f"📊 SIGNAL PERFORMANCE: SELL={sell_success_rate:.1%} ({len(sell_positions)} trades, avg ${sell_avg_pnl:.2f})")
+                
+                # If one direction is significantly worse, recommend adjustments
+                if buy_success_rate < 0.30 and sell_success_rate > 0.50:
+                    recommendations.append(OptimizationRecommendation(
+                        parameter_name='disable_buy_signals',
+                        current_value=False,
+                        recommended_value=True,
+                        confidence=0.85,
+                        reason=f'BUY signals only {buy_success_rate:.1%} success vs SELL {sell_success_rate:.1%}. Disable BUY temporarily.',
+                        expected_improvement=0.3,
+                        risk_level='MEDIUM'
+                    ))
+                elif sell_success_rate < 0.30 and buy_success_rate > 0.50:
+                    recommendations.append(OptimizationRecommendation(
+                        parameter_name='disable_sell_signals',
+                        current_value=False,
+                        recommended_value=True,
+                        confidence=0.85,
+                        reason=f'SELL signals only {sell_success_rate:.1%} success vs BUY {buy_success_rate:.1%}. Disable SELL temporarily.',
+                        expected_improvement=0.3,
+                        risk_level='MEDIUM'
+                    ))
+                
+                # If both are bad, increase confidence threshold significantly
+                if buy_success_rate < 0.30 and sell_success_rate < 0.30:
+                    recommendations.append(OptimizationRecommendation(
+                        parameter_name='min_confidence_threshold',
+                        current_value=runtime_config_store.get('min_confidence_threshold', 0.65),
+                        recommended_value=0.85,
+                        confidence=0.95,
+                        reason=f'BOTH BUY ({buy_success_rate:.1%}) and SELL ({sell_success_rate:.1%}) failing. Raise bar significantly.',
+                        expected_improvement=0.5,
+                        risk_level='HIGH'
+                    ))
+            
+            return recommendations
+            
+        except Exception as e:
+            logger.error(f"❌ Signal action analysis failed: {e}")
             return []
     
     async def _analyze_pattern_performance(self, results: List[Dict[str, Any]], weights: Dict[str, float] = None) -> List[OptimizationRecommendation]:
