@@ -6,12 +6,17 @@ Pre-cached historical analysis service that provides instant market context
 for intelligent entry decisions without performance delays.
 
 Features:
-- Pre-calculated monthly/weekly/daily price ranges from 3.97M records
+- Pre-calculated price ranges from 14-day data (DAY TRADING optimized)
 - Cached support/resistance levels with historical validation
-- Pattern success rates database
+- Pattern success rates database (last 3 days for relevance)
 - Market regime classification
 - Volatility percentile analysis
-- Instant lookup for entry engine decisions
+- Instant lookup for entry engine decisions (<1ms)
+
+Performance:
+- Pre-cache: ~65KB (336 hourly candles)
+- Real-time validation: 300-720 candles (5-12h)
+- Total memory: ~1MB (lightweight!)
 
 Author: TradePulse.AI Development Team
 Created: January 2025
@@ -71,8 +76,11 @@ class HistoricalMarketContextService:
     """
     Pre-cached historical market context for instant entry decisions
     
-    Loads 3.97M historical records once and maintains pre-calculated
-    market context data for ultra-fast entry analysis.
+    DAY TRADING MODE: Loads 14 days of 1h candles (336 records) and maintains
+    pre-calculated market context data for ultra-fast entry analysis (<1ms lookups).
+    
+    Real-time validation uses 300-720 recent 1m candles (5-12 hours) for pattern
+    confirmation. Total memory: ~1MB (lightweight and fast).
     """
     
     def __init__(self):
