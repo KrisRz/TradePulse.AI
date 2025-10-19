@@ -177,11 +177,11 @@ class ProfessionalPortfolio:
         self.max_drawdown_amount = Decimal('0')
         self.last_daily_reset_date = datetime.now(timezone.utc).date()  # Track last reset
         
-        # Risk management - OPTIMIZED FOR SMALL FREQUENT TRADES
+        # Risk management - OPTIMIZED FOR QUALITY OVER QUANTITY
         self.daily_trades = 0
-        self.max_daily_trades = 30  # SMALL TRADES: 30 trades per day (was 8 - too low!)
+        self.max_daily_trades = 8  # QUALITY TRADES: 8 trades per day (reduced from 30 - focus on quality)
         self.consecutive_losses = 0
-        self.max_consecutive_losses = 8  # Higher tolerance for small losses (was 5)
+        self.max_consecutive_losses = 5  # Lower tolerance (reduced from 8)
         
         # DynamoDB persistence
         self.db_client = None

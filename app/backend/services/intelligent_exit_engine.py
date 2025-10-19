@@ -365,18 +365,18 @@ class IntelligentExitEngine:
                     successful = [p for p in recent_positions if p.get('was_successful', False)]
                     if successful:
                         hold_times = [p.get('time_in_position_minutes', 5) * 60 for p in successful]
-                        optimal_hold = int(np.median(hold_times))
+                        optimal_hold = max(600, int(np.median(hold_times)))  # Minimum 10 minutes
                         
                         # Calculate optimal min PnL from profitable positions
                         pnls = [abs(p.get('pnl_percent', 0)) for p in successful]
-                        optimal_min_pnl = int(np.percentile(pnls, 25) * 10000) if pnls else 10
+                        optimal_min_pnl = max(30, int(np.percentile(pnls, 25) * 10000) if pnls else 30)  # Minimum 0.30% (fee-beating)
                         
                         # Calculate optimal cooldown
                         optimal_cooldown = max(60, optimal_hold // 2)
                         
                         self._learned_params = {
-                            'min_hold_seconds': {'value': optimal_hold, 'confidence': 0.7, 'reason': 'Calculated from successful trades'},
-                            'min_pnl_bp': {'value': optimal_min_pnl, 'confidence': 0.7, 'reason': 'Calculated from profitable trades'},
+                            'min_hold_seconds': {'value': optimal_hold, 'confidence': 0.7, 'reason': 'Calculated from successful trades (min 10min)'},
+                            'min_pnl_bp': {'value': optimal_min_pnl, 'confidence': 0.7, 'reason': 'Calculated from profitable trades (min 0.30% to beat fees)'},
                             'reentry_cooldown_seconds': {'value': optimal_cooldown, 'confidence': 0.6, 'reason': 'Calculated from position timing'}
                         }
                         
@@ -394,8 +394,8 @@ class IntelligentExitEngine:
     def _get_conservative_defaults(self) -> Dict[str, Any]:
         """Get conservative defaults for day trading (only when no data available)"""
         return {
-            'min_hold_seconds': {'value': 120, 'confidence': 0.5, 'reason': 'Conservative default - 2 minutes'},
-            'min_pnl_bp': {'value': 10, 'confidence': 0.5, 'reason': 'Conservative default - 0.10%'},
+            'min_hold_seconds': {'value': 600, 'confidence': 0.5, 'reason': 'Quality trades - 10 minutes minimum (increased from 2 min)'},
+            'min_pnl_bp': {'value': 30, 'confidence': 0.5, 'reason': 'Fee-beating threshold - 0.30% minimum (increased from 0.10%)'},
             'reentry_cooldown_seconds': {'value': 90, 'confidence': 0.5, 'reason': 'Conservative default - 90 seconds'}
         }
     

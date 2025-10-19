@@ -661,7 +661,7 @@ class DynamicRiskManager:
     async def calculate_position_size(self, signal, risk_ctx, portfolio, tick) -> float:
         """PHASE 1A: Calculate position size based on risk and signal type"""
         try:
-            base_size = float(portfolio.cash_balance) * 0.12  # 12% base
+            base_size = float(portfolio.cash_balance) * 0.25  # 25% base (increased from 12% - larger positions to beat fees)
             
             # Adjust for signal type
             if hasattr(signal, 'signal_type') and signal.signal_type == "exploratory":
