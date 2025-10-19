@@ -1,0 +1,9 @@
+# Use the existing working image as base
+FROM 590183672693.dkr.ecr.eu-west-2.amazonaws.com/tradepulse-backend:latest
+
+# Copy only the fixed files
+COPY app/backend/services/intelligent_exit_engine.py /app/app/backend/services/intelligent_exit_engine.py
+COPY app/backend/config/day_trading_config.py /app/app/backend/config/day_trading_config.py
+
+# Keep the same CMD as original
+CMD ["python", "-m", "uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "9002"]
