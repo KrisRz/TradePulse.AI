@@ -14,14 +14,15 @@ logger = structlog.get_logger(__name__)
 class ConfidenceThresholds:
     """Unified confidence thresholds for all trading decisions"""
     
-    # 🚨 EMERGENCY FIX: Raised from catastrophic 45% to 85% after learning engine detected 2.7% win rate
-    # Learning system recommendation: "Only 2.7% win rate with current 60% threshold. Need much higher bar for entries."
-    BUY_THRESHOLD: float = 0.85      # 85% confidence required for BUY signals (EMERGENCY FIX - was 45%!)
-    SELL_THRESHOLD: float = 0.85     # 85% confidence required for SELL signals (EMERGENCY FIX - was 45%!)
+    # 🎯 BALANCED THRESHOLDS: Lowered to allow trading in low-volatility sideways markets
+    # Previous 85% threshold was too strict - prevented all trading even with good AI signals
+    # New approach: Let AI signals through, rely on improved position sizing + exit logic for risk management
+    BUY_THRESHOLD: float = 0.70      # 70% confidence required for BUY signals (balanced for sideways markets)
+    SELL_THRESHOLD: float = 0.70     # 70% confidence required for SELL signals (balanced for sideways markets)
     
-    # EXPLORATORY SIGNAL THRESHOLDS - DISABLED due to catastrophic performance
-    EXPLORATORY_BUY: float = 0.75    # 75% confidence minimum (EMERGENCY FIX - was 25%!)
-    EXPLORATORY_SELL: float = 0.75   # 75% confidence minimum (EMERGENCY FIX - was 25%!)
+    # EXPLORATORY SIGNAL THRESHOLDS - Re-enabled with moderate thresholds
+    EXPLORATORY_BUY: float = 0.55    # 55% confidence minimum (allows probing in uncertain conditions)
+    EXPLORATORY_SELL: float = 0.55   # 55% confidence minimum (allows probing in uncertain conditions)
     
     # HOLD DECISION THRESHOLDS
     HOLD_LOWER_BOUND: float = 0.70   # Below 70% = potential SELL signal (raised from 35%)

@@ -1,1 +1,2 @@
 # Deployment trigger - Mon Oct 20 06:34:04 BST 2025
+Threshold fix - allow trading in sideways markets Mon Oct 20 15:07:04 BST 2025
