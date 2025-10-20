@@ -548,6 +548,43 @@ class ContinuousLearningEngine:
                             elif 'SELL signal' in reasoning or 'SHORT position' in reasoning:
                                 signal_action = 'SELL'
                             
+                            # Infer position_type if missing
+                            position_type = result.get('position_type')
+                            if not position_type:
+                                reasoning_text = (result.get('ai_reasoning', '') or '').upper()
+                                if 'SHORT' in reasoning_text or 'SELL' in reasoning_text:
+                                    position_type = 'SHORT'
+                                elif 'LONG' in reasoning_text or 'BUY' in reasoning_text:
+                                    position_type = 'LONG'
+                                else:
+                                    try:
+                                        entry_val = float(result.get('entry_price', 0) or 0)
+                                        exit_val = float(result.get('exit_price', entry_val) or entry_val)
+                                        pnl_val = float(result.get('realized_pnl', 0) or 0)
+                                        price_delta = exit_val - entry_val
+                                        if (price_delta >= 0 and pnl_val >= 0) or (price_delta < 0 and pnl_val < 0):
+                                            position_type = 'LONG'
+                                        else:
+                                            position_type = 'SHORT'
+                                    except Exception:
+                                        position_type = None
+
+                                # Write-back inferred position_type to DB for future reads
+                                try:
+                                    if position_type and self.db_client:
+                                        user_id = result.get('user_id')
+                                        position_id = result.get('position_id')
+                                        if user_id and position_id:
+                                            table = self.db_client.get_table('portfolio_closed_positions')
+                                            table.update_item(
+                                                Key={'user_id': user_id, 'position_id': position_id},
+                                                UpdateExpression='SET position_type = :pt',
+                                                ExpressionAttributeValues={':pt': position_type}
+                                            )
+                                except Exception:
+                                    # Non-fatal; continue analysis
+                                    pass
+
                             normalized_result = {
                                 'position_id': result.get('position_id'),
                                 'closed_at': closed_at_str,
@@ -561,7 +598,7 @@ class ContinuousLearningEngine:
                                 # CRITICAL: Add signal info for learning analysis
                                 'signal_action': signal_action,
                                 'signal_confidence': float(result.get('ai_confidence', 0.5)),
-                                'position_type': result.get('position_type')
+                                'position_type': position_type
                             }
                             recent_results.append(normalized_result)
                     except (ValueError, TypeError) as e:
