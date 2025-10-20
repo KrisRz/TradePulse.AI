@@ -32,10 +32,11 @@ if lsof -i :8000 -sTCP:LISTEN >/dev/null 2>&1; then
     echo "🔗 Use AWS CLI: aws dynamodb list-tables --endpoint-url http://localhost:8000 --region us-east-1"
     # Bootstrap required tables automatically
     echo "🛠  Bootstrapping DynamoDB tables..."
-    cd /Applications/Projects/TradePulse.AI
-    if [ -x .venv/bin/python ]; then PY=.venv/bin/python; elif [ -x venv/bin/python ]; then PY=venv/bin/python; else PY=python3; fi
-    DYNAMODB_ENDPOINT=http://localhost:8000 AWS_DEFAULT_REGION=us-east-1 AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy \
-    $PY app/backend/scripts/bootstrap_dynamodb_tables.py || echo "⚠️ Table bootstrap script failed; check logs."
+    # 🔧 DISABLED: Bootstrap script creates too many legacy tables
+    # Tables are now synchronized with AWS (16 core tables only)
+    # If you need to recreate tables, run manually:
+    # python3 app/backend/scripts/bootstrap_dynamodb_tables.py
+    echo "✅ DynamoDB Local ready (tables already exist)"
 else
     echo "❌ Failed to start DynamoDB Local"
     exit 1
