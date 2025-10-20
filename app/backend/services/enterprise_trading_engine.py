@@ -2051,6 +2051,20 @@ class EnterpriseTradingEngine:
             rsi = float(features.get("rsi", 50.0))
             bb_pos = float(features.get("bb_position", features.get("bollinger_position", 0.5)))
             macd = float(features.get("macd", 0.0))
+            volume_ratio = float(features.get("volume_ratio", 1.0))
+            
+            # 🔧 FIX (Oct 2025): Epsilon for float boundary comparisons
+            EPS = 1e-9
+            
+            # 🔧 FIX (Oct 2025): Check structure conditions for oversold bounce
+            # MACD histogram contracting = MACD negative but moving toward zero
+            macd_hist_contracting = (-0.01 < macd < 0)  # MACD negative but close to zero
+            
+            # Bull re-entry inside band = price closed back inside bands (BB_pos > 0.0)
+            bull_reentry_inside_band = (bb_pos > EPS and bb_pos < 0.15)  # Back inside lower band
+            
+            # Micro tape = very low volatility
+            micro_tape = (volatility <= 0.0005)  # 0.05% or less
             
             # 🔧 FIX (Oct 2025): Dynamic exploratory threshold in low-vol regimes
             # Top-band: volatility ≤ 0.05% & BB_pos ≥ 0.90 & RSI ∈ [55,70] → relax to 0.52
@@ -2058,18 +2072,40 @@ class EnterpriseTradingEngine:
             # This allows tiny, time-boxed exploratory positions near band touches
             base_exploratory_threshold = self.thresholds.confidence.EXPLORATORY_BUY  # 0.55 default
             
-            is_top_band_regime = (volatility <= 0.0005 and bb_pos >= 0.90 and 55 <= rsi <= 70)
-            is_bottom_band_regime = (volatility <= 0.0006 and bb_pos <= 0.05 and 28 <= rsi <= 36)
+            # Use epsilon for boundary checks
+            is_top_band = (bb_pos >= 0.90 - EPS)
+            is_bottom_band = (bb_pos <= 0.05 + EPS)
+            is_low_vol_top = (volatility <= 0.0005 + EPS)
+            is_low_vol_bottom = (volatility <= 0.0006 + EPS)
+            
+            is_top_band_regime = (is_low_vol_top and is_top_band and 55 <= rsi <= 70)
+            is_bottom_band_regime = (is_low_vol_bottom and is_bottom_band and 28 <= rsi <= 36)
+            
+            # 🔧 FIX (Oct 2025): Oversold bounce with structure confirmation
+            # In micro tape, require structure instead of volume
+            oversold_with_structure = (
+                is_bottom_band_regime and 
+                micro_tape and 
+                bull_reentry_inside_band and 
+                macd_hist_contracting
+            )
             
             if is_top_band_regime:
                 exploratory_threshold = 0.52
                 logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED (TOP-BAND) to 0.52 (from {base_exploratory_threshold:.2f}) | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
-            elif is_bottom_band_regime:
+            elif is_bottom_band_regime or oversold_with_structure:
                 exploratory_threshold = 0.52
-                logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED (BOTTOM-BAND) to 0.52 (from {base_exploratory_threshold:.2f}) | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
+                if oversold_with_structure:
+                    logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED (OVERSOLD+STRUCTURE) to 0.52 | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}, bull_reentry={bull_reentry_inside_band}, macd_contract={macd_hist_contracting}")
+                else:
+                    logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED (BOTTOM-BAND) to 0.52 (from {base_exploratory_threshold:.2f}) | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
             else:
                 exploratory_threshold = base_exploratory_threshold
-                logger.debug(f"📊 EXPLORATORY THRESHOLD: STANDARD {exploratory_threshold:.2f} | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
+                # 🔧 FIX (Oct 2025): Debug logging to see why relax didn't trigger
+                if is_bottom_band or (28 <= rsi <= 36):
+                    logger.debug(f"📊 EXPLORATORY THRESHOLD: STANDARD {exploratory_threshold:.2f} | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}, bull_reentry={bull_reentry_inside_band}, macd_contract={macd_hist_contracting}, vol_ratio={volume_ratio:.2f}")
+                else:
+                    logger.debug(f"📊 EXPLORATORY THRESHOLD: STANDARD {exploratory_threshold:.2f} | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
             
             # Use dynamic exploratory threshold
             conf_check = confidence >= exploratory_threshold

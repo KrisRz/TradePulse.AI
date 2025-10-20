@@ -718,8 +718,10 @@ class DayTradingEngine:
                     is_low_vol_regime = (vol_ratio < 1.0 and atr_pct < 0.001)
                     
                     if is_oversold:
-                        # Capitulation volume gate: composite metric
-                        vol_composite = max(z / 3.5, vol_ratio / 7.0)
+                        # 🔧 FIX (Oct 2025): Easier capitulation volume gate
+                        # Lower bars: zVol/2.0 and vol_ratio/5.0 (was /3.5 and /7.0)
+                        # This catches more oversold bounces in micro-tape conditions
+                        vol_composite = max(z / 2.0, vol_ratio / 5.0)
                         threshold_on = 3.5  # Keep standard for z-score
                         threshold_off = 2.0
                         
