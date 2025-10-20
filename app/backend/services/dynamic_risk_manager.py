@@ -567,8 +567,9 @@ class DynamicRiskManager:
             except Exception as e:
                 logger.error(f"Failed to trigger emergency controls: {e}")
         
-        # Check for extreme drawdown
-        if self.current_risk_metrics.max_drawdown > 0.08:  # 8%
+        # Check for extreme drawdown (ONLY if we have open positions)
+        # 🔧 FIX (Oct 2025): Don't show drawdown warning when portfolio is flat
+        if len(self.position_stop_losses) > 0 and self.current_risk_metrics.max_drawdown > 0.08:  # 8%
             logger.warning(f"⚠️ High drawdown detected: {self.current_risk_metrics.max_drawdown:.1%}")
     
     async def _load_stop_loss_configurations(self):

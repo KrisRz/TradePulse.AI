@@ -107,13 +107,17 @@ class DayTradingValidator:
         
         # ATR percentiles cache (calculated from historical data)
         # These are statistical baselines, not magic numbers
-        # 🔧 FIX (Oct 2025): LOWERED p25 from 1.5% to 1.0% for day trading flexibility
+        # 🔧 FIX (Oct 2025): LOWERED p25 from 1.0% to 0.20% for mean-reversion playbook
         self.atr_percentiles = {
-            'p25': 0.010,  # 1.0% (Bitcoin 25th percentile) - DAY TRADING: Allow lower volatility
-            'p50': 0.025,  # 2.5% (Bitcoin median)
-            'p75': 0.040,  # 4.0% (Bitcoin 75th percentile)
-            'p95': 0.070   # 7.0% (Bitcoin 95th percentile)
+            'p25': 0.0020,  # 0.20% (Bitcoin 25th percentile) - MEAN REVERSION: Allow very low volatility
+            'p50': 0.025,   # 2.5% (Bitcoin median)
+            'p75': 0.040,   # 4.0% (Bitcoin 75th percentile)
+            'p95': 0.070    # 7.0% (Bitcoin 95th percentile)
         }
+        
+        # Rolling ATR history for dynamic calculation (last 30 minutes)
+        self.atr_history: List[float] = []
+        self.atr_history_max_size = 30
         
         # Learning system
         self.failed_trades: List[FailedTrade] = []
@@ -217,12 +221,28 @@ class DayTradingValidator:
         # Convert ATR-based thresholds to absolute percentages
         current_atr = config.current_atr
         
+        # 🔧 DYNAMIC VOLATILITY GATE: Calculate min_volatility based on recent ATR history
+        # Baseline: 0.20% for mean-reversion playbook
+        # Dynamic: 0.5× rolling median of recent ATR (last 30 minutes)
+        min_vol_baseline = 0.0020  # 0.20% baseline
+        if len(self.atr_history) >= 5:
+            import statistics
+            recent_median = statistics.median(self.atr_history[-30:])
+            min_vol_dynamic = max(min_vol_baseline, 0.5 * recent_median)
+        else:
+            min_vol_dynamic = min_vol_baseline
+        
+        # Update ATR history (keep last 30 samples)
+        self.atr_history.append(current_atr)
+        if len(self.atr_history) > self.atr_history_max_size:
+            self.atr_history.pop(0)
+        
         return {
             'min_risk_reward_ratio': config.min_risk_reward_ratio,
             'max_spread_pct': config.max_spread_bps / 10000,  # Convert bps to percentage
             'min_volume_ratio': config.min_volume_ratio,
             'max_volatility': self.atr_percentiles['p95'],  # Use 95th percentile as max
-            'min_volatility': self.atr_percentiles['p25'],  # Use 25th percentile as min
+            'min_volatility': min_vol_dynamic,  # DYNAMIC: 0.20% baseline or 0.5× recent median
             'min_resistance_distance': config.min_resistance_distance_atr * current_atr,  # ATR multiple to %
             'max_support_distance': config.max_support_distance_atr * current_atr  # ATR multiple to %
         }

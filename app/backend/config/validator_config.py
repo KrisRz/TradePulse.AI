@@ -323,9 +323,14 @@ class AdaptiveParameterCalculator:
         max_spread_bps = current_atr * 10000 * 0.5  # Convert to bps
         
         # S/R distance thresholds (ATR multiples)
+        # 🔧 FIX (Oct 2025): Support proximity tied to stop distance
+        # Support should be within 80% of stop distance (not a fixed 0.04%)
         confidence_factor, _ = cls.calculate_confidence_factor(signal_confidence)
         min_res_distance_atr = cls.ATR_MIN_DISTANCE_MULTIPLIER * confidence_factor
-        max_sup_distance_atr = cls.ATR_STOP_LOSS_MULTIPLIER * (2.0 - confidence_factor)
+        
+        # Stop distance = max(1.0× ATR, 0.25%)
+        stop_distance_atr = max(1.0, 0.0025 / current_atr)  # At least 1× ATR or 0.25%
+        max_sup_distance_atr = 0.8 * stop_distance_atr  # Support within 80% of stop distance
         
         return DynamicValidatorConfig(
             min_risk_reward_ratio=min_rr,
