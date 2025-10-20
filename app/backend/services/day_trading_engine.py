@@ -127,15 +127,18 @@ class DayTradingEngine:
         self.positions_opened = 0
         self.avg_analysis_time_ms = 0
         # Circuit breaker (volume z-score) hysteresis
-        # 🔧 FIX (Oct 2025): Adaptive volume gate scaling
-        # When zVol < 1.0 and ATR/close < 0.10%, scale thresholds to 2.2/1.2
-        # This allows arming in low-volatility conditions
+        # 🔧 FIX (Oct 2025): Relaxed thresholds to allow trading in volatile spikes
+        # Previous: on=3.5, off=2.0, safe_ticks=3 (too restrictive - blocked valid entries)
+        # New: on=4.5, off=2.5, safe_ticks=2 (allows more entries, still protects from extremes)
         self.cb_active = False
-        self.cb_threshold_on = 3.5  # Default on threshold
-        self.cb_threshold_off = 2.0  # Default off threshold
+        self.cb_threshold_on = 4.5  # Raised from 3.5 (only extreme spikes trigger halt)
+        self.cb_threshold_off = 2.5  # Raised from 2.0 (easier to recover)
         self.cb_safe_ticks = 0
-        self.cb_safe_required = 3  # require N consecutive safe ticks before resuming
+        self.cb_safe_required = 2  # Reduced from 3 (faster recovery)
         self.cb_safe_window_sec = 90  # Allow accumulation across 90s in micro-vol
+        # EMA z-score for smoothing (prevents single spike halts)
+        self.z_ema = None
+        self.z_ema_alpha = 0.3  # 30% weight to new value, 70% to EMA
         # Duplicate suppression burst tracker (timestamps of suppressions)
         self._dupe_suppress_ts: List[float] = []
         
@@ -738,23 +741,40 @@ class DayTradingEngine:
                         threshold_off = self.cb_threshold_off
                         logger.debug(f"📊 VOLUME GATE: NORMAL (on={threshold_on}, off={threshold_off}) | vol_ratio={vol_ratio:.2f}, atr={atr_pct:.4f}")
                     
+                    # 🔧 FIX (Oct 2025): EMA smoothing to prevent single-spike halts
+                    # Update EMA z-score (exponential moving average)
+                    if self.z_ema is None:
+                        self.z_ema = z  # Initialize with first value
+                    else:
+                        self.z_ema = self.z_ema_alpha * z + (1 - self.z_ema_alpha) * self.z_ema
+                    
+                    # Use EMA z-score for breaker decisions (smoother)
+                    z_smoothed = self.z_ema
+                    
                     prev = self.cb_active
-                    # Detailed logging of z and thresholds
+                    # 🔧 FIX (Oct 2025): Enhanced logging with raw + smoothed z-score
                     try:
-                        logger.debug(f"📉 Volume z={z:.2f} | on>={threshold_on:.2f} off<={threshold_off:.2f} (safe_ticks={self.cb_safe_ticks}/{self.cb_safe_required})")
+                        ticks_remaining = self.cb_safe_required - self.cb_safe_ticks if self.cb_active else 0
+                        logger.debug(f"📉 Volume z={z:.2f} (EMA={z_smoothed:.2f}) | on>={threshold_on:.2f} off<={threshold_off:.2f} | safe_ticks={self.cb_safe_ticks}/{self.cb_safe_required} (need {ticks_remaining} more)")
                     except Exception:
                         pass
-                    if not prev and z >= threshold_on:
+                    
+                    # Use smoothed z-score for breaker logic
+                    if not prev and z_smoothed >= threshold_on:
                         self.cb_active = True
                         self.cb_safe_ticks = 0
+                        try:
+                            logger.warning(f"🚨 Circuit breaker ACTIVATED: volume z={z:.2f} (EMA={z_smoothed:.2f}) >= {threshold_on:.2f}")
+                        except Exception:
+                            pass
                     elif prev:
-                        if z <= threshold_off:
+                        if z_smoothed <= threshold_off:
                             self.cb_safe_ticks += 1
                             if self.cb_safe_ticks >= self.cb_safe_required:
                                 self.cb_active = False
                                 self.cb_safe_ticks = 0
                                 try:
-                                    logger.info("✅ Circuit breaker auto-recovered: volume (consecutive safe ticks)")
+                                    logger.info(f"✅ Circuit breaker RECOVERED: volume z={z:.2f} (EMA={z_smoothed:.2f}) <= {threshold_off:.2f} for {self.cb_safe_required} ticks")
                                 except Exception:
                                     pass
                         else:
