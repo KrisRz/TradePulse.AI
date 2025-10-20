@@ -4,7 +4,7 @@ Centralized configuration for all confidence thresholds across TradePulse.AI
 """
 
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import structlog
 
 logger = structlog.get_logger(__name__)
