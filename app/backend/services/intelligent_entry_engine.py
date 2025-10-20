@@ -2315,6 +2315,10 @@ class IntelligentEntryEngine:
                 phase_consensus_thresh = 0.60  # Moderate consensus during Phase 1 for Bitcoin scalping (was 0.75, too strict!)
         elif phase == 2:
             phase_consensus_thresh = 0.58  # Medium consensus required during Phase 2 (was 0.60)
+        elif phase == 3:
+            # 🔧 FIX (Oct 2025): Phase 3 (fully warmed) - crypto day trading needs lower threshold
+            # Consensus 0.62-0.64 is good enough for 70% confidence BUY signals
+            phase_consensus_thresh = 0.60  # Was missing → fallback to 0.65 (too high!)
         
         # Enhanced checks with phase-based and exploratory support
         meets_consensus = enter_votes > wait_votes and consensus_score > phase_consensus_thresh
