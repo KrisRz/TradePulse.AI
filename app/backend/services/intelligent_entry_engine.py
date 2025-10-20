@@ -804,10 +804,14 @@ class IntelligentEntryEngine:
                 timestamp=datetime.now(timezone.utc)
             )
         
-        # Update last analysis time (allow entry on new candle or after cooldown)
+        # 🔧 FIX (Oct 2025): Store candle open time, not current time
+        # This ensures consistent candle identity across calls
         if is_new_candle:
-            logger.debug(f"🕯️ New candle detected - allowing entry despite cooldown")
+            logger.debug(f"🕯️ New candle detected (open_time={current_bar_open_time}) - allowing entry despite cooldown")
+        # Store current_time (not bar_open_time) for cooldown calculation
+        # but log the candle identity for debugging
         self.entry_cooldown_cache[symbol] = current_time
+        self.entry_cooldown_cache[f"{symbol}_candle"] = current_bar_open_time  # Track candle identity
         
         # OPTIMIZED PHASE-BASED WARMUP: Allow entries with higher thresholds during phases
         current_phase = self.get_current_warmup_phase()

@@ -751,34 +751,59 @@ class DayTradingEngine:
                     # Use EMA z-score for breaker decisions (smoother)
                     z_smoothed = self.z_ema
                     
-                    prev = self.cb_active
-                    # 🔧 FIX (Oct 2025): Enhanced logging with raw + smoothed z-score
-                    try:
-                        ticks_remaining = self.cb_safe_required - self.cb_safe_ticks if self.cb_active else 0
-                        logger.debug(f"📉 Volume z={z:.2f} (EMA={z_smoothed:.2f}) | on>={threshold_on:.2f} off<={threshold_off:.2f} | safe_ticks={self.cb_safe_ticks}/{self.cb_safe_required} (need {ticks_remaining} more)")
-                    except Exception:
-                        pass
+                    # 🔧 FIX (Oct 2025): FSM-based breaker with both raw + EMA checks
+                    # ON: raw_z >= on AND ema_z >= on*0.7 (prevents false activation from single spike)
+                    # OFF: raw_z <= off AND ema_z <= off for N consecutive ticks
+                    ema_on_threshold = threshold_on * 0.7  # 70% of ON threshold for EMA
                     
-                    # Use smoothed z-score for breaker logic
-                    if not prev and z_smoothed >= threshold_on:
-                        self.cb_active = True
-                        self.cb_safe_ticks = 0
-                        try:
-                            logger.warning(f"🚨 Circuit breaker ACTIVATED: volume z={z:.2f} (EMA={z_smoothed:.2f}) >= {threshold_on:.2f}")
-                        except Exception:
-                            pass
-                    elif prev:
-                        if z_smoothed <= threshold_off:
+                    prev = self.cb_active
+                    
+                    # Calculate ticks needed for recovery (fix off-by-one)
+                    ticks_needed = max(0, self.cb_safe_required - self.cb_safe_ticks)
+                    
+                    # FSM State Machine
+                    if not prev:
+                        # State: OFF → check for activation
+                        # Require BOTH raw and EMA to exceed thresholds
+                        if z >= threshold_on and z_smoothed >= ema_on_threshold:
+                            self.cb_active = True
+                            self.cb_safe_ticks = 0
+                            try:
+                                logger.warning(f"🚨 CB state=ON raw_z={z:.2f} ema_z={z_smoothed:.2f} on={threshold_on:.2f} reason=raw>={threshold_on:.2f}&ema>={ema_on_threshold:.2f}")
+                            except Exception:
+                                pass
+                        else:
+                            # Still OFF, log debug
+                            try:
+                                logger.debug(f"📉 CB state=OFF raw_z={z:.2f} ema_z={z_smoothed:.2f} on={threshold_on:.2f} off={threshold_off:.2f}")
+                            except Exception:
+                                pass
+                    else:
+                        # State: ON → check for recovery
+                        # Require BOTH raw and EMA below OFF threshold
+                        if z <= threshold_off and z_smoothed <= threshold_off:
                             self.cb_safe_ticks += 1
                             if self.cb_safe_ticks >= self.cb_safe_required:
+                                # Recovery complete
                                 self.cb_active = False
                                 self.cb_safe_ticks = 0
                                 try:
-                                    logger.info(f"✅ Circuit breaker RECOVERED: volume z={z:.2f} (EMA={z_smoothed:.2f}) <= {threshold_off:.2f} for {self.cb_safe_required} ticks")
+                                    logger.info(f"✅ CB recover raw_z={z:.2f} ema_z={z_smoothed:.2f} safe={self.cb_safe_required}/{self.cb_safe_required}")
+                                except Exception:
+                                    pass
+                            else:
+                                # Still accumulating safe ticks
+                                try:
+                                    logger.debug(f"📉 CB state=ON raw_z={z:.2f} ema_z={z_smoothed:.2f} safe={self.cb_safe_ticks}/{self.cb_safe_required} need={ticks_needed}")
                                 except Exception:
                                     pass
                         else:
-                            # still risky, reset safe counter
+                            # Condition broken, reset safe counter
+                            if self.cb_safe_ticks > 0:
+                                try:
+                                    logger.debug(f"⚠️ CB safe reset: raw_z={z:.2f} ema_z={z_smoothed:.2f} (was {self.cb_safe_ticks}/{self.cb_safe_required})")
+                                except Exception:
+                                    pass
                             self.cb_safe_ticks = 0
                     # export status
                     try:
