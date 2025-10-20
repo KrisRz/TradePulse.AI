@@ -1629,7 +1629,10 @@ class EnterpriseTradingEngine:
             
             # EXPLORATORY SIGNAL (lower thresholds for small positions)
             # ✅ PROFESSIONAL: Always enabled for day trading opportunities
-            exploratory_signal = self._calculate_exploratory_signal(confidence, timing_score, reversal_prob, filter_score, volatility)
+            exploratory_signal = self._calculate_exploratory_signal(
+                confidence, timing_score, reversal_prob, filter_score, volatility,
+                layer_results.get("features", {})  # Pass features for alternative SELL signals
+            )
             if exploratory_signal[0] != "HOLD":
                 return exploratory_signal[0], exploratory_signal[1], "exploratory"
             
@@ -1682,9 +1685,20 @@ class EnterpriseTradingEngine:
             
             filter_check = filter_score > 0.08  # SCALPING: Lower filter threshold (was 0.15)
             timing_buy_check = timing_score > 0.008   # SCALPING: More sensitive timing (was 0.02)
-            timing_sell_check = timing_score < -0.008 # SCALPING: More sensitive timing (was -0.02)
+            timing_sell_check = timing_score < -0.003 # SCALPING: RELAXED for day trading (was -0.008) - allows SELL in neutral/slightly bullish markets
+            
+            # 🔥 CRITICAL FIX: Alternative SELL signals for mean reversion (day trading needs SHORT positions!)
+            # Even in bullish markets, overbought conditions present SHORT opportunities
+            mean_reversion_sell = (rsi > 70 and bb_pos > 0.85 and reversal_prob > 0.60)  # Strong overbought reversal
+            resistance_rejection_sell = (bb_pos > 0.95 and macd < 0.0)  # Price rejected at upper band with bearish MACD
+            momentum_shift_sell = (timing_score < 0.0 and macd < -0.001 and volume_ratio > 1.2)  # Momentum turning bearish with volume
+            
+            # Combined SELL check: timing OR alternative signals
+            any_sell_signal = timing_sell_check or mean_reversion_sell or resistance_rejection_sell or momentum_shift_sell
             
             logger.info(f"DAY TRADING CHECKS - conf:{conf_check}, reversal_opp:{reversal_opportunity}, filter:{filter_check}, timing_buy:{timing_buy_check}, timing_sell:{timing_sell_check}")
+            if any_sell_signal and not timing_sell_check:
+                logger.info(f"🎯 ALTERNATIVE SELL PATH: mean_rev={mean_reversion_sell}, resistance={resistance_rejection_sell}, momentum={momentum_shift_sell}")
             
             # 🎯 DAY TRADING: Special logic for extreme oversold/overbought conditions
             # Bind to actual RSI/BB to avoid mislabeling
@@ -1903,7 +1917,7 @@ class EnterpriseTradingEngine:
                     self._track_signal_metrics("SELL", confidence, rsi, reversal_prob, signal_type="extreme_overbought")
                     return "SELL", confidence
             
-            # Standard day trading: Confidence + reversal + filter + timing + RSI safety
+            # Standard day trading: Confidence + reversal + filter + (timing OR alternative SELL signals) + RSI safety
             if conf_check and reversal_check and filter_check:
                 if timing_buy_check and not rsi_overbought_danger:  # ✅ FIX: Don't buy when RSI > 80
                     action = "BUY"
@@ -1911,9 +1925,10 @@ class EnterpriseTradingEngine:
                     # 📊 METRICS: Track standard BUY signal
                     self._track_signal_metrics("BUY", confidence, rsi, reversal_prob, signal_type="standard")
                     return action, confidence
-                elif timing_sell_check and not rsi_oversold_danger:  # ✅ FIX: Don't sell when RSI < 20
+                elif any_sell_signal and not rsi_oversold_danger:  # 🔥 FIX: Use combined SELL check (timing OR mean reversion)
                     action = "SELL"
-                    logger.info(f"✅ DAY TRADING SIGNAL: {action} (standard_sell)")
+                    sell_reason = "timing" if timing_sell_check else "mean_reversion" if mean_reversion_sell else "resistance" if resistance_rejection_sell else "momentum"
+                    logger.info(f"✅ DAY TRADING SIGNAL: {action} (standard_sell_{sell_reason})")
                     # 📊 METRICS: Track standard SELL signal
                     self._track_signal_metrics("SELL", confidence, rsi, reversal_prob, signal_type="standard")
                     return action, confidence
@@ -1921,7 +1936,7 @@ class EnterpriseTradingEngine:
                     logger.warning(f"⚠️ BUY signal BLOCKED by RSI safety check (RSI={rsi:.1f} > 80)")
                     # 📊 METRICS: Track blocked BUY
                     self.signal_metrics["buy_signals"]["blocked_by_rsi_count"] += 1
-                elif timing_sell_check and rsi_oversold_danger:
+                elif any_sell_signal and rsi_oversold_danger:
                     logger.warning(f"⚠️ SELL signal BLOCKED by RSI safety check (RSI={rsi:.1f} < 20)")
                     # 📊 METRICS: Track blocked SELL
                     self.signal_metrics["sell_signals"]["blocked_by_rsi_count"] += 1
@@ -1935,15 +1950,28 @@ class EnterpriseTradingEngine:
             logger.error(f"Primary signal calculation error: {e}")
             return "HOLD", 0.5
         
-    def _calculate_exploratory_signal(self, confidence: float, timing_score: float, reversal_prob: float, filter_score: float, volatility: float) -> Tuple[str, float]:
+    def _calculate_exploratory_signal(self, confidence: float, timing_score: float, reversal_prob: float, filter_score: float, volatility: float, features: Dict[str, float] = None) -> Tuple[str, float]:
         """Calculate exploratory signal for small probing positions using unified thresholds"""
         try:
+            # Extract technical indicators for alternative SELL signals
+            if features is None:
+                features = {}
+            rsi = float(features.get("rsi", 50.0))
+            bb_pos = float(features.get("bb_position", features.get("bollinger_position", 0.5)))
+            macd = float(features.get("macd", 0.0))
+            
             # Use unified exploratory threshold for consistency
             conf_check = confidence >= self.thresholds.confidence.EXPLORATORY_BUY  # 45% threshold
             reversal_check = reversal_prob < 0.75  # Higher tolerance for reversal risk
             volatility_check = volatility < 0.12  # Avoid high volatility periods
             timing_buy_check = timing_score > 0.005  # Very low timing requirement
-            timing_sell_check = timing_score < -0.005
+            timing_sell_check = timing_score < -0.002  # 🔥 RELAXED for exploratory (was -0.005)
+            
+            # 🔥 Alternative SELL signals for exploratory (lower requirements)
+            exploratory_mean_reversion = (rsi > 68 and bb_pos > 0.80)  # Slightly lower requirements than standard
+            exploratory_momentum_shift = (timing_score < 0.0 and macd < 0.0)  # Any bearish momentum
+            
+            any_exploratory_sell = timing_sell_check or exploratory_mean_reversion or exploratory_momentum_shift
             
             # CRITICAL FIX: Much lower filter threshold for exploratory signals
             filter_check = filter_score > 0.05  # Very low filter requirement (5%)
@@ -1956,10 +1984,11 @@ class EnterpriseTradingEngine:
                     exploratory_confidence = max(confidence * 0.7, 0.2)
                     logger.info(f"🔬 EXPLORATORY SIGNAL: BUY (conf={exploratory_confidence:.2f})")
                     return "BUY", exploratory_confidence
-                elif timing_sell_check:
+                elif any_exploratory_sell:
                     # Reduce confidence for exploratory signals
                     exploratory_confidence = max(confidence * 0.7, 0.2)
-                    logger.info(f"🔬 EXPLORATORY SIGNAL: SELL (conf={exploratory_confidence:.2f})")
+                    sell_reason = "timing" if timing_sell_check else "mean_rev" if exploratory_mean_reversion else "momentum"
+                    logger.info(f"🔬 EXPLORATORY SIGNAL: SELL_{sell_reason} (conf={exploratory_confidence:.2f})")
                     return "SELL", exploratory_confidence
             
             return "HOLD", confidence

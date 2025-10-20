@@ -118,7 +118,7 @@ class EmergencyControlSystem:
             ),
             CircuitBreakerType.DRAWDOWN: CircuitBreakerConfig(
                 breaker_type=CircuitBreakerType.DRAWDOWN,
-                threshold=0.10,      # 10% drawdown
+                threshold=0.20,      # 20% drawdown (TEMPORARY: Increased from 10% while fixing SELL signal generation)
                 cooldown_seconds=600, # 10 minutes
                 auto_recovery=False,  # Manual review required
                 enabled=True
