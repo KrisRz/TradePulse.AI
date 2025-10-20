@@ -603,15 +603,34 @@ class PriceForecastingService:
             recommended_action = "HOLD"
         
         # Confidence boost for entry engine
+        # 🔧 FIX (Oct 2025): Only boost if prediction deltas are meaningful (≥0.15%)
+        # Prevents artificial lifts from trivial predictions (e.g., +0.08% / -0.00%)
         # Strong predictions boost confidence, weak predictions reduce it
-        if avg_confidence > 0.75 and momentum_strength in ["moderate", "strong"]:
+        
+        # Check if any prediction has meaningful delta (≥0.15%)
+        meaningful_predictions = sum(
+            1 for pred in predictions.values() 
+            if abs(pred.expected_move_pct) >= 0.15
+        )
+        
+        # Require at least 2 horizons agreeing on meaningful move
+        has_meaningful_signal = meaningful_predictions >= 2
+        
+        # 🔧 FIX (Oct 2025): Detailed logging for boost decision
+        if has_meaningful_signal and avg_confidence > 0.75 and momentum_strength in ["moderate", "strong"]:
             confidence_boost = 0.15  # +15%
-        elif avg_confidence > 0.65:
+            boost_reason = f"agreeing_horizons({meaningful_predictions}/3, avg_conf={avg_confidence:.2f}, momentum={momentum_strength})"
+        elif has_meaningful_signal and avg_confidence > 0.65:
             confidence_boost = 0.10  # +10%
-        elif avg_confidence > 0.55:
+            boost_reason = f"agreeing_horizons({meaningful_predictions}/3, avg_conf={avg_confidence:.2f})"
+        elif has_meaningful_signal and avg_confidence > 0.55:
             confidence_boost = 0.05  # +5%
+            boost_reason = f"agreeing_horizons({meaningful_predictions}/3, avg_conf={avg_confidence:.2f}, weak)"
         else:
-            confidence_boost = 0.0  # Neutral
+            confidence_boost = 0.0  # Neutral (no boost for trivial predictions)
+            boost_reason = f"no_boost(meaningful={meaningful_predictions}/3, max_delta={max([abs(p.expected_move_pct) for p in predictions.values()]):.2f}%)"
+        
+        logger.debug(f"📊 LAYER-7 BOOST: {confidence_boost:+.2f} | {boost_reason}")
         
         return {
             "short_term_bias": short_term_bias,

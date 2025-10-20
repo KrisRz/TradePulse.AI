@@ -1689,9 +1689,17 @@ class EnterpriseTradingEngine:
             macd = float(features.get("macd", 0.0))
             volume_ratio = float(features.get("volume_ratio", 1.0))
             
+            # 🔧 FIX (Oct 2025): Cap timing contribution to prevent marginal setups from passing
+            # Timing alone shouldn't push confidence over thresholds
+            # Cap timing influence to ±0.10 absolute to avoid timing-driven false signals
+            capped_timing_score = max(-0.10, min(0.10, timing_score))
+            
             filter_check = filter_score > 0.08  # SCALPING: Lower filter threshold (was 0.15)
-            timing_buy_check = timing_score > 0.008   # SCALPING: More sensitive timing (was 0.02)
-            timing_sell_check = timing_score < -0.003 # SCALPING: RELAXED for day trading (was -0.008) - allows SELL in neutral/slightly bullish markets
+            timing_buy_check = capped_timing_score > 0.008   # SCALPING: More sensitive timing (was 0.02)
+            timing_sell_check = capped_timing_score < -0.003 # SCALPING: RELAXED for day trading (was -0.008) - allows SELL in neutral/slightly bullish markets
+            
+            if timing_score != capped_timing_score:
+                logger.debug(f"⚖️ TIMING CAPPED: {timing_score:.3f} → {capped_timing_score:.3f} (max ±0.10)")
             
             # 🔥 CRITICAL FIX: Alternative SELL signals for mean reversion (day trading needs SHORT positions!)
             # Even in bullish markets, overbought conditions present SHORT opportunities
@@ -1699,12 +1707,33 @@ class EnterpriseTradingEngine:
             resistance_rejection_sell = (bb_pos > 0.95 and macd < 0.0)  # Price rejected at upper band with bearish MACD
             momentum_shift_sell = (timing_score < 0.0 and macd < -0.001 and volume_ratio > 1.2)  # Momentum turning bearish with volume
             
-            # Combined SELL check: timing OR alternative signals
-            any_sell_signal = timing_sell_check or mean_reversion_sell or resistance_rejection_sell or momentum_shift_sell
+            # 🔧 FIX (Oct 2025): Fade-top-band micro-playbook for shorts in sideways markets
+            # When BB_pos ≥ 0.98 AND RSI ≥ 68 AND MACD histogram narrowing AND low vol → fade the top
+            # This is a high-signal short opportunity in sideways/low-vol regimes
+            regime = layer_results.get("layer_1_regime", {}) if layer_results else {}
+            is_sideways = regime.get("regime", "") == "sideways"
+            volatility_pct = float(features.get("volatility", 0.05))
+            
+            # Check for MACD histogram narrowing (approximation: MACD approaching 0)
+            macd_narrowing = abs(macd) < 0.0005  # MACD histogram narrowing (near zero)
+            
+            fade_top_band = (
+                bb_pos >= 0.98 and 
+                rsi >= 68 and 
+                macd_narrowing and 
+                volatility_pct < 0.001 and  # zVol < 1.0 (0.1%)
+                is_sideways
+            )
+            
+            if fade_top_band:
+                logger.info(f"🎯 FADE-TOP-BAND: BB={bb_pos:.3f}, RSI={rsi:.1f}, MACD={macd:.5f}, Vol={volatility_pct:.4f}")
+            
+            # Combined SELL check: timing OR alternative signals OR fade-top-band
+            any_sell_signal = timing_sell_check or mean_reversion_sell or resistance_rejection_sell or momentum_shift_sell or fade_top_band
             
             logger.info(f"DAY TRADING CHECKS - conf:{conf_check}, reversal_opp:{reversal_opportunity}, filter:{filter_check}, timing_buy:{timing_buy_check}, timing_sell:{timing_sell_check}")
             if any_sell_signal and not timing_sell_check:
-                logger.info(f"🎯 ALTERNATIVE SELL PATH: mean_rev={mean_reversion_sell}, resistance={resistance_rejection_sell}, momentum={momentum_shift_sell}")
+                logger.info(f"🎯 ALTERNATIVE SELL PATH: mean_rev={mean_reversion_sell}, resistance={resistance_rejection_sell}, momentum={momentum_shift_sell}, fade_band={fade_top_band}")
             
             # 🎯 DAY TRADING: Special logic for extreme oversold/overbought conditions
             # Bind to actual RSI/BB to avoid mislabeling
@@ -1966,8 +1995,21 @@ class EnterpriseTradingEngine:
             bb_pos = float(features.get("bb_position", features.get("bollinger_position", 0.5)))
             macd = float(features.get("macd", 0.0))
             
-            # Use unified exploratory threshold for consistency
-            conf_check = confidence >= self.thresholds.confidence.EXPLORATORY_BUY  # 45% threshold
+            # 🔧 FIX (Oct 2025): Dynamic exploratory threshold in low-vol regimes
+            # When volatility ≤ 0.05% & BB_pos ≥ 0.90 & RSI ∈ [55,70] → relax to 0.52
+            # This allows tiny, time-boxed exploratory longs near band touch when timing is strong
+            base_exploratory_threshold = self.thresholds.confidence.EXPLORATORY_BUY  # 0.55 default
+            
+            is_low_vol_regime = (volatility <= 0.0005 and bb_pos >= 0.90 and 55 <= rsi <= 70)
+            exploratory_threshold = 0.52 if is_low_vol_regime else base_exploratory_threshold
+            
+            if is_low_vol_regime:
+                logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED to 0.52 (from {base_exploratory_threshold:.2f}) | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
+            else:
+                logger.debug(f"📊 EXPLORATORY THRESHOLD: STANDARD {exploratory_threshold:.2f} | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
+            
+            # Use dynamic exploratory threshold
+            conf_check = confidence >= exploratory_threshold
             reversal_check = reversal_prob < 0.75  # Higher tolerance for reversal risk
             volatility_check = volatility < 0.12  # Avoid high volatility periods
             timing_buy_check = timing_score > 0.005  # Very low timing requirement

@@ -127,11 +127,15 @@ class DayTradingEngine:
         self.positions_opened = 0
         self.avg_analysis_time_ms = 0
         # Circuit breaker (volume z-score) hysteresis
+        # 🔧 FIX (Oct 2025): Adaptive volume gate scaling
+        # When zVol < 1.0 and ATR/close < 0.10%, scale thresholds to 2.2/1.2
+        # This allows arming in low-volatility conditions
         self.cb_active = False
-        self.cb_threshold_on = 3.5
-        self.cb_threshold_off = 2.0
+        self.cb_threshold_on = 3.5  # Default on threshold
+        self.cb_threshold_off = 2.0  # Default off threshold
         self.cb_safe_ticks = 0
         self.cb_safe_required = 3  # require N consecutive safe ticks before resuming
+        self.cb_safe_window_sec = 90  # Allow accumulation across 90s in micro-vol
         # Duplicate suppression burst tracker (timestamps of suppressions)
         self._dupe_suppress_ts: List[float] = []
         
@@ -697,17 +701,34 @@ class DayTradingEngine:
                         set_volume_zscore("BTCUSDT", float(z))
                     except Exception:
                         pass
+                    
+                    # 🔧 FIX (Oct 2025): Adaptive volume gate scaling
+                    # When zVol < 1.0 and ATR/close < 0.10%, scale thresholds to 2.2/1.2
+                    vol_ratio = market_data.get("volume_ratio", 1.0)
+                    volatility = market_data.get("volatility", 0.05)
+                    atr_pct = volatility  # ATR/close approximation
+                    
+                    is_low_vol_regime = (vol_ratio < 1.0 and atr_pct < 0.001)
+                    if is_low_vol_regime:
+                        threshold_on = 2.2
+                        threshold_off = 1.2
+                        logger.info(f"📊 VOLUME GATE: LOW-VOL REGIME (on={threshold_on}, off={threshold_off}) | vol_ratio={vol_ratio:.2f}, atr={atr_pct:.4f}")
+                    else:
+                        threshold_on = self.cb_threshold_on
+                        threshold_off = self.cb_threshold_off
+                        logger.debug(f"📊 VOLUME GATE: NORMAL (on={threshold_on}, off={threshold_off}) | vol_ratio={vol_ratio:.2f}, atr={atr_pct:.4f}")
+                    
                     prev = self.cb_active
                     # Detailed logging of z and thresholds
                     try:
-                        logger.debug(f"📉 Volume z={z:.2f} | on>={self.cb_threshold_on:.2f} off<={self.cb_threshold_off:.2f} (safe_ticks={self.cb_safe_ticks}/{self.cb_safe_required})")
+                        logger.debug(f"📉 Volume z={z:.2f} | on>={threshold_on:.2f} off<={threshold_off:.2f} (safe_ticks={self.cb_safe_ticks}/{self.cb_safe_required})")
                     except Exception:
                         pass
-                    if not prev and z >= self.cb_threshold_on:
+                    if not prev and z >= threshold_on:
                         self.cb_active = True
                         self.cb_safe_ticks = 0
                     elif prev:
-                        if z <= self.cb_threshold_off:
+                        if z <= threshold_off:
                             self.cb_safe_ticks += 1
                             if self.cb_safe_ticks >= self.cb_safe_required:
                                 self.cb_active = False

@@ -191,9 +191,17 @@ async def load_recent(symbol: str = "BTCUSDT", horizon: str = '30m') -> list:
         return []
 
 
+# 🔧 FIX (Oct 2025): Decision audit de-duplication cache
+# Prevents writing the same HOLD/low_confidence decision repeatedly
+_decision_cache = {}  # {symbol: (decision_type, reason, timestamp)}
+_decision_cache_ttl_sec = 120  # 2 minutes
+
 async def write_decisions(entry_decision, exit_decision, risk_assessment, signal) -> bool:
     """
     PHASE 1A: Write trading decisions for audit trail
+    
+    🔧 FIX (Oct 2025): De-duplicates HOLD/low_confidence decisions to reduce noise
+    Only writes if decision changed or 120s elapsed since last write
     
     Returns:
         bool: True if successfully written, False otherwise
@@ -208,6 +216,27 @@ async def write_decisions(entry_decision, exit_decision, risk_assessment, signal
         # Ensure proper key types for DynamoDB
         timestamp_now = datetime.now(timezone.utc)
         
+        # 🔧 FIX (Oct 2025): De-duplicate HOLD/low_confidence decisions
+        symbol = "BTCUSDT"
+        signal_action = signal.action if signal else "none"
+        entry_reason = entry_decision.get('reasoning', 'none') if entry_decision else "none"
+        decision_type = f"{signal_action}_{entry_reason}"
+        
+        # Check if this is a duplicate decision
+        if symbol in _decision_cache:
+            cached_type, cached_reason, cached_time = _decision_cache[symbol]
+            time_since_last = (timestamp_now.timestamp() - cached_time)
+            
+            # Skip write if same decision within TTL window
+            if cached_type == decision_type and time_since_last < _decision_cache_ttl_sec:
+                # Only log for HOLD decisions to reduce noise
+                if signal_action == "HOLD":
+                    print(f"⏭️ Skipping duplicate HOLD decision (last {time_since_last:.0f}s ago)")
+                return True  # Return success without writing
+        
+        # Update cache
+        _decision_cache[symbol] = (decision_type, entry_reason, timestamp_now.timestamp())
+        
         # Generate unique decision_id (required partition key for trading_decisions)
         import uuid
         decision_id = f"decision_{timestamp_now.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
@@ -217,11 +246,11 @@ async def write_decisions(entry_decision, exit_decision, risk_assessment, signal
             "timestamp": int(timestamp_now.timestamp()),  # Sort key (RANGE) - must be Number (epoch)
             "day": str(today),  # Partition for queries
             "timestamp_iso": timestamp_now.isoformat(),  # Human-readable timestamp
-            "symbol": "BTCUSDT",
-            "signal_action": signal.action if signal else "none",
+            "symbol": symbol,
+            "signal_action": signal_action,
             "signal_confidence": Decimal(str(signal.confidence)) if signal else Decimal('0.0'),
             "entry_decision": entry_decision.get('should_enter', False) if entry_decision else False,
-            "entry_reason": entry_decision.get('reasoning', 'none') if entry_decision else "none",
+            "entry_reason": entry_reason,
             "entry_reason_canonical": entry_decision.get('canonical_reason', None) if entry_decision else None,
             "entry_blockers": entry_decision.get('blockers', None) if entry_decision else None,
             "entry_playbook": entry_decision.get('playbook', None) if entry_decision else None,
