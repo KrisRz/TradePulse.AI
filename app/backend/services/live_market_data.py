@@ -362,7 +362,7 @@ class LiveMarketDataService:
 					ping_timeout=10,       # Wait 10s for pong (tighter)
 					close_timeout=10,
 					max_queue=1000,        # Limit queue size
-					read_limit=2**20,      # 1MB read limit
+					max_size=2**20,        # 1MB max message size
 					write_limit=2**20,     # 1MB write limit
 					compression=None       # Disable compression to reduce backpressure
 				)
@@ -503,7 +503,7 @@ class LiveMarketDataService:
 					ping_timeout=10,       # Wait 10s for pong (tighter)
 					close_timeout=10,
 					max_queue=1000,        # Limit queue size
-					read_limit=2**20,      # 1MB read limit
+					max_size=2**20,        # 1MB max message size
 					write_limit=2**20,     # 1MB write limit
 					compression=None       # Disable compression to reduce backpressure
 				)

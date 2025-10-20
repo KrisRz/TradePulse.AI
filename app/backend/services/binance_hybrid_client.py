@@ -357,8 +357,8 @@ class BinanceHybridClient:
                     ping_interval=self.config.ws_ping_interval,  # 15s
                     ping_timeout=10,                             # 10s (tighter than before)
                     close_timeout=10,
+                    max_size=2**20,        # 1MB max message size
                     max_queue=1000,        # Limit queue size
-                    read_limit=2**20,      # 1MB read limit
                     write_limit=2**20,     # 1MB write limit
                     compression=None       # Disable compression to reduce backpressure
                 ) as websocket:
