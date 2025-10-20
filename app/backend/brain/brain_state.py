@@ -245,7 +245,7 @@ class BrainControllerState(BaseModel):
     cycle_interval_seconds: int = 15
     max_positions: int = 5
     position_size_pct: Decimal = Decimal('0.05')
-    confidence_threshold: Decimal = Decimal('0.45')  # Bitcoin scalping threshold (was 0.65 - too high!)
+    confidence_threshold: Decimal = Decimal('0.55')  # Exploratory threshold for sideways markets (lowered from 0.45)
     
     class Config:
         arbitrary_types_allowed = True

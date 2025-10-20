@@ -2267,9 +2267,9 @@ class IntelligentEntryEngine:
             base_consensus_thresh = 0.60
         
         # Unified signal threshold
-        from app.backend.config.trading_thresholds import ConfidenceThresholds
-        thresholds = ConfidenceThresholds()
-        signal_thresh = thresholds.BUY_THRESHOLD if not is_exploratory else thresholds.EXPLORATORY_BUY
+        from app.backend.config.trading_thresholds import get_trading_thresholds
+        thresholds = get_trading_thresholds()
+        signal_thresh = thresholds.confidence.BUY_THRESHOLD if not is_exploratory else thresholds.confidence.EXPLORATORY_BUY
         try:
             from app.backend.services.metrics import set_decision_threshold
             set_decision_threshold("entry", "exploratory" if is_exploratory else "primary", f"phase{phase}", float(signal_thresh))
