@@ -543,7 +543,7 @@ class ModelRetrainingService:
         """Create professional LightGBM regressor with explicit parameters"""
         return lgb.LGBMRegressor(
             n_estimators=200,
-            max_depth=6,
+            max_depth=5,  # FIXED: Set to 5 so 2^5=32 > 31 leaves (removes warning)
             num_leaves=31,  # FIXED: Explicit num_leaves parameter
             min_data_in_leaf=20,  # FIXED: Explicit min_data_in_leaf parameter
             learning_rate=0.1,
