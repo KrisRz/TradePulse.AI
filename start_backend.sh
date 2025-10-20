@@ -119,8 +119,8 @@ echo "🚀 AUTO-START: Starting Day Trading Engine..."
 curl -X POST http://localhost:${PORT}/api/trading/modes/start
 
 echo "✅ COMPLETE: TradePulse.AI is fully operational!"
-echo "📊 Day Trading Engine is analyzing market every 12 seconds"
-echo "🎯 Ready for aggressive scalping with 35% confidence threshold"
+echo "📊 Day Trading Engine is analyzing market every ~21s (adaptive based on volatility)"
+echo "🎯 Ready for day trading with 70% confidence threshold (balanced for sideways markets)"
 
 # Keep backend running in foreground
 wait $BACKEND_PID

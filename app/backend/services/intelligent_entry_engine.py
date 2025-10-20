@@ -763,14 +763,24 @@ class IntelligentEntryEngine:
         
         logger.info(f"📈 PREDICTIVE ANALYSIS: Current price {current_price:.2f}, Signal: {signal_action}, History points: {len(self.price_history)}")
         
-        # COOLDOWN CHECK: Prevent excessive analysis
+        # COOLDOWN CHECK: Respect candle boundaries
+        # 🔧 FIX (Oct 2025): Cooldown respects candle boundaries - allow entry on new candle
         import time
         current_time = time.time()
         last_analysis_time = self.entry_cooldown_cache.get(symbol, 0)
         
-        if current_time - last_analysis_time < self.entry_cooldown_seconds:
-            remaining_cooldown = self.entry_cooldown_seconds - (current_time - last_analysis_time)
-            logger.debug(f"🔄 PIPELINE DEBUG: Entry Engine - Cooldown active for {symbol}, {remaining_cooldown:.1f}s remaining")
+        # Calculate candle boundary (1-minute candles)
+        bar_duration_sec = 60  # 1-minute candles
+        current_bar_open_time = int(current_time / bar_duration_sec) * bar_duration_sec
+        last_bar_open_time = int(last_analysis_time / bar_duration_sec) * bar_duration_sec if last_analysis_time > 0 else 0
+        
+        # Cooldown = max(10s, bar_duration) OR new candle
+        cooldown_sec = max(self.entry_cooldown_seconds, bar_duration_sec)
+        is_new_candle = current_bar_open_time > last_bar_open_time
+        
+        if current_time - last_analysis_time < cooldown_sec and not is_new_candle:
+            remaining_cooldown = cooldown_sec - (current_time - last_analysis_time)
+            logger.debug(f"🔄 PIPELINE DEBUG: Entry Engine - Cooldown active for {symbol}, {remaining_cooldown:.1f}s remaining (same candle)")
             
             # Get current price even during cooldown
             try:
@@ -788,13 +798,15 @@ class IntelligentEntryEngine:
                 position_size_recommendation=0.0,
                 risk_score=1.0,
                 timing_score=0.0,
-                layer_analysis={"cooldown_status": "active"},
+                layer_analysis={"cooldown_status": "active", "new_candle": False},
                 market_conditions={"cooldown_remaining_seconds": remaining_cooldown},
                 analysis_time_ms=0.0,
                 timestamp=datetime.now(timezone.utc)
             )
         
-        # Update last analysis time
+        # Update last analysis time (allow entry on new candle or after cooldown)
+        if is_new_candle:
+            logger.debug(f"🕯️ New candle detected - allowing entry despite cooldown")
         self.entry_cooldown_cache[symbol] = current_time
         
         # OPTIMIZED PHASE-BASED WARMUP: Allow entries with higher thresholds during phases

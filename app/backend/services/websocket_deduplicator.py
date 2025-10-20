@@ -238,13 +238,20 @@ def process_ticker_message(data: Dict[str, Any], processor_func) -> bool:
 
 
 def process_kline_message(data: Dict[str, Any], processor_func) -> bool:
-    """Process kline message with deduplication"""
+    """Process kline message with deduplication
+    
+    🔧 FIX (Oct 2025): Enhanced deduplication using (symbol, start, end, eventTime)
+    This prevents processing the same candle event multiple times from duplicate streams
+    """
     if 'k' in data:
         kline = data['k']
         symbol = kline.get('s', 'UNKNOWN')
         interval = kline.get('i', 'UNKNOWN')
-        kline_start_time = kline.get('t', 0)  # Kline start time for uniqueness
-        extra_id = f"{symbol}:{interval}:{kline_start_time}"
+        kline_start_time = kline.get('t', 0)  # Kline start time
+        kline_end_time = kline.get('T', 0)    # Kline end time
+        event_time = data.get('E', 0)         # Event time
+        # Composite key: (symbol, start, end, eventTime) for complete uniqueness
+        extra_id = f"{symbol}:{interval}:{kline_start_time}:{kline_end_time}:{event_time}"
     else:
         extra_id = "UNKNOWN"
     
