@@ -237,6 +237,10 @@ class DayTradingValidator:
         if len(self.atr_history) > self.atr_history_max_size:
             self.atr_history.pop(0)
         
+        # 🔧 FIX (Oct 2025): Support distance logic - only check minimum (don't get too close)
+        # Having support far away is GOOD (more room for profit) - no max check needed!
+        min_sup_distance = 0.0  # No minimum for now - let AI decide
+        
         return {
             'min_risk_reward_ratio': config.min_risk_reward_ratio,
             'max_spread_pct': config.max_spread_bps / 10000,  # Convert bps to percentage
@@ -244,7 +248,7 @@ class DayTradingValidator:
             'max_volatility': self.atr_percentiles['p95'],  # Use 95th percentile as max
             'min_volatility': min_vol_dynamic,  # DYNAMIC: 0.20% baseline or 0.5× recent median
             'min_resistance_distance': config.min_resistance_distance_atr * current_atr,  # ATR multiple to %
-            'max_support_distance': config.max_support_distance_atr * current_atr  # ATR multiple to %
+            'min_support_distance': min_sup_distance  # Only check if too close (not too far!)
         }
     
     async def validate_day_trading_setup(
@@ -338,9 +342,11 @@ class DayTradingValidator:
             logger.info(f"🎯 HIGH CONFIDENCE ({setup.confidence:.1%}): Skipping volatility check (vol={setup.volatility:.1%})")
             return True, f"HIGH CONFIDENCE override (vol={setup.volatility:.1%})"
         
+        # 🔧 FIX (Oct 2025): Use <= for boundary check (epsilon tolerance)
+        EPS = 1e-9
         if setup.volatility > max_vol:
             return False, f"Volatility too high ({setup.volatility:.1%} > {max_vol:.1%})"
-        if setup.volatility < min_vol:
+        if setup.volatility < min_vol - EPS:  # Allow exact boundary match
             return False, f"Volatility too low ({setup.volatility:.1%} < {min_vol:.1%})"
         return True, f"Volatility OK ({setup.volatility:.1%}, range: {min_vol:.1%}-{max_vol:.1%})"
     
@@ -427,10 +433,17 @@ class DayTradingValidator:
             if resistance_dist < min_res_dist:
                 return False, f"Too close to resistance ({resistance_dist:.2%} < {min_res_dist:.2%})"
             
+            # 🔧 FIX (Oct 2025): Support distance logic corrected
+            # For LONG: We want support BELOW current price (support_dist > 0)
+            # Check: support should NOT be too close (min distance check, not max!)
+            # Having support far away is GOOD (more room for profit) - don't reject it!
             support_dist = abs(setup.current_price - setup.support) / setup.current_price
-            max_sup_dist = params['max_support_distance']
-            if support_dist > max_sup_dist:
-                return False, f"Support too far ({support_dist:.2%} > {max_sup_dist:.2%})"
+            min_sup_dist = params.get('min_support_distance', 0.0)  # Minimum distance (don't get too close)
+            
+            # Only check if support is too CLOSE (not too far!)
+            # Having support 1.5% away is GOOD - gives room for profit
+            if min_sup_dist > 0 and support_dist < min_sup_dist:
+                return False, f"Support too close ({support_dist:.2%} < {min_sup_dist:.2%})"
             
             return True, f"Support/resistance OK (resistance: +{resistance_dist:.2%}, support: -{support_dist:.2%})"
             

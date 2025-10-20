@@ -773,9 +773,9 @@ class DayTradingEngine:
                             except Exception:
                                 pass
                         else:
-                            # Still OFF, log debug
+                            # Still OFF, log info (every tick for visibility)
                             try:
-                                logger.debug(f"📉 CB state=OFF raw_z={z:.2f} ema_z={z_smoothed:.2f} on={threshold_on:.2f} off={threshold_off:.2f}")
+                                logger.info(f"📉 CB state=OFF raw_z={z:.2f} ema_z={z_smoothed:.2f} on={threshold_on:.2f} off={threshold_off:.2f}")
                             except Exception:
                                 pass
                     else:
@@ -794,7 +794,7 @@ class DayTradingEngine:
                             else:
                                 # Still accumulating safe ticks
                                 try:
-                                    logger.debug(f"📉 CB state=ON raw_z={z:.2f} ema_z={z_smoothed:.2f} safe={self.cb_safe_ticks}/{self.cb_safe_required} need={ticks_needed}")
+                                    logger.info(f"📉 CB state=ON raw_z={z:.2f} ema_z={z_smoothed:.2f} safe={self.cb_safe_ticks}/{self.cb_safe_required} need={ticks_needed}")
                                 except Exception:
                                     pass
                         else:
