@@ -1683,6 +1683,12 @@ class EnterpriseTradingEngine:
             reversal_opportunity = reversal_prob > 0.70  # 🔧 PROFESSIONAL FIX: 70%+ reversal = STRONG OPPORTUNITY (was 0.50)
             reversal_check = reversal_opportunity  # Opportunity-based (risk delegated) - stronger confirmation required
             
+            # 🔥 CRITICAL: Extract technical indicators FIRST (needed for alternative SELL signals)
+            rsi = float(features.get("rsi", 50.0))
+            bb_pos = float(features.get("bb_position", features.get("bollinger_position", 0.5)))
+            macd = float(features.get("macd", 0.0))
+            volume_ratio = float(features.get("volume_ratio", 1.0))
+            
             filter_check = filter_score > 0.08  # SCALPING: Lower filter threshold (was 0.15)
             timing_buy_check = timing_score > 0.008   # SCALPING: More sensitive timing (was 0.02)
             timing_sell_check = timing_score < -0.003 # SCALPING: RELAXED for day trading (was -0.008) - allows SELL in neutral/slightly bullish markets
