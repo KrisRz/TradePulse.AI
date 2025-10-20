@@ -1689,17 +1689,20 @@ class EnterpriseTradingEngine:
             macd = float(features.get("macd", 0.0))
             volume_ratio = float(features.get("volume_ratio", 1.0))
             
-            # 🔧 FIX (Oct 2025): Cap timing contribution to prevent marginal setups from passing
-            # Timing alone shouldn't push confidence over thresholds
-            # Cap timing influence to ±0.10 absolute to avoid timing-driven false signals
-            capped_timing_score = max(-0.10, min(0.10, timing_score))
+            # 🔧 FIX (Oct 2025): Dynamic timing cap based on volatility (CRYPTO DAY TRADING)
+            # Low-vol: slightly looser cap (0.15), high-vol: looser cap (0.35)
+            # Crypto needs more room for timing signals than stocks
+            volatility = float(features.get('volatility', 0.02))
+            base_cap = 0.12
+            dynamic_cap = min(0.35, max(0.15, base_cap + 2.0 * volatility))
+            capped_timing_score = max(-dynamic_cap, min(dynamic_cap, timing_score))
             
             filter_check = filter_score > 0.08  # SCALPING: Lower filter threshold (was 0.15)
             timing_buy_check = capped_timing_score > 0.008   # SCALPING: More sensitive timing (was 0.02)
             timing_sell_check = capped_timing_score < -0.003 # SCALPING: RELAXED for day trading (was -0.008) - allows SELL in neutral/slightly bullish markets
             
             if timing_score != capped_timing_score:
-                logger.debug(f"⚖️ TIMING CAPPED: {timing_score:.3f} → {capped_timing_score:.3f} (max ±0.10)")
+                logger.debug(f"⚖️ TIMING CAPPED: {timing_score:.3f} → {capped_timing_score:.3f} (cap=±{dynamic_cap:.2f}, vol={volatility:.4f})")
             
             # 🔥 CRITICAL FIX: Alternative SELL signals for mean reversion (day trading needs SHORT positions!)
             # Even in bullish markets, overbought conditions present SHORT opportunities
@@ -1778,10 +1781,30 @@ class EnterpriseTradingEngine:
             rsi_overbought_danger = rsi > 80  # Extremely overbought - DON'T BUY
             rsi_oversold_danger = rsi < 20     # Extremely oversold - DON'T SELL
             
+            # 🔧 FIX (Oct 2025): Extreme RSI requires microstructure confirmation
+            # Don't blindly buy "falling knife" - need short-term flip signal
+            lstm_1m_pred = layer_results.get('layer_2', {}).get('lstm_1m', 0.5)
+            macd_hist = float(features.get("macd_hist", 0.0)) if "macd_hist" in features else 0.0
+            macd_cross_up = macd > 0.0 and macd_hist > 0.0  # Both positive = bullish cross
+            bb_exit_bottom = bb_pos > 0.05  # Exiting lower band
+            
+            require_micro_confirm_buy = lstm_1m_pred > 0.515 or macd_cross_up or bb_exit_bottom
+            require_micro_confirm_sell = lstm_1m_pred < 0.485 or (macd < 0.0 and macd_hist < 0.0) or bb_pos < 0.95
+            
+            # 🔧 FIX (Oct 2025): RSI Safety for crypto day trading
+            # Instead of BLOCKING, allow reduced-size scalps in extreme conditions
+            # This is key for day trading: small positions in oversold = opportunity, not danger
+            rsi_scalp_mode = False  # Flag for reduced position size
+            
             if rsi_overbought_danger:
                 logger.warning(f"🚨 RSI SAFETY: RSI={rsi:.1f} is EXTREMELY OVERBOUGHT - Blocking BUY signals, only SELL allowed")
             if rsi_oversold_danger:
-                logger.warning(f"🚨 RSI SAFETY: RSI={rsi:.1f} is EXTREMELY OVERSOLD - Blocking SELL signals, only BUY allowed")
+                if not require_micro_confirm_buy:
+                    # 🔧 CRYPTO DAY TRADING: Allow small scalp instead of blocking
+                    rsi_scalp_mode = True
+                    logger.info(f"📉 RSI SCALP MODE: RSI={rsi:.1f} is EXTREMELY OVERSOLD, no micro-confirmation → Allow small BUY (0.5x size)")
+                else:
+                    logger.info(f"✅ RSI CONFIRMED: RSI={rsi:.1f} is EXTREMELY OVERSOLD with micro-confirmation → Full BUY allowed")
             
             # ═══════════════════════════════════════════════════════════════════════════
             # 🎯 TIER 1: EXTREME OVERBOUGHT SCALP (Highest Priority)

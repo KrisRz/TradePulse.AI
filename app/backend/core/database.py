@@ -128,19 +128,22 @@ class DynamoDBClient:
     def put_item(self, table_name: str, item: Dict[str, Any]) -> bool:
         """Put an item in DynamoDB table with proper type conversion"""
         try:
-            logger.info(f"🔄 Attempting to save item to table '{table_name}'")
-            # Extract ID from various possible fields
-            item_id = item.get('id') or item.get('position_id') or item.get('trade_id') or item.get('pk') or 'NO_ID'
-            logger.info(f"📝 Item data: {list(item.keys())} - ID: {item_id}")
+            logger.debug(f"🔄 Attempting to save item to table '{table_name}'")
+            # Extract ID from various possible fields (or use symbol+timestamp for market data)
+            item_id = item.get('id') or item.get('position_id') or item.get('trade_id') or item.get('pk')
+            if not item_id and 'symbol' in item and 'timestamp' in item:
+                item_id = f"{item['symbol']}@{item['timestamp']}"
+            item_id = item_id or 'NO_ID'
+            logger.debug(f"📝 Item data: {list(item.keys())} - ID: {item_id}")
             
             # Convert numeric values to proper DynamoDB format
             processed_item = self._convert_item_types(item)
             
             table = self.get_table(table_name)
-            logger.info(f"✅ Got table reference for '{table_name}'")
+            logger.debug(f"✅ Got table reference for '{table_name}'")
             
             table.put_item(Item=processed_item)
-            logger.info(f"✅ Successfully saved item to '{table_name}' - ID: {item_id}")
+            logger.debug(f"✅ Successfully saved item to '{table_name}' - ID: {item_id}")
             return True
         except Exception as e:
             logger.error(f"❌ Error putting item in {table_name}: {e}")
@@ -560,10 +563,6 @@ class TableSchemas:
                 'StreamEnabled': True,
                 'StreamViewType': 'NEW_AND_OLD_IMAGES'
             },
-            'TimeToLiveSpecification': {
-                'AttributeName': 'TTL',
-                'Enabled': True
-            },
             'Tags': [
                 {'Key': 'Project', 'Value': 'TradePulse'},
                 {'Key': 'Environment', 'Value': os.getenv('ENVIRONMENT', 'development')},
@@ -610,10 +609,6 @@ class TableSchemas:
             'StreamSpecification': {
                 'StreamEnabled': True,
                 'StreamViewType': 'NEW_AND_OLD_IMAGES'
-            },
-            'TimeToLiveSpecification': {
-                'AttributeName': 'TTL',
-                'Enabled': True
             },
             'Tags': [
                 {'Key': 'Project', 'Value': 'TradePulse'},
@@ -695,10 +690,6 @@ class TableSchemas:
                 'StreamEnabled': True,
                 'StreamViewType': 'NEW_AND_OLD_IMAGES'
             },
-            'TimeToLiveSpecification': {
-                'AttributeName': 'TTL',
-                'Enabled': True
-            },
             'Tags': [
                 {'Key': 'Project', 'Value': 'TradePulse'},
                 {'Key': 'Environment', 'Value': os.getenv('ENVIRONMENT', 'development')},
@@ -746,10 +737,6 @@ class TableSchemas:
                 'StreamEnabled': True,
                 'StreamViewType': 'NEW_AND_OLD_IMAGES'
             },
-            'TimeToLiveSpecification': {
-                'AttributeName': 'TTL',
-                'Enabled': True
-            },
             'Tags': [
                 {'Key': 'Project', 'Value': 'TradePulse'},
                 {'Key': 'Environment', 'Value': os.getenv('ENVIRONMENT', 'development')},
@@ -786,10 +773,6 @@ class TableSchemas:
             'StreamSpecification': {
                 'StreamEnabled': True,
                 'StreamViewType': 'NEW_AND_OLD_IMAGES'
-            },
-            'TimeToLiveSpecification': {
-                'AttributeName': 'TTL',
-                'Enabled': True
             },
             'Tags': [
                 {'Key': 'Project', 'Value': 'TradePulse'},
@@ -1776,6 +1759,22 @@ def ensure_required_tables() -> bool:
                         waiter.wait(TableName=table_name)
                         
                         logger.info(f"✅ Successfully created table {table_name}")
+                        
+                        # Enable TTL for tables that need it (after table is ACTIVE)
+                        ttl_tables = ['trading_signals', 'exit_analysis_log', 'position_monitoring_log', 'trade_execution_metrics']
+                        if table_name in ttl_tables:
+                            try:
+                                client.dynamodb.meta.client.update_time_to_live(
+                                    TableName=table_name,
+                                    TimeToLiveSpecification={
+                                        'Enabled': True,
+                                        'AttributeName': 'ttl'
+                                    }
+                                )
+                                logger.debug(f"✅ TTL enabled for {table_name}")
+                            except Exception as ttl_error:
+                                logger.warning(f"⚠️ Failed to enable TTL for {table_name}: {ttl_error}")
+                        
                         success_count += 1
                         
                     except Exception as create_error:

@@ -476,15 +476,6 @@ class IntelligentExitEngine:
                         "pnl_percent": 0.0,
                         "timestamp": datetime.now(timezone.utc).isoformat()
                     }
-                
-                # Calculate position metrics as FEATURES for AI decision
-                current_price = await get_live_bitcoin_price()
-                entry_price = position_data.get('entry_price', current_price)
-                pnl_pct = ((current_price - entry_price) / entry_price) if entry_price else 0.0
-                abs_bp = abs(pnl_pct) * 10000  # Convert to basis points
-                
-                # Store position age and PnL as context for AI (not as hard limits!)
-                logger.info(f"📊 Position ready for analysis: age={age_s:.0f}s, pnl={abs_bp:.1f}bp, entry_conf={entry_confidence:.2f}")
                     
             except Exception as e:
                 logger.warning(f"Failed to parse entry time for context: {e}")
@@ -495,7 +486,7 @@ class IntelligentExitEngine:
             logger.debug(f"🔍 Analyzing exit conditions for position {position_data.get('position_id')} ({symbol})")
             logger.info("📊 PIPELINE DEBUG: Exit Engine - Starting 6-layer exit analysis")
             
-            # Get current market data
+            # Get current market data (ONCE per cycle - optimization)
             logger.info("📈 PIPELINE DEBUG: Exit Engine - Fetching live market data...")
             current_price = await get_live_bitcoin_price()
             if current_price is None or current_price <= 0:
@@ -556,8 +547,8 @@ class IntelligentExitEngine:
                 symbol, position_data, current_price, market_data
             )
             
-            # Calculate consensus decision
-            exit_decision = await self._calculate_exit_consensus(layer_results)
+            # Calculate consensus decision (with position_data for hysteresis)
+            exit_decision = await self._calculate_exit_consensus(layer_results, position_data)
             
             # REVERSAL CONFIRMATION: Track reversal hits for confirmation (DYNAMIC TICKS!)
             if position_id and "layer_3_reversal" in layer_results:
@@ -1059,20 +1050,17 @@ class IntelligentExitEngine:
         try:
             # Use real reversal detection model from enterprise engine
             if "reversal" in self.models:
-                # Get real market features
-                from app.backend.services.live_market_data import get_live_market_data
-                live_data = await get_live_market_data()
-                
+                # Use market_data passed as parameter (already fetched once - optimization)
                 # Build feature set for model (EXACTLY 8 features for reversal model)
                 features_dict = {
                     "close": current_price,
-                    "volume": live_data.get("volume", 1000000),
-                    "rsi": live_data.get("rsi", 50),
-                    "macd": live_data.get("macd", 0),
-                    "bb_position": live_data.get("bb_position", 0.5),
-                    "volatility": live_data.get("volatility", 0.02),
-                    "trend_strength": live_data.get("trend_strength", 0.0),
-                    "volume_ratio": live_data.get("volume_ratio", 1.0)
+                    "volume": market_data.get("volume", 1000000),
+                    "rsi": market_data.get("rsi", 50),
+                    "macd": market_data.get("macd", 0),
+                    "bb_position": market_data.get("bb_position", 0.5),
+                    "volatility": market_data.get("volatility", 0.02),
+                    "trend_strength": market_data.get("trend_strength", 0.0),
+                    "volume_ratio": market_data.get("volume_ratio", 1.0)
                     # CRITICAL: NO price_change_24h - reversal model expects exactly 8 features
                 }
                 
@@ -1412,8 +1400,11 @@ class IntelligentExitEngine:
             "reasoning": f"SMART EXIT: {reason} | PnL: {current_pnl_pct:+.2f}% | Age: {position_age:.1f}h | Reversal: {reversal_detected}"
         }
     
-    async def _calculate_exit_consensus(self, layer_results: Dict[str, Any]) -> Dict[str, Any]:
+    async def _calculate_exit_consensus(self, layer_results: Dict[str, Any], position_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """Calculate consensus-based exit decision with DYNAMIC adaptive thresholds"""
+        
+        # Ensure position_data is not None
+        position_data = position_data or {}
         
         # PROFESSIONAL: Use dynamic thresholds calculated from market conditions
         if self.current_dynamic_thresholds:
@@ -1475,8 +1466,32 @@ class IntelligentExitEngine:
         logger.info(f"🎯 Exit consensus: {exit_votes} exit vs {hold_votes} hold votes, "
                    f"score={consensus_score:.2f}, threshold={adaptive_threshold:.2f} (regime: {regime})")
         
+        # 🔧 FIX (Oct 2025): Exit hysteresis - prevent churn
+        # Require higher confidence to exit than to enter (anti-flip-flop)
+        # Min hold: 3 bars (~60s) unless hard stop hit
+        MIN_HOLD_BARS = 3
+        EXIT_MARGIN = 0.06  # Require 6% higher confidence to exit
+        
+        position_age_s = (datetime.now(timezone.utc) - datetime.fromisoformat(position_data.get('entry_time', datetime.now(timezone.utc).isoformat()).replace('Z', '+00:00'))).total_seconds()
+        position_age_bars = int(position_age_s / 20)  # Assuming ~20s per bar
+        entry_confidence = position_data.get('confidence_score', 0.5)
+        required_exit_conf = max(adaptive_threshold, entry_confidence + EXIT_MARGIN)
+        
+        # Check if hard stop hit (emergency exit)
+        hard_stop_hit = any(
+            cond.get("emergency_exit", False) 
+            for cond in [layer_results.get(f"layer_{i}", {}) for i in range(1, 7)]
+        )
+        
+        if position_age_bars < MIN_HOLD_BARS and not hard_stop_hit:
+            logger.info(f"⏱️ HYSTERESIS: Position too young ({position_age_bars}/{MIN_HOLD_BARS} bars) - suppressing soft exit")
+            consensus_score = min(consensus_score, required_exit_conf - 0.01)  # Force below threshold
+        
+        if consensus_score < required_exit_conf and not hard_stop_hit:
+            logger.info(f"⏱️ HYSTERESIS: Exit conf {consensus_score:.2f} < required {required_exit_conf:.2f} (entry={entry_confidence:.2f}+{EXIT_MARGIN:.2f}) - HOLD")
+        
         # 🎯 FIX: With strong reversal override, prioritize EXIT even if votes are split
-        if reversal_override and exit_votes >= 2:
+        if reversal_override and exit_votes >= 2 and hard_stop_hit:
             logger.warning(f"⚠️ Strong reversal detected with {exit_votes} exit votes - FORCING EXIT")
             return {
                 "should_exit": True,
@@ -1486,8 +1501,8 @@ class IntelligentExitEngine:
                 "layer_votes": {"exit": exit_votes, "hold": hold_votes}
             }
         
-        # Determine final decision with adaptive threshold
-        if exit_votes > hold_votes and consensus_score > adaptive_threshold:
+        # Determine final decision with adaptive threshold + hysteresis
+        if exit_votes > hold_votes and consensus_score > required_exit_conf:
             decision = {
                 "should_exit": True,
                 "confidence": consensus_score,
@@ -1591,7 +1606,11 @@ class IntelligentExitEngine:
         # if signal_action == "BUY" and position_type == "SHORT":
         #     emergency_conditions["emergency_exit"] = True
         
-        logger.debug(f"📊 Strategy check: {position_type} position with {signal_action} signal - mismatch IGNORED for day trading")
+        # 🔧 FIX (Oct 2025): Only log mismatch if it would have triggered (but we ignore it)
+        # This prevents confusing "IGNORED" messages when there's no mismatch
+        is_mismatch = (signal_action == "BUY" and position_type == "SHORT") or (signal_action == "SELL" and position_type == "LONG")
+        if is_mismatch:
+            logger.debug(f"📊 Strategy mismatch detected ({position_type} + {signal_action} signal) - IGNORED for day trading")
         
         return emergency_conditions
     

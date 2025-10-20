@@ -102,6 +102,7 @@ class MarketDataPersistenceService:
             ttl = int((datetime.now(timezone.utc) + timedelta(days=self.ttl_days)).timestamp())
             
             # Convert floats to Decimal for DynamoDB
+            saved_at_ts = int(datetime.now(timezone.utc).timestamp())
             item = {
                 "symbol": candle.symbol,
                 "timestamp": candle.timestamp,
@@ -113,10 +114,29 @@ class MarketDataPersistenceService:
                 "quote_volume": Decimal(str(candle.quote_volume)),
                 "trades": candle.trades,
                 "ttl": ttl,
-                "saved_at": int(datetime.now(timezone.utc).timestamp())
+                "saved_at": saved_at_ts
             }
             
-            self.client.put_item(self.table_name, item)
+            # 🔧 FIX (Oct 2025): Idempotent write - only insert if PK doesn't exist OR saved_at is newer
+            # This prevents duplicate writes from parallel handlers (WS + REST)
+            try:
+                table = self.client.get_table(self.table_name)
+                table.put_item(
+                    Item=item,
+                    ConditionExpression="attribute_not_exists(#sym) OR #saved < :new_saved",
+                    ExpressionAttributeNames={
+                        "#sym": "symbol",
+                        "#saved": "saved_at"
+                    },
+                    ExpressionAttributeValues={
+                        ":new_saved": saved_at_ts
+                    }
+                )
+            except Exception as e:
+                if "ConditionalCheckFailedException" in str(e):
+                    # Duplicate or older data - safe to ignore
+                    return True
+                raise
             
             self.candles_saved += 1
             self.last_save_time = datetime.now(timezone.utc)

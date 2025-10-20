@@ -342,13 +342,20 @@ class DayTradingValidator:
             logger.info(f"🎯 HIGH CONFIDENCE ({setup.confidence:.1%}): Skipping volatility check (vol={setup.volatility:.1%})")
             return True, f"HIGH CONFIDENCE override (vol={setup.volatility:.1%})"
         
+        # 🔧 FIX (Oct 2025): CRYPTO DAY TRADING - Lower ATR min to 0.10% (was 0.20%)
+        # Crypto moves faster than stocks, 0.10% is still meaningful for scalps
+        # Keeps chop filter but doesn't block sensible NY session scalps
+        ATR_MIN_CRYPTO = 0.0010  # 0.10% for crypto
+        is_crypto = setup.symbol.endswith(("USDT", "USD", "PERP"))
+        adjusted_min_vol = ATR_MIN_CRYPTO if is_crypto else min_vol
+        
         # 🔧 FIX (Oct 2025): Use <= for boundary check (epsilon tolerance)
         EPS = 1e-9
         if setup.volatility > max_vol:
             return False, f"Volatility too high ({setup.volatility:.1%} > {max_vol:.1%})"
-        if setup.volatility < min_vol - EPS:  # Allow exact boundary match
-            return False, f"Volatility too low ({setup.volatility:.1%} < {min_vol:.1%})"
-        return True, f"Volatility OK ({setup.volatility:.1%}, range: {min_vol:.1%}-{max_vol:.1%})"
+        if setup.volatility < adjusted_min_vol - EPS:  # Allow exact boundary match
+            return False, f"Volatility too low ({setup.volatility:.1%} < {adjusted_min_vol:.1%})"
+        return True, f"Volatility OK ({setup.volatility:.1%}, range: {adjusted_min_vol:.1%}-{max_vol:.1%})"
     
     def _validate_risk_reward(self, setup: TradeSetup, params: Dict[str, float]) -> Tuple[bool, str]:
         """Validate risk-reward ratio for day trading (ADAPTIVE with ATR fallback)"""
@@ -486,11 +493,13 @@ class DayTradingValidator:
         if setup.layer_agreement < min_agreement:
             return False, f"Insufficient layer agreement ({setup.layer_agreement}/6 < {min_agreement}/6)"
         
-        # RELAXED LSTM check: Don't require LSTM for 70%+ confidence signals (DAY TRADING OPTIMIZED)
-        # For day trading, we want to catch moves quickly - 70% is strong enough
+        # 🔧 FIX (Oct 2025): CRYPTO DAY TRADING - LSTM confirm only below 0.67 (was 0.70)
+        # If conf ≥ 0.67, don't block just because LSTM is neutral - we have RR/ATR/spread filters
+        # This allows quick scalp entries when conf ≈ 0.68 without hard LSTM block
+        CONFIRM_LSTM_UNTIL = 0.67  # was 0.70
         if setup.action in ["BUY", "SELL"]:
-            if not setup.lstm_confirmation and setup.confidence < 0.70:  # LOWERED from 0.75 to 0.70 for day trading
-                return False, f"LSTM does not confirm direction (required for <70% confidence)"
+            if not setup.lstm_confirmation and setup.confidence < CONFIRM_LSTM_UNTIL:
+                return False, f"LSTM does not confirm direction (required for <{CONFIRM_LSTM_UNTIL:.0%} confidence)"
         
         return True, f"Layer agreement OK ({setup.layer_agreement}/6 layers >= {min_agreement}/6, LSTM: {'✓' if setup.lstm_confirmation else '✗'})"
     

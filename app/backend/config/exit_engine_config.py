@@ -225,9 +225,12 @@ class AdaptiveExitCalculator:
             small_mult = 1.0
         
         # Calculate actual profit thresholds as % of entry price
-        excellent_profit_threshold = (excellent_mult * current_atr) / entry_price
-        good_profit_threshold = (good_mult * current_atr) / entry_price
-        small_profit_threshold = (small_mult * current_atr) / entry_price
+        # 🔧 FIX (Oct 2025): Add floor values to prevent 0.00% thresholds
+        atr_pct = current_atr / entry_price if entry_price > 0 else 0.0025  # Fallback: 0.25%
+        
+        excellent_profit_threshold = max(excellent_mult * atr_pct, 0.0010)  # Floor: 0.10% (10bp)
+        good_profit_threshold = max(good_mult * atr_pct, 0.0005)            # Floor: 0.05% (5bp)
+        small_profit_threshold = max(small_mult * atr_pct, 0.0002)          # Floor: 0.02% (2bp)
         
         return (
             take_profit_mult,

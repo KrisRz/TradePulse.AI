@@ -97,9 +97,17 @@ class PriceForecastingService:
         self.models = {}
         self.scalers = {}
         
-        # Prediction cache (5-minute TTL)
+        # Prediction cache with dynamic TTL per timeframe
+        # 🔧 FIX (Oct 2025): Separate TTL for each timeframe to prevent stale predictions
         self.prediction_cache = {}
-        self.cache_ttl_seconds = 300  # 5 minutes
+        self.cache_ttl_by_horizon = {
+            "1m": 5,     # 5 seconds for 1-minute predictions
+            "5m": 20,    # 20 seconds for 5-minute predictions
+            "1h": 120,   # 2 minutes for 1-hour predictions
+            "4h": 300,   # 5 minutes for 4-hour predictions
+            "24h": 600   # 10 minutes for 24-hour predictions
+        }
+        self.cache_ttl_seconds = 120  # Default: 2 minutes (for aggregate)
         
         # Performance tracking
         self.performance_tracker = defaultdict(list)  # horizon -> list of (predicted, actual)
@@ -256,14 +264,21 @@ class PriceForecastingService:
         if horizons is None:
             horizons = ["1h", "4h", "24h"]
         
-        # Check cache first
+        # Check cache first with dynamic TTL per horizon
+        # 🔧 FIX (Oct 2025): Use shortest horizon TTL to determine cache validity
         cache_key = f"{current_price:.2f}_{datetime.now(timezone.utc).minute // 5}"
         if cache_key in self.prediction_cache:
             cached_result, cached_time = self.prediction_cache[cache_key]
             age_seconds = (datetime.now(timezone.utc) - cached_time).total_seconds()
-            if age_seconds < self.cache_ttl_seconds:
-                logger.debug(f"📋 Using cached predictions (age: {age_seconds:.0f}s)")
+            
+            # Determine appropriate TTL based on requested horizons
+            min_ttl = min([self.cache_ttl_by_horizon.get(h, self.cache_ttl_seconds) for h in horizons])
+            
+            if age_seconds < min_ttl:
+                logger.debug(f"📋 Using cached predictions (age: {age_seconds:.0f}s < ttl: {min_ttl}s)")
                 return cached_result
+            else:
+                logger.debug(f"📋 Cache stale (age: {age_seconds:.0f}s >= ttl: {min_ttl}s), regenerating")
         
         try:
             # Generate predictions for each horizon

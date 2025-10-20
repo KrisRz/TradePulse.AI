@@ -26,7 +26,7 @@ from app.backend.services.enterprise_trading_engine import EnterpriseTradingEngi
 from app.backend.services.intelligent_entry_engine import IntelligentEntryEngine
 from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
 from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_market_data, get_live_candlestick_data, get_live_market_data_service
-from app.backend.services.professional_portfolio import get_professional_portfolio, PositionType
+from app.backend.services.professional_portfolio import get_professional_portfolio, PositionType, PositionStatus
 from app.backend.core.runtime_config import runtime_config_store
 from app.backend.config.day_trading_config import get_day_trading_config
 # Professional integrations - CRITICAL for Phase 1A
@@ -504,14 +504,25 @@ class DayTradingEngine:
                     )
                     
                     # Log exit analysis result
+                    # 🔧 FIX (Oct 2025): Show PnL with sign (+/-)
+                    pnl_pct = exit_analysis.get('pnl_percent', 0)
                     logger.info(f"🚪 EXIT ANALYSIS {position.position_id}: "
                                f"{'EXIT' if exit_analysis['should_exit'] else 'HOLD'} "
                                f"conf={exit_analysis['confidence']:.2f} "
                                f"reason={exit_analysis.get('exit_reason', 'N/A')} "
-                               f"pnl={exit_analysis.get('pnl_percent', 0):.2f}%")
+                               f"pnl={pnl_pct:+.2f}%")
                     
                     # Close position if exit engine recommends
                     if exit_analysis["should_exit"]:
+                        # 🔧 FIX (Oct 2025): Idempotency check - prevent double-close attempts
+                        if position.position_id not in portfolio.positions:
+                            logger.info(f"⏭️ Position {position.position_id} already closed, skipping")
+                            continue
+                        
+                        if portfolio.positions[position.position_id].status != PositionStatus.OPEN:
+                            logger.info(f"⏭️ Position {position.position_id} status={portfolio.positions[position.position_id].status}, skipping close")
+                            continue
+                        
                         logger.info(f"🚪 Closing position {position.position_id} - {exit_analysis['exit_reason']}")
                         realized_pnl = await portfolio.close_position(
                             position_id=position.position_id,
@@ -575,10 +586,16 @@ class DayTradingEngine:
             adapt_active_delta = max(active_delta, 1.0 * realized_vol_5m)  # Very tolerant
             adapt_closed_delta = max(closed_delta * 3.0, 1.2 * realized_vol_5m)  # Extremely tolerant for re-entry  
             
-            # 🚀 SHORTENED WINDOWS: 2min active, 1min closed (was 5min, 30min)
-            # Base windows set to 120s and 60s respectively (from runtime config)
-            adapt_active_window = max(10, 120)  # 2 minutes active window (fixed, not adaptive)
-            adapt_closed_window = max(5, 60)    # 1 minute closed window (fixed, not adaptive)
+            # 🔧 FIX (Oct 2025): CRYPTO DAY TRADING cooldown with meaningful-change bypass
+            # Crypto requires faster re-entry than stocks (24/7, high liquidity, fast moves)
+            adapt_active_window = max(10, 60)  # 1 minute active window (crypto scalping)
+            
+            # Base cooldown: 90s for crypto day trading (was 5min - too slow!)
+            REENTRY_COOLDOWN_BASE = 90  # 90 seconds base (crypto day trading)
+            MEANINGFUL_PRICE_ATR = 0.35  # 35% ATR move = meaningful
+            MEANINGFUL_CONF_DELTA = 0.12  # 12pp confidence change = meaningful
+            
+            adapt_closed_window = REENTRY_COOLDOWN_BASE  # Will be adjusted per-position below
 
             # Check recent positions (active) within adaptive window
             for position in portfolio.get_active_positions():
@@ -595,36 +612,120 @@ class DayTradingEngine:
                 )
                 
                 if same_direction and time_diff < adapt_active_window and price_diff < adapt_active_delta:
-                    logger.warning(f"🚫 Duplicate detected: {signal.action} position within 5min and 1% price")
+                    # 🔧 FIX (Oct 2025): Consolidated duplicate log with details
+                    cooldown_left = adapt_active_window - time_diff
+                    logger.warning(f"🚫 Duplicate entry blocked: {signal.action} within {adapt_active_window:.0f}s window "
+                                 f"(reason=active_duplicate, cooldown={adapt_active_window:.0f}s, remaining={cooldown_left:.0f}s, "
+                                 f"price_delta={price_diff:.2%})")
                     try:
                         from app.backend.services.metrics import inc_decision_dupe
                         inc_decision_dupe("similar_signal")
                     except Exception:
                         pass
+                    # Audit with meta
+                    try:
+                        await self._audit_decision(
+                            signal, None, None, None, "duplicate_entry_prevented",
+                            meta={
+                                "reason": "active_duplicate",
+                                "remaining_sec": float(cooldown_left),
+                                "cooldown_sec": float(adapt_active_window),
+                                "base": 90, "tp": 60, "sl": 180, "unknown": 90, "active_dup": 60
+                            }
+                        )
+                    except Exception:
+                        pass
                     return True
             
-            # Check closed positions (last 30 minutes) to prevent immediate re-entry
+            # 🔧 FIX (Oct 2025): Smart cooldown with meaningful-change bypass
+            # Check closed positions with adaptive cooldown based on exit reason
             for position in portfolio.closed_positions[-10:]:  # Check last 10 closed
                 if position.exit_time:
                     time_diff = (current_time - position.exit_time).total_seconds()
-                    if time_diff < adapt_closed_window:
+                    
+                    # Exit-aware cooldown: longer for stop-loss, shorter for take-profit (CRYPTO DAY TRADING)
+                    exit_reason = getattr(position, 'exit_reason', 'unknown')
+                    if 'stop' in exit_reason.lower() or 'emergency' in exit_reason.lower():
+                        effective_cooldown = 180  # 3 min for stop-loss (crypto day trading)
+                    elif 'profit' in exit_reason.lower() or 'target' in exit_reason.lower():
+                        effective_cooldown = 60  # 1 min for TP (quick re-entry in crypto)
+                    else:
+                        effective_cooldown = REENTRY_COOLDOWN_BASE  # 90s default
+                    
+                    if time_diff < effective_cooldown:
                         price_diff = abs(current_price - float(position.exit_price or position.entry_price)) / float(position.entry_price)
                         same_direction = (
                             (signal.action == "BUY" and position.type == PositionType.LONG) or
                             (signal.action == "SELL" and position.type == PositionType.SHORT)
                         )
                         
-                        # SCALPING FIX: Allow re-entry if different playbook or significant price move
                         playbook_match = getattr(signal, 'playbook', 'default') == getattr(position, 'playbook', 'default')
                         
-                        if same_direction and price_diff < adapt_closed_delta and playbook_match:
-                            logger.warning(f"🚫 Re-entry too soon: {signal.action} position closed {time_diff/60:.1f}min ago (same playbook)")
+                        if same_direction and playbook_match:
+                            # Check for meaningful change that can bypass cooldown
+                            meaningful_change = False
+                            
+                            # 1) Significant price move (35% of ATR)
+                            exit_atr = getattr(position, 'exit_atr', 0.02)  # Fallback 2%
+                            if exit_atr > 0 and price_diff >= (MEANINGFUL_PRICE_ATR * exit_atr):
+                                meaningful_change = True
+                                logger.info(f"✅ Meaningful price move: {price_diff:.2%} >= {MEANINGFUL_PRICE_ATR * exit_atr:.2%} (0.35×ATR)")
+                            
+                            # 2) Confidence delta (L5/L6 changed significantly)
+                            exit_conf = getattr(position, 'ai_confidence', 0.5)
+                            signal_conf = getattr(signal, 'confidence', 0.5)
+                            if abs(signal_conf - exit_conf) >= MEANINGFUL_CONF_DELTA:
+                                meaningful_change = True
+                                logger.info(f"✅ Meaningful confidence shift: Δ={abs(signal_conf - exit_conf):.2f} >= {MEANINGFUL_CONF_DELTA:.2f}")
+                            
+                            # 3) Momentum breakout (vol spike + timing surge)
                             try:
-                                from app.backend.services.metrics import inc_decision_dupe
-                                inc_decision_dupe("reentry_cooldown")
+                                from app.backend.services.live_market_data import get_live_market_data
+                                import asyncio
+                                market_data = asyncio.run(get_live_market_data()) if asyncio.get_event_loop().is_running() == False else None
+                                if market_data:
+                                    vol_ratio = market_data.get('volume_ratio', 1.0)
+                                    timing_score = getattr(signal, 'timing_score', 0.0)
+                                    if vol_ratio > 3.0 and abs(timing_score) > 0.15:
+                                        meaningful_change = True
+                                        logger.info(f"✅ Momentum breakout: vol_ratio={vol_ratio:.1f}, timing={timing_score:+.2f}")
                             except Exception:
                                 pass
-                            return True
+                            
+                            if not meaningful_change:
+                                cooldown_left = effective_cooldown - time_diff
+                                # Map exit_reason to cooldown type
+                                cooldown_type = "unknown"
+                                if 'stop' in exit_reason.lower() or 'emergency' in exit_reason.lower():
+                                    cooldown_type = "stop_loss"
+                                elif 'profit' in exit_reason.lower() or 'target' in exit_reason.lower():
+                                    cooldown_type = "take_profit"
+                                
+                                logger.warning(f"🚫 Re-entry blocked: {cooldown_left:.0f}s remaining "
+                                             f"(reason={cooldown_type}, cooldown={effective_cooldown:.0f}s, "
+                                             f"base=90s, tp=60s, sl=180s)")
+                                try:
+                                    from app.backend.services.metrics import inc_decision_dupe
+                                    inc_decision_dupe("reentry_cooldown")
+                                except Exception:
+                                    pass
+                                # Audit with meta
+                                try:
+                                    await self._audit_decision(
+                                        signal, None, None, None, "duplicate_entry_prevented",
+                                        meta={
+                                            "reason": cooldown_type,
+                                            "remaining_sec": float(cooldown_left),
+                                            "cooldown_sec": float(effective_cooldown),
+                                            "base": 90, "tp": 60, "sl": 180, "unknown": 90, "active_dup": 60
+                                        }
+                                    )
+                                except Exception:
+                                    pass
+                                return True
+                            else:
+                                logger.info(f"🎯 Cooldown bypassed: meaningful_change detected ({time_diff:.0f}s < {effective_cooldown:.0f}s)")
+                                # Allow re-entry despite cooldown
             
             return False
             
@@ -1011,7 +1112,7 @@ class DayTradingEngine:
                 
                 # CRITICAL: Check for duplicate positions (prevent same-minute entries)
                 if await self._is_duplicate_entry(signal, portfolio):
-                    logger.warning(f"🚫 Duplicate entry prevented: {signal.action} signal too similar to recent position")
+                    # 🔧 FIX (Oct 2025): Log already emitted in _is_duplicate_entry, skip duplicate
                     try:
                         from app.backend.services.metrics import inc_decision_dupe
                         inc_decision_dupe("similar_signal")

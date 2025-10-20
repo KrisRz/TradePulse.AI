@@ -474,7 +474,18 @@ class ProfessionalPortfolio:
             position.status = PositionStatus.CLOSED
 
             # Calculate realized P&L using safe money math
-            realized_pnl = position.realized_pnl
+            # 🔧 FIX (Oct 2025): Correct PnL calculation for LONG/SHORT positions
+            direction = D('1') if position.type == PositionType.LONG else D('-1')
+            gross_per_unit = (current_price - position.entry_price) * direction
+            pnl_quote = gross_per_unit * abs(position.size)
+            
+            # Fees (if any - currently 0 for virtual portfolio)
+            fees_entry = D('0')
+            fees_exit = D('0')
+            realized_pnl = pnl_quote - fees_entry - fees_exit
+            
+            # Calculate PnL percentage (relative to entry price, not position value)
+            pnl_pct = (gross_per_unit / position.entry_price) * D('100') if position.entry_price > 0 else D('0')
 
             # Update portfolio state: add back original entry value plus realized P&L
             entry_value = calculate_position_value(position.entry_price, position.size)
@@ -495,6 +506,7 @@ class ProfessionalPortfolio:
                 entry_price=float(position.entry_price),
                 exit_price=float(position.exit_price),
                 realized_pnl=float(realized_pnl),
+                pnl_pct=float(pnl_pct),
                 duration_minutes=(position.exit_time - position.entry_time).total_seconds() / 60,
                 ai_confidence=position.ai_confidence
             )
@@ -524,13 +536,14 @@ class ProfessionalPortfolio:
                     signal_action = "SELL"
                 
                 # Create position result for learning
+                # 🔧 FIX (Oct 2025): Use corrected pnl_pct instead of recalculating
                 position_result = PositionResult(
                     position_id=position_id,
                     symbol=position.symbol,
                     outcome=outcome,
                     was_successful=realized_pnl > 0,
                     pnl_absolute=float(realized_pnl),
-                    pnl_percentage=float((realized_pnl / (position.entry_price * position.size)) * 100) if position.entry_price > 0 and position.size > 0 else 0.0,
+                    pnl_percentage=float(pnl_pct),
                     time_in_position_minutes=int((position.exit_time - position.entry_time).total_seconds() / 60),
                     entry_price=float(position.entry_price),
                     exit_price=float(position.exit_price),

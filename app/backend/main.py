@@ -43,13 +43,15 @@ import warnings
 warnings.filterwarnings('ignore')
 os.environ['PYTHONWARNINGS'] = 'ignore'
 
-# Suppress specific LightGBM warnings that appear during model loading
+# Suppress specific LightGBM warnings that appear during model loading and prediction
 try:
     import lightgbm as lgb
     # Use correct LightGBM logging suppression
     import logging
     lgb_logger = logging.getLogger('lightgbm')
     lgb_logger.setLevel(logging.CRITICAL)
+    # Also suppress LightGBM warnings during prediction
+    warnings.filterwarnings('ignore', category=UserWarning, module='lightgbm')
 except ImportError:
     pass  # LightGBM not installed
 
