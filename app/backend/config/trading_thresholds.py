@@ -132,13 +132,16 @@ class TradingThresholds:
         }
 
 
-# Global instance for application-wide use
-UNIFIED_THRESHOLDS = TradingThresholds()
+# Global instance for application-wide use (lazy initialization)
+_UNIFIED_THRESHOLDS: Optional[TradingThresholds] = None
 
 
 def get_trading_thresholds() -> TradingThresholds:
-    """Get the unified trading thresholds instance"""
-    return UNIFIED_THRESHOLDS
+    """Get the unified trading thresholds instance (lazy singleton)"""
+    global _UNIFIED_THRESHOLDS
+    if _UNIFIED_THRESHOLDS is None:
+        _UNIFIED_THRESHOLDS = TradingThresholds()
+    return _UNIFIED_THRESHOLDS
 
 
 def log_threshold_summary():
