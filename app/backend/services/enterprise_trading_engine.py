@@ -1728,6 +1728,24 @@ class EnterpriseTradingEngine:
             if fade_top_band:
                 logger.info(f"🎯 FADE-TOP-BAND: BB={bb_pos:.3f}, RSI={rsi:.1f}, MACD={macd:.5f}, Vol={volatility_pct:.4f}")
             
+            # 🔧 FIX (Oct 2025): Oversold-bounce micro-playbook for longs
+            # When BB_pos ≤ 0.05 AND RSI ∈ [28,36] AND volume spike → bounce play
+            # This is a high-signal long opportunity in oversold/capitulation regimes
+            z_vol = layer_results.get("layer_4_filters", {}).get("volume_zscore", 0.0) if layer_results else 0.0
+            
+            # Check for MACD histogram contraction (becoming less negative)
+            macd_contracting = macd > -0.01 and macd < 0  # MACD negative but contracting
+            
+            oversold_bounce = (
+                bb_pos <= 0.05 and 
+                28 <= rsi <= 36 and 
+                (z_vol >= 2.0 or volume_ratio >= 5.0) and  # Volume spike (capitulation)
+                macd_contracting
+            )
+            
+            if oversold_bounce:
+                logger.info(f"🎯 OVERSOLD-BOUNCE: BB={bb_pos:.3f}, RSI={rsi:.1f}, MACD={macd:.5f}, zVol={z_vol:.2f}, VolRatio={volume_ratio:.2f}")
+            
             # Combined SELL check: timing OR alternative signals OR fade-top-band
             any_sell_signal = timing_sell_check or mean_reversion_sell or resistance_rejection_sell or momentum_shift_sell or fade_top_band
             
@@ -1930,6 +1948,45 @@ class EnterpriseTradingEngine:
                     return "SELL", sell_confidence
             
             # ═══════════════════════════════════════════════════════════════════════════
+            # 🎯 TIER 1: OVERSOLD-BOUNCE MICRO-PLAYBOOK (Capitulation Longs)
+            # ═══════════════════════════════════════════════════════════════════════════
+            # 🔧 FIX (Oct 2025): New playbook for oversold bounces
+            # When BB_pos ≤ 0.05, RSI ∈ [28,36], volume spike → allow exploratory long
+            # This catches capitulation bounces with tight risk management
+            # ═══════════════════════════════════════════════════════════════════════════
+            
+            if oversold_bounce and not rsi_oversold_danger:
+                # Temporarily relax exploratory threshold for this high-signal setup
+                bounce_confidence = max(confidence * 0.9, 0.45)  # Slightly reduce for exploratory nature
+                bounce_confidence = min(bounce_confidence, 0.75)  # Cap at 75%
+                
+                logger.info(f"")
+                logger.info(f"╔═══════════════════════════════════════════════════════════════════╗")
+                logger.info(f"║  🎯 OVERSOLD-BOUNCE OPPORTUNITY DETECTED (TIER 1)                ║")
+                logger.info(f"╠═══════════════════════════════════════════════════════════════════╣")
+                logger.info(f"║  Signal Type:      LONG SCALP (Bounce from oversold)             ║")
+                logger.info(f"║  RSI:              {rsi:.1f} (Oversold)                           ║")
+                logger.info(f"║  BB Position:      {bb_pos:.3f} (At/below lower band)            ║")
+                logger.info(f"║  Volume Spike:     zVol={z_vol:.2f}, ratio={volume_ratio:.2f}x   ║")
+                logger.info(f"║  MACD:             {macd:.4f} (contracting)                       ║")
+                logger.info(f"║  Base Confidence:  {confidence:.1%}                               ║")
+                logger.info(f"║  Final Confidence: {bounce_confidence:.1%}                        ║")
+                logger.info(f"║                                                                   ║")
+                logger.info(f"║  📊 SCALP PARAMETERS (Tight Risk):                               ║")
+                logger.info(f"║     • Size Factor:  0.25-0.40× exploratory base                  ║")
+                logger.info(f"║     • Stop Loss:    0.15-0.20% below swing low                   ║")
+                logger.info(f"║     • Take Profit:  TP1: +0.20-0.30% (scale 50%)                 ║")
+                logger.info(f"║                     TP2: mid-band or +0.50% (trail)              ║")
+                logger.info(f"║     • Cooldown:     10-15 minutes after exit                     ║")
+                logger.info(f"╚═══════════════════════════════════════════════════════════════════╝")
+                logger.info(f"")
+                
+                # 📊 METRICS: Track oversold bounce BUY signal
+                self._track_signal_metrics("BUY", bounce_confidence, rsi, reversal_prob, signal_type="oversold_bounce")
+                
+                return "BUY", bounce_confidence
+            
+            # ═══════════════════════════════════════════════════════════════════════════
             # 🎯 LEGACY EXTREME CONDITIONS (for backwards compatibility)
             # ═══════════════════════════════════════════════════════════════════════════
             # These are the original extreme condition checks that require full conf_check
@@ -1996,16 +2053,22 @@ class EnterpriseTradingEngine:
             macd = float(features.get("macd", 0.0))
             
             # 🔧 FIX (Oct 2025): Dynamic exploratory threshold in low-vol regimes
-            # When volatility ≤ 0.05% & BB_pos ≥ 0.90 & RSI ∈ [55,70] → relax to 0.52
-            # This allows tiny, time-boxed exploratory longs near band touch when timing is strong
+            # Top-band: volatility ≤ 0.05% & BB_pos ≥ 0.90 & RSI ∈ [55,70] → relax to 0.52
+            # Bottom-band: volatility ≤ 0.06% & BB_pos ≤ 0.05 & RSI ∈ [28,36] → relax to 0.52
+            # This allows tiny, time-boxed exploratory positions near band touches
             base_exploratory_threshold = self.thresholds.confidence.EXPLORATORY_BUY  # 0.55 default
             
-            is_low_vol_regime = (volatility <= 0.0005 and bb_pos >= 0.90 and 55 <= rsi <= 70)
-            exploratory_threshold = 0.52 if is_low_vol_regime else base_exploratory_threshold
+            is_top_band_regime = (volatility <= 0.0005 and bb_pos >= 0.90 and 55 <= rsi <= 70)
+            is_bottom_band_regime = (volatility <= 0.0006 and bb_pos <= 0.05 and 28 <= rsi <= 36)
             
-            if is_low_vol_regime:
-                logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED to 0.52 (from {base_exploratory_threshold:.2f}) | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
+            if is_top_band_regime:
+                exploratory_threshold = 0.52
+                logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED (TOP-BAND) to 0.52 (from {base_exploratory_threshold:.2f}) | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
+            elif is_bottom_band_regime:
+                exploratory_threshold = 0.52
+                logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED (BOTTOM-BAND) to 0.52 (from {base_exploratory_threshold:.2f}) | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
             else:
+                exploratory_threshold = base_exploratory_threshold
                 logger.debug(f"📊 EXPLORATORY THRESHOLD: STANDARD {exploratory_threshold:.2f} | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
             
             # Use dynamic exploratory threshold

@@ -353,14 +353,18 @@ class LiveMarketDataService:
 			try:
 				logger.info(f"📡 Connecting to ticker stream: {stream_name} (attempt {reconnect_count + 1})")
 				
-				# Create WebSocket with AWS-optimized timing
-				# Binance recommends 3-minute keepalive; AWS adds network latency
-				# FIXED: Increased intervals to prevent "keepalive ping timeout" errors
+				# 🔧 FIX (Oct 2025): Optimized WebSocket params to prevent 1008 Pong timeouts
+				# ping_interval=15s, ping_timeout=10s, max_queue=1000, read/write limits=1MB
+				# Compression disabled to reduce backpressure
 				websocket = await websockets.connect(
 					url,
-					ping_interval=45,  # Ping every 45s - balanced for stability
-					ping_timeout=30,   # Wait 30s for pong - account for AWS network latency
-					close_timeout=10
+					ping_interval=15,      # Ping every 15s (more frequent)
+					ping_timeout=10,       # Wait 10s for pong (tighter)
+					close_timeout=10,
+					max_queue=1000,        # Limit queue size
+					read_limit=2**20,      # 1MB read limit
+					write_limit=2**20,     # 1MB write limit
+					compression=None       # Disable compression to reduce backpressure
 				)
 				self.connections["ticker"] = websocket
 				
@@ -490,14 +494,18 @@ class LiveMarketDataService:
 			try:
 				logger.info(f"📡 Connecting to candle stream: {stream_name} (attempt {reconnect_count + 1})")
 				
-				# Create WebSocket with AWS-optimized timing
-				# Binance recommends 3-minute keepalive; AWS adds network latency
-				# FIXED: Increased intervals to prevent "keepalive ping timeout" errors
+				# 🔧 FIX (Oct 2025): Optimized WebSocket params to prevent 1008 Pong timeouts
+				# ping_interval=15s, ping_timeout=10s, max_queue=1000, read/write limits=1MB
+				# Compression disabled to reduce backpressure
 				websocket = await websockets.connect(
 					url,
-					ping_interval=45,  # Ping every 45s - balanced for stability
-					ping_timeout=30,   # Wait 30s for pong - account for AWS network latency
-					close_timeout=10
+					ping_interval=15,      # Ping every 15s (more frequent)
+					ping_timeout=10,       # Wait 10s for pong (tighter)
+					close_timeout=10,
+					max_queue=1000,        # Limit queue size
+					read_limit=2**20,      # 1MB read limit
+					write_limit=2**20,     # 1MB write limit
+					compression=None       # Disable compression to reduce backpressure
 				)
 				self.connections[f"kline_{interval}"] = websocket
 				logger.info(f"✅ Candle stream connected ({interval})")

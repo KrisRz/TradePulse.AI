@@ -708,8 +708,26 @@ class DayTradingEngine:
                     volatility = market_data.get("volatility", 0.05)
                     atr_pct = volatility  # ATR/close approximation
                     
+                    # 🔧 FIX (Oct 2025): Adaptive volume gate with capitulation detection
+                    # In oversold context (BB_pos ≤ 0.05 & RSI ≤ 36), use composite volume metric
+                    # This catches capitulation spikes that would otherwise be blocked
+                    rsi = market_data.get("rsi", 50.0)
+                    bb_pos = market_data.get("bb_position", 0.5)
+                    
+                    is_oversold = (bb_pos <= 0.05 and rsi <= 36)
                     is_low_vol_regime = (vol_ratio < 1.0 and atr_pct < 0.001)
-                    if is_low_vol_regime:
+                    
+                    if is_oversold:
+                        # Capitulation volume gate: composite metric
+                        vol_composite = max(z / 3.5, vol_ratio / 7.0)
+                        threshold_on = 3.5  # Keep standard for z-score
+                        threshold_off = 2.0
+                        
+                        if vol_composite >= 1.0:
+                            logger.info(f"📊 VOLUME GATE: CAPITULATION (composite={vol_composite:.2f}) | zVol={z:.2f}, vol_ratio={vol_ratio:.2f}, RSI={rsi:.1f}, BB={bb_pos:.3f}")
+                        else:
+                            logger.debug(f"📊 VOLUME GATE: OVERSOLD (composite={vol_composite:.2f} < 1.0) | zVol={z:.2f}, vol_ratio={vol_ratio:.2f}")
+                    elif is_low_vol_regime:
                         threshold_on = 2.2
                         threshold_off = 1.2
                         logger.info(f"📊 VOLUME GATE: LOW-VOL REGIME (on={threshold_on}, off={threshold_off}) | vol_ratio={vol_ratio:.2f}, atr={atr_pct:.4f}")
@@ -823,6 +841,13 @@ class DayTradingEngine:
                 
             # Get portfolio for risk and position management
             portfolio = await get_professional_portfolio("admin")
+            
+            # 🔧 FIX (Oct 2025): Check knife-catch cooldown before entry
+            # Prevents "fade the knife" loops after rapid stop-outs
+            if self.risk_manager and self.risk_manager.is_knife_catch_cooldown_active("BTCUSDT"):
+                logger.warning(f"🚫 Entry blocked: BTCUSDT in knife-catch cooldown (rapid stop-out protection)")
+                await self._audit_decision(signal, None, None, None, "knife_catch_cooldown")
+                return
             
             # (D) Risk gate (pre-trade assessment) - DYNAMIC RISK MANAGER
             risk_assessment = None

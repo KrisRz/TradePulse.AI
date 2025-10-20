@@ -94,6 +94,11 @@ class DynamicRiskManager:
         self.current_risk_metrics: Optional[RiskMetrics] = None
         self.risk_level = RiskLevel.MODERATE
         
+        # 🔧 FIX (Oct 2025): Knife-catching protection
+        # Track rapid stop-outs to prevent "fade the knife" loops
+        self.knife_catch_cooldowns: Dict[str, float] = {}  # {symbol: cooldown_until_timestamp}
+        self.knife_catch_cooldown_duration = 1800  # 30 minutes in seconds
+        
         # Monitoring task
         self.risk_monitoring_task: Optional[asyncio.Task] = None
         
@@ -659,6 +664,53 @@ class DynamicRiskManager:
                     self.risk_score = 1.0
             return RiskContext()
             
+    def is_knife_catch_cooldown_active(self, symbol: str) -> bool:
+        """
+        🔧 FIX (Oct 2025): Check if knife-catching cooldown is active for a symbol
+        
+        Returns True if the symbol is in cooldown (recent rapid stop-out)
+        """
+        current_time = time.time()
+        
+        if symbol in self.knife_catch_cooldowns:
+            cooldown_until = self.knife_catch_cooldowns[symbol]
+            if current_time < cooldown_until:
+                remaining = int(cooldown_until - current_time)
+                logger.warning(f"🚫 KNIFE-CATCH COOLDOWN: {symbol} blocked for {remaining}s (rapid stop-out protection)")
+                return True
+            else:
+                # Cooldown expired, remove it
+                del self.knife_catch_cooldowns[symbol]
+                logger.info(f"✅ KNIFE-CATCH COOLDOWN: {symbol} expired, re-entry allowed")
+        
+        return False
+    
+    def register_knife_catch_event(self, symbol: str, stop_breach_pct: float):
+        """
+        🔧 FIX (Oct 2025): Register a knife-catching event (rapid stop-out)
+        
+        If stop is breached by >0.05% in one bar, activate 30-minute cooldown
+        to prevent "fade the knife" loops
+        """
+        if stop_breach_pct > 0.05:  # >0.05% breach
+            current_time = time.time()
+            cooldown_until = current_time + self.knife_catch_cooldown_duration
+            self.knife_catch_cooldowns[symbol] = cooldown_until
+            
+            cooldown_minutes = self.knife_catch_cooldown_duration / 60
+            logger.warning(f"")
+            logger.warning(f"╔═══════════════════════════════════════════════════════════════════╗")
+            logger.warning(f"║  🚨 KNIFE-CATCH EVENT DETECTED                                   ║")
+            logger.warning(f"╠═══════════════════════════════════════════════════════════════════╣")
+            logger.warning(f"║  Symbol:           {symbol}                                      ║")
+            logger.warning(f"║  Stop Breach:      {stop_breach_pct:.2f}% (rapid)                ║")
+            logger.warning(f"║  Cooldown:         {cooldown_minutes:.0f} minutes                ║")
+            logger.warning(f"║  Re-entry Allowed: {datetime.fromtimestamp(cooldown_until).strftime('%H:%M:%S')} ║")
+            logger.warning(f"║                                                                   ║")
+            logger.warning(f"║  🛡️ Protection: Preventing fade-the-knife loops                 ║")
+            logger.warning(f"╚═══════════════════════════════════════════════════════════════════╝")
+            logger.warning(f"")
+    
     async def calculate_position_size(self, signal, risk_ctx, portfolio, tick) -> float:
         """PHASE 1A: Calculate position size based on risk and signal type"""
         try:

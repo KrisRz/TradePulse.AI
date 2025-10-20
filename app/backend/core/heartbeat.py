@@ -28,15 +28,23 @@ class CloudWatchHeartbeat:
         self.namespace = os.getenv("CW_NAMESPACE", "TradePulse/Brain")
         self.service_name = os.getenv("SERVICE_NAME", "tradepulse-brain")
         self.is_running = False
+        self.cloudwatch = None
         
-        # CloudWatch client with retries
-        self.cloudwatch = boto3.client(
-            "cloudwatch",
-            region_name=self.settings.AWS_REGION,
-            config=Config(retries={"max_attempts": 3})
-        )
-        
-        logger.info(f"💓 CloudWatch Heartbeat initialized - Namespace: {self.namespace}, Service: {self.service_name}")
+        # 🔧 FIX (Oct 2025): Only initialize CloudWatch in production
+        # In development mode, skip CloudWatch to avoid InvalidClientTokenId errors
+        if self.settings.is_production:
+            try:
+                self.cloudwatch = boto3.client(
+                    "cloudwatch",
+                    region_name=self.settings.AWS_REGION,
+                    config=Config(retries={"max_attempts": 3})
+                )
+                logger.info(f"💓 CloudWatch Heartbeat initialized - Namespace: {self.namespace}, Service: {self.service_name}")
+            except Exception as e:
+                logger.warning(f"💓 CloudWatch initialization failed (will suppress metrics): {e}")
+                self.cloudwatch = None
+        else:
+            logger.info(f"💓 CloudWatch Heartbeat DISABLED (development mode)")
     
     async def heartbeat_loop(self, lease_guard):
         """
@@ -66,6 +74,10 @@ class CloudWatchHeartbeat:
     
     async def _emit_heartbeat(self):
         """Emit heartbeat metric to CloudWatch"""
+        # 🔧 FIX (Oct 2025): Skip if CloudWatch not initialized
+        if not self.cloudwatch:
+            return
+        
         try:
             # Emit BrainHeartbeat metric
             self.cloudwatch.put_metric_data(
@@ -90,6 +102,10 @@ class CloudWatchHeartbeat:
     
     async def emit_startup_metric(self):
         """Emit startup metric when brain controller starts"""
+        # 🔧 FIX (Oct 2025): Skip if CloudWatch not initialized
+        if not self.cloudwatch:
+            return
+        
         try:
             self.cloudwatch.put_metric_data(
                 Namespace=self.namespace,
@@ -111,6 +127,10 @@ class CloudWatchHeartbeat:
     
     async def emit_shutdown_metric(self):
         """Emit shutdown metric when brain controller stops"""
+        # 🔧 FIX (Oct 2025): Skip if CloudWatch not initialized
+        if not self.cloudwatch:
+            return
+        
         try:
             self.cloudwatch.put_metric_data(
                 Namespace=self.namespace,

@@ -79,7 +79,7 @@ class HybridConfig:
     ws_base_url: str = "wss://stream.binance.com:9443/ws"
     ws_reconnect_delay: float = 5.0
     ws_max_reconnects: int = 10
-    ws_ping_interval: float = 30.0  # Increased for stability
+    ws_ping_interval: float = 15.0  # 🔧 FIX (Oct 2025): Optimized for 1008 Pong timeout prevention
     ws_timeout_seconds: float = 60.0  # Increased timeout for better reliability
     
     # REST API settings  
@@ -351,13 +351,16 @@ class BinanceHybridClient:
                 logger.info(f"🔗 Connecting to {stream_key}...")
                 
                 connect_start = time.time()
+                # 🔧 FIX (Oct 2025): Optimized WebSocket params to prevent 1008 Pong timeouts
                 async with websockets.connect(
                     url,
-                    ping_interval=self.config.ws_ping_interval,
-                    ping_timeout=self.config.ws_timeout_seconds,
-                    close_timeout=20,  # Increased close timeout
-                    max_size=2**20,    # 1MB max message size
-                    max_queue=32       # Increased message queue
+                    ping_interval=self.config.ws_ping_interval,  # 15s
+                    ping_timeout=10,                             # 10s (tighter than before)
+                    close_timeout=10,
+                    max_queue=1000,        # Limit queue size
+                    read_limit=2**20,      # 1MB read limit
+                    write_limit=2**20,     # 1MB write limit
+                    compression=None       # Disable compression to reduce backpressure
                 ) as websocket:
                     
                     # Connection established
