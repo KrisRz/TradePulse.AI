@@ -1415,6 +1415,11 @@ class IntelligentExitEngine:
             adaptive_threshold = 0.55
             regime = "unknown"
         
+        # 🔧 FIX (Oct 2025): CRYPTO DAY TRADING - Raise exit threshold to prevent premature exits
+        # Was: 0.55-0.60 → positions closed after 2-10 min (too quick!)
+        # Now: 0.70 minimum → requires stronger consensus to exit (let trades develop)
+        adaptive_threshold = max(adaptive_threshold, 0.70)  # Minimum 0.70 for crypto day trading
+        
         # 🎯 SMART REVERSAL CHECK: Only force exit on VERY strong signals (6+)
         # Was: 4+ signals override → Now: 6+ signals override (Bitcoin-adjusted)
         reversal_layer = layer_results.get("layer_3_reversal", {})
@@ -1468,9 +1473,10 @@ class IntelligentExitEngine:
         
         # 🔧 FIX (Oct 2025): Exit hysteresis - prevent churn
         # Require higher confidence to exit than to enter (anti-flip-flop)
-        # Min hold: 3 bars (~60s) unless hard stop hit
-        MIN_HOLD_BARS = 3
-        EXIT_MARGIN = 0.06  # Require 6% higher confidence to exit
+        # Min hold: 15 bars (~5 min) for crypto day trading (was 3 bars/60s - too short!)
+        # Crypto needs time to develop moves - 2-10 min is too quick
+        MIN_HOLD_BARS = 15  # 15 × 20s = 5 minutes minimum hold
+        EXIT_MARGIN = 0.10  # Require 10% higher confidence to exit (was 6% - too easy)
         
         position_age_s = (datetime.now(timezone.utc) - datetime.fromisoformat(position_data.get('entry_time', datetime.now(timezone.utc).isoformat()).replace('Z', '+00:00'))).total_seconds()
         position_age_bars = int(position_age_s / 20)  # Assuming ~20s per bar
