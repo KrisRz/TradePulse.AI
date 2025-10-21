@@ -2,6 +2,7 @@ import { useState, useEffect } from 'preact/hooks';
 import { Brain, TrendingUp, Clock, ArrowRight, Zap, Target, Eye } from 'lucide-preact';
 import type { PortfolioOverviewResponse, TradingSignalsResponse, Position } from '../../../../types';
 import { apiClient } from '@/lib/api-client';
+import ClosedPositionsModal from './ClosedPositionsModal';
 
 interface SignalData {
   signals: any[];
@@ -26,6 +27,7 @@ export default function TradingIntelligence({ portfolioData }: TradingIntelligen
   const [signalData, setSignalData] = useState<SignalData | null>(null);
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
   const [loading, setLoading] = useState(true);
+  const [showAllPositionsModal, setShowAllPositionsModal] = useState(false);
 
   // Fetch live positions and signals
   useEffect(() => {
@@ -384,9 +386,19 @@ export default function TradingIntelligence({ portfolioData }: TradingIntelligen
               <ArrowRight className="w-5 h-5 mr-2 text-green-600" />
               Closed Positions ({closedPositions.length} completed)
             </h3>
-            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-              <Clock className="w-4 h-4" />
-              <span>Recent history</span>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+                <Clock className="w-4 h-4" />
+                <span>Recent history</span>
+              </div>
+              {closedPositions.length > 10 && (
+                <button
+                  onClick={() => setShowAllPositionsModal(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                >
+                  View All ({closedPositions.length})
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -502,6 +514,13 @@ export default function TradingIntelligence({ portfolioData }: TradingIntelligen
           </div>
         </div>
       </div>
+
+      {/* Closed Positions Modal */}
+      <ClosedPositionsModal
+        positions={closedPositions}
+        isOpen={showAllPositionsModal}
+        onClose={() => setShowAllPositionsModal(false)}
+      />
     </div>
   );
 }
