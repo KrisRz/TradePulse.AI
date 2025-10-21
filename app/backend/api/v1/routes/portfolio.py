@@ -300,12 +300,15 @@ async def get_virtual_positions():
                         else:
                             pnl_percentage = float(pnl_percentage_raw) if pnl_percentage_raw else 0.0
                         
+                        # Get position type and normalize to uppercase for frontend
+                        position_type = pos_data.get('position_type', 'long').upper()
+                        
                         closed_positions.append({
                             "id": pos_data.get('position_id', 'unknown'),
                             "position_id": pos_data.get('position_id', 'unknown'),
                             "symbol": pos_data.get('symbol', 'BTCUSDT'),
-                            "type": pos_data.get('position_type', 'long'),
-                            "side": pos_data.get('position_type', 'long'),
+                            "type": position_type,  # LONG or SHORT (uppercase)
+                            "side": position_type,  # LONG or SHORT (uppercase)
                             "size": float(pos_data.get('size', 0)),
                             "quantity": float(pos_data.get('size', 0)),
                             "entry_price": float(pos_data.get('entry_price', 0)),
