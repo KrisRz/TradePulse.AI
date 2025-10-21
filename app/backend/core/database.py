@@ -24,8 +24,10 @@ settings = get_settings()
 @lru_cache(maxsize=1)
 def get_dynamodb_singleton():
     """Singleton DynamoDB resource to prevent multiple client creation and ListTables storms"""
+    # Get region from environment (defaults to eu-west-2 for production)
+    region = os.getenv("DYNAMODB_REGION") or os.getenv("AWS_REGION", "eu-west-2")
+    
     cfg = Config(
-        region_name=os.getenv("DYNAMODB_REGION", "us-east-1"),
         retries={"max_attempts": 5, "mode": "standard"},
         connect_timeout=10, 
         read_timeout=30, 
@@ -35,20 +37,21 @@ def get_dynamodb_singleton():
     
     endpoint_url = os.getenv("DYNAMODB_ENDPOINT")
     if endpoint_url:
-        logger.info(f"Using DynamoDB Local on {endpoint_url} with optimized connection pooling")
+        logger.info(f"Using DynamoDB Local on {endpoint_url} (region={region}) with optimized connection pooling")
         # FORCE dummy credentials for DynamoDB Local (ignore system AWS credentials)
         return boto3.resource(
             "dynamodb",
             endpoint_url=endpoint_url,
-            region_name=os.getenv("DYNAMODB_REGION", "us-east-1"),
+            region_name=region,
             aws_access_key_id="dummy", 
             aws_secret_access_key="dummy",
             aws_session_token=None,  # Explicitly clear session token
             config=cfg
         )
     else:
-        # Use system credentials for production AWS
-        return boto3.resource("dynamodb", config=cfg)
+        # Use system credentials for production AWS with correct region
+        logger.info(f"Using AWS DynamoDB in region={region}")
+        return boto3.resource("dynamodb", region_name=region, config=cfg)
 
 # Reduce noisy botocore logs for both development and production
 for name in ("botocore", "boto3", "urllib3", "s3transfer"):
