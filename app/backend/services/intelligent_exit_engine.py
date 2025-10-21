@@ -1415,10 +1415,11 @@ class IntelligentExitEngine:
             adaptive_threshold = 0.55
             regime = "unknown"
         
-        # 🔧 FIX (Oct 2025): CRYPTO DAY TRADING - Raise exit threshold to prevent premature exits
-        # Was: 0.55-0.60 → positions closed after 2-10 min (too quick!)
-        # Now: 0.70 minimum → requires stronger consensus to exit (let trades develop)
-        adaptive_threshold = max(adaptive_threshold, 0.70)  # Minimum 0.70 for crypto day trading
+        # 🔧 FIX (Oct 2025): CRYPTO DAY TRADING - Use reasonable exit threshold
+        # Consensus 0.60-0.65 is GOOD for exit (4 exit vs 1-2 hold votes)
+        # Don't artificially raise it - let 6-layer AI work!
+        # Trailing stop from peak protects profit naturally
+        adaptive_threshold = max(adaptive_threshold, 0.60)  # Reasonable minimum for crypto
         
         # 🎯 SMART REVERSAL CHECK: Only force exit on VERY strong signals (6+)
         # Was: 4+ signals override → Now: 6+ signals override (Bitcoin-adjusted)
@@ -1471,30 +1472,22 @@ class IntelligentExitEngine:
         logger.info(f"🎯 Exit consensus: {exit_votes} exit vs {hold_votes} hold votes, "
                    f"score={consensus_score:.2f}, threshold={adaptive_threshold:.2f} (regime: {regime})")
         
-        # 🔧 FIX (Oct 2025): Exit hysteresis - prevent churn
-        # Require higher confidence to exit than to enter (anti-flip-flop)
-        # Min hold: 15 bars (~5 min) for crypto day trading (was 3 bars/60s - too short!)
-        # Crypto needs time to develop moves - 2-10 min is too quick
-        MIN_HOLD_BARS = 15  # 15 × 20s = 5 minutes minimum hold
-        EXIT_MARGIN = 0.10  # Require 10% higher confidence to exit (was 6% - too easy)
-        
-        position_age_s = (datetime.now(timezone.utc) - datetime.fromisoformat(position_data.get('entry_time', datetime.now(timezone.utc).isoformat()).replace('Z', '+00:00'))).total_seconds()
-        position_age_bars = int(position_age_s / 20)  # Assuming ~20s per bar
-        entry_confidence = position_data.get('confidence_score', 0.5)
-        required_exit_conf = max(adaptive_threshold, entry_confidence + EXIT_MARGIN)
+        # 🔧 FIX (Oct 2025): SMART EXIT - Let AI and trailing stop work!
+        # REMOVED: MIN_HOLD_BARS - anti-pattern that blocks profit protection
+        # REMOVED: EXIT_MARGIN - let consensus work naturally
+        # 
+        # Professional exit logic:
+        # 1. Trailing stop protects profit (ATR-based from peak)
+        # 2. 6-layer consensus detects reversals
+        # 3. TP/SL provide hard limits
+        # 
+        # NO artificial time delays - exit when conditions say exit!
         
         # Check if hard stop hit (emergency exit)
         hard_stop_hit = any(
             cond.get("emergency_exit", False) 
             for cond in [layer_results.get(f"layer_{i}", {}) for i in range(1, 7)]
         )
-        
-        if position_age_bars < MIN_HOLD_BARS and not hard_stop_hit:
-            logger.info(f"⏱️ HYSTERESIS: Position too young ({position_age_bars}/{MIN_HOLD_BARS} bars) - suppressing soft exit")
-            consensus_score = min(consensus_score, required_exit_conf - 0.01)  # Force below threshold
-        
-        if consensus_score < required_exit_conf and not hard_stop_hit:
-            logger.info(f"⏱️ HYSTERESIS: Exit conf {consensus_score:.2f} < required {required_exit_conf:.2f} (entry={entry_confidence:.2f}+{EXIT_MARGIN:.2f}) - HOLD")
         
         # 🎯 FIX: With strong reversal override, prioritize EXIT even if votes are split
         if reversal_override and exit_votes >= 2 and hard_stop_hit:
