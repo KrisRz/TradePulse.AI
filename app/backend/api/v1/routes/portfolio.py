@@ -231,84 +231,84 @@ async def get_virtual_positions():
                         "current_value": float(position.position_value)
                     })
 
+            # ALWAYS load closed positions from DynamoDB (source of truth)
+            # Don't rely on in-memory portfolio which may be incomplete after restart
             closed_positions = []
-            for position in portfolio.closed_positions:  # Remove artificial limit
-                closed_positions.append({
-                    "id": position.position_id,
-                    "position_id": position.position_id,
-                    "symbol": position.symbol,
-                    "type": position.type.value,
-                    "side": position.type.value,  # Add 'side' field for frontend compatibility
-                    "size": float(position.size),
-                    "quantity": float(position.size),  # Add 'quantity' alias
-                    "entry_price": float(position.entry_price),
-                    "current_price": float(position.exit_price) if position.exit_price else float(position.current_price),
-                    "pnl": float(position.realized_pnl),
-                    "unrealized_pnl": float(position.realized_pnl),  # Add alias for closed positions
-                    "pnl_percentage": float(position.realized_pnl / (position.entry_price * position.size) * 100) if position.entry_price * position.size != 0 else 0.0,
-                    "unrealized_pnl_percentage": float(position.realized_pnl / (position.entry_price * position.size) * 100) if position.entry_price * position.size != 0 else 0.0,  # Add alias
-                    "entry_time": position.entry_time.isoformat(),
-                    "exit_time": position.exit_time.isoformat() if position.exit_time else None,
-                    "status": position.status.value,
-                    "hold_duration": str(position.exit_time - position.entry_time) if position.exit_time else "N/A",
-                })
             
-            # FALLBACK: If in-memory portfolio is empty (e.g., after restart), load from DynamoDB
-            if len(closed_positions) == 0:
-                logger.info("📦 In-memory closed positions empty, loading from DynamoDB...")
-                try:
-                    from app.backend.core.database import DynamoDBClient
-                    from app.backend.core.config import get_settings
-                    
-                    settings = get_settings()
-                    db_client = DynamoDBClient(local_development=settings.is_development)
-                    
-                    # Scan portfolio_closed_positions table
-                    all_closed = db_client.scan_table('portfolio_closed_positions')
-                    
-                    # Sort by closed_at descending and take last 100
-                    all_closed.sort(key=lambda x: x.get('closed_at', ''), reverse=True)
-                    
-                    for pos_data in all_closed[:100]:  # Limit to 100 most recent
-                        try:
-                            # Calculate hold duration
-                            from datetime import datetime
-                            entry_time = datetime.fromisoformat(pos_data.get('entry_time', ''))
-                            exit_time = datetime.fromisoformat(pos_data.get('exit_time', ''))
-                            hold_duration = str(exit_time - entry_time) if exit_time and entry_time else "N/A"
-                            
-                            # Parse PnL values
-                            realized_pnl = float(pos_data.get('realized_pnl', 0))
-                            pnl_percentage = float(pos_data.get('pnl_percentage', 0))
-                            
-                            closed_positions.append({
-                                "id": pos_data.get('position_id', 'unknown'),
-                                "position_id": pos_data.get('position_id', 'unknown'),
-                                "symbol": pos_data.get('symbol', 'BTCUSDT'),
-                                "type": pos_data.get('position_type', 'long'),
-                                "side": pos_data.get('position_type', 'long'),
-                                "size": float(pos_data.get('size', 0)),
-                                "quantity": float(pos_data.get('size', 0)),
-                                "entry_price": float(pos_data.get('entry_price', 0)),
-                                "current_price": float(pos_data.get('exit_price', 0)),
-                                "pnl": realized_pnl,
-                                "unrealized_pnl": realized_pnl,
-                                "pnl_percentage": pnl_percentage,
-                                "unrealized_pnl_percentage": pnl_percentage,
-                                "entry_time": pos_data.get('entry_time', ''),
-                                "exit_time": pos_data.get('exit_time', ''),
-                                "status": 'closed',
-                                "hold_duration": hold_duration,
-                            })
-                        except Exception as parse_error:
-                            logger.warning(f"⚠️ Failed to parse closed position from DynamoDB: {parse_error}")
-                            continue
-                    
-                    logger.info(f"✅ Loaded {len(closed_positions)} closed positions from DynamoDB")
-                    
-                except Exception as db_error:
-                    logger.error(f"❌ Failed to load closed positions from DynamoDB: {db_error}")
-                    # Continue with empty list
+            try:
+                from app.backend.core.database import DynamoDBClient
+                from app.backend.core.config import get_settings
+                
+                settings = get_settings()
+                db_client = DynamoDBClient(local_development=settings.is_development)
+                
+                # Scan portfolio_closed_positions table (source of truth)
+                all_closed = db_client.scan_table('portfolio_closed_positions')
+                
+                # Sort by closed_at descending and take last 100
+                all_closed.sort(key=lambda x: x.get('closed_at', ''), reverse=True)
+                
+                for pos_data in all_closed[:100]:  # Limit to 100 most recent
+                    try:
+                        # Calculate hold duration
+                        from datetime import datetime
+                        entry_time = datetime.fromisoformat(pos_data.get('entry_time', ''))
+                        exit_time = datetime.fromisoformat(pos_data.get('exit_time', ''))
+                        hold_duration = str(exit_time - entry_time) if exit_time and entry_time else "N/A"
+                        
+                        # Parse PnL values
+                        realized_pnl = float(pos_data.get('realized_pnl', 0))
+                        pnl_percentage = float(pos_data.get('pnl_percentage', 0))
+                        
+                        closed_positions.append({
+                            "id": pos_data.get('position_id', 'unknown'),
+                            "position_id": pos_data.get('position_id', 'unknown'),
+                            "symbol": pos_data.get('symbol', 'BTCUSDT'),
+                            "type": pos_data.get('position_type', 'long'),
+                            "side": pos_data.get('position_type', 'long'),
+                            "size": float(pos_data.get('size', 0)),
+                            "quantity": float(pos_data.get('size', 0)),
+                            "entry_price": float(pos_data.get('entry_price', 0)),
+                            "current_price": float(pos_data.get('exit_price', 0)),
+                            "pnl": realized_pnl,
+                            "unrealized_pnl": realized_pnl,
+                            "pnl_percentage": pnl_percentage,
+                            "unrealized_pnl_percentage": pnl_percentage,
+                            "entry_time": pos_data.get('entry_time', ''),
+                            "exit_time": pos_data.get('exit_time', ''),
+                            "status": 'closed',
+                            "hold_duration": hold_duration,
+                        })
+                    except Exception as parse_error:
+                        logger.warning(f"⚠️ Failed to parse closed position from DynamoDB: {parse_error}")
+                        continue
+                
+                logger.info(f"✅ Loaded {len(closed_positions)} closed positions from DynamoDB (live data)")
+                
+            except Exception as db_error:
+                logger.error(f"❌ Failed to load closed positions from DynamoDB: {db_error}")
+                # FALLBACK: Use in-memory portfolio if DynamoDB fails
+                logger.info("📦 Falling back to in-memory closed positions...")
+                for position in portfolio.closed_positions:
+                    closed_positions.append({
+                        "id": position.position_id,
+                        "position_id": position.position_id,
+                        "symbol": position.symbol,
+                        "type": position.type.value,
+                        "side": position.type.value,
+                        "size": float(position.size),
+                        "quantity": float(position.size),
+                        "entry_price": float(position.entry_price),
+                        "current_price": float(position.exit_price) if position.exit_price else float(position.current_price),
+                        "pnl": float(position.realized_pnl),
+                        "unrealized_pnl": float(position.realized_pnl),
+                        "pnl_percentage": float(position.realized_pnl / (position.entry_price * position.size) * 100) if position.entry_price * position.size != 0 else 0.0,
+                        "unrealized_pnl_percentage": float(position.realized_pnl / (position.entry_price * position.size) * 100) if position.entry_price * position.size != 0 else 0.0,
+                        "entry_time": position.entry_time.isoformat(),
+                        "exit_time": position.exit_time.isoformat() if position.exit_time else None,
+                        "status": position.status.value,
+                        "hold_duration": str(position.exit_time - position.entry_time) if position.exit_time else "N/A",
+                    })
 
         except Exception as e:
             logger.error(f"Professional portfolio error: {e}")
