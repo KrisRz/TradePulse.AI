@@ -244,6 +244,12 @@ async def get_virtual_positions():
                 
                 # Scan portfolio_closed_positions table (source of truth)
                 all_closed = db_client.scan_table('portfolio_closed_positions')
+                logger.info(f"🔍 DynamoDB scan returned {len(all_closed)} positions")
+                
+                # DEBUG: Log first item structure if available
+                if len(all_closed) > 0:
+                    logger.info(f"🔍 Sample position keys: {list(all_closed[0].keys())}")
+                    logger.info(f"🔍 Sample position_type: {all_closed[0].get('position_type')}")
                 
                 # Sort by closed_at descending and take last 100
                 all_closed.sort(key=lambda x: x.get('closed_at', ''), reverse=True)
@@ -252,13 +258,34 @@ async def get_virtual_positions():
                     try:
                         # Calculate hold duration
                         from datetime import datetime
-                        entry_time = datetime.fromisoformat(pos_data.get('entry_time', ''))
-                        exit_time = datetime.fromisoformat(pos_data.get('exit_time', ''))
-                        hold_duration = str(exit_time - entry_time) if exit_time and entry_time else "N/A"
+                        entry_time_str = pos_data.get('entry_time', '')
+                        exit_time_str = pos_data.get('exit_time', '')
                         
-                        # Parse PnL values
-                        realized_pnl = float(pos_data.get('realized_pnl', 0))
-                        pnl_percentage = float(pos_data.get('pnl_percentage', 0))
+                        if not entry_time_str or not exit_time_str:
+                            logger.warning(f"⚠️ Missing time data for position {pos_data.get('position_id')}")
+                            hold_duration = "N/A"
+                            entry_time = None
+                            exit_time = None
+                        else:
+                            entry_time = datetime.fromisoformat(entry_time_str)
+                            exit_time = datetime.fromisoformat(exit_time_str)
+                            hold_duration = str(exit_time - entry_time)
+                        
+                        # Parse PnL values (handle Decimal from DynamoDB)
+                        realized_pnl_raw = pos_data.get('realized_pnl', 0)
+                        pnl_percentage_raw = pos_data.get('pnl_percentage', 0)
+                        
+                        # Convert Decimal to float if needed
+                        from decimal import Decimal
+                        if isinstance(realized_pnl_raw, Decimal):
+                            realized_pnl = float(realized_pnl_raw)
+                        else:
+                            realized_pnl = float(realized_pnl_raw) if realized_pnl_raw else 0.0
+                            
+                        if isinstance(pnl_percentage_raw, Decimal):
+                            pnl_percentage = float(pnl_percentage_raw)
+                        else:
+                            pnl_percentage = float(pnl_percentage_raw) if pnl_percentage_raw else 0.0
                         
                         closed_positions.append({
                             "id": pos_data.get('position_id', 'unknown'),
@@ -280,10 +307,12 @@ async def get_virtual_positions():
                             "hold_duration": hold_duration,
                         })
                     except Exception as parse_error:
-                        logger.warning(f"⚠️ Failed to parse closed position from DynamoDB: {parse_error}")
+                        logger.error(f"⚠️ Failed to parse closed position from DynamoDB: {parse_error}", exc_info=True)
+                        logger.error(f"⚠️ Problematic position data: {pos_data}")
                         continue
                 
                 logger.info(f"✅ Loaded {len(closed_positions)} closed positions from DynamoDB (live data)")
+                logger.info(f"📊 Position types: {[p.get('type') for p in closed_positions[:5]]}")
                 
             except Exception as db_error:
                 logger.error(f"❌ Failed to load closed positions from DynamoDB: {db_error}")
