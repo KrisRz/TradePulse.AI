@@ -477,6 +477,7 @@ class ContinuousLearningEngine:
         """Get recent position results for analysis - with fallback to portfolio_closed_positions"""
         try:
             if not self.db_client:
+                logger.warning("⚠️ No database client available for learning")
                 return []
             
             # Filter cutoff date - FIXED: Use timezone-aware datetime for comparison
@@ -485,7 +486,11 @@ class ContinuousLearningEngine:
             source_table = 'position_results'
             
             # Try position_results table first (preferred source)
-            all_results = self.db_client.scan_table('position_results')
+            try:
+                all_results = self.db_client.scan_table('position_results')
+            except Exception as e:
+                logger.warning(f"⚠️ Cannot access position_results table: {e}")
+                all_results = []
             
             # Filter to recent from position_results
             for result in all_results:
@@ -525,7 +530,12 @@ class ContinuousLearningEngine:
             if len(recent_results) == 0:
                 logger.warning("⚠️ No recent data in position_results, using portfolio_closed_positions as fallback")
                 source_table = 'portfolio_closed_positions'
-                all_portfolio_results = self.db_client.scan_table('portfolio_closed_positions')
+                try:
+                    all_portfolio_results = self.db_client.scan_table('portfolio_closed_positions')
+                except Exception as e:
+                    logger.error(f"❌ Cannot access portfolio_closed_positions table: {e}")
+                    logger.error("💡 Learning engine needs DynamoDB tables to be created!")
+                    return []
                 
                 for result in all_portfolio_results:
                     try:
@@ -605,7 +615,12 @@ class ContinuousLearningEngine:
                         logger.debug(f"Skipping portfolio entry due to parse error: {e}")
                         continue
             
-            logger.info(f"📊 Loaded {len(recent_results)} position results for learning analysis (from {source_table})")
+            if len(recent_results) > 0:
+                logger.info(f"✅ Retrieved {len(recent_results)} position results from {source_table} (last {days} days)")
+            else:
+                logger.warning(f"⚠️ No position results found in any table (last {days} days)")
+                logger.warning(f"💡 Checked tables: position_results, portfolio_closed_positions")
+            
             return recent_results
             
         except Exception as e:
