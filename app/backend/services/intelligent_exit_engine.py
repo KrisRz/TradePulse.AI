@@ -1501,7 +1501,7 @@ class IntelligentExitEngine:
             }
         
         # Determine final decision with adaptive threshold + hysteresis
-        if exit_votes > hold_votes and consensus_score > required_exit_conf:
+        if exit_votes > hold_votes and consensus_score > adaptive_threshold:
             decision = {
                 "should_exit": True,
                 "confidence": consensus_score,
