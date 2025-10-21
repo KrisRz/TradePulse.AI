@@ -246,15 +246,28 @@ async def get_virtual_positions():
                 all_closed = db_client.scan_table('portfolio_closed_positions')
                 logger.info(f"🔍 DynamoDB scan returned {len(all_closed)} positions")
                 
-                # DEBUG: Log first item structure if available
+                # DEBUG: Count position types BEFORE sorting
                 if len(all_closed) > 0:
+                    type_counts = {}
+                    for p in all_closed:
+                        ptype = p.get('position_type', 'unknown')
+                        type_counts[ptype] = type_counts.get(ptype, 0) + 1
+                    logger.info(f"🔍 Position types in DynamoDB: {type_counts}")
                     logger.info(f"🔍 Sample position keys: {list(all_closed[0].keys())}")
-                    logger.info(f"🔍 Sample position_type: {all_closed[0].get('position_type')}")
+                    logger.info(f"🔍 Sample closed_at: {all_closed[0].get('closed_at')}")
                 
-                # Sort by closed_at descending and take last 100
+                # Sort by closed_at descending and take last 200
                 all_closed.sort(key=lambda x: x.get('closed_at', ''), reverse=True)
                 
-                for pos_data in all_closed[:100]:  # Limit to 100 most recent
+                # DEBUG: Count position types in TOP 200
+                top_200 = all_closed[:200]
+                type_counts_top = {}
+                for p in top_200:
+                    ptype = p.get('position_type', 'unknown')
+                    type_counts_top[ptype] = type_counts_top.get(ptype, 0) + 1
+                logger.info(f"🔍 Position types in TOP 200: {type_counts_top}")
+                
+                for pos_data in top_200:  # Limit to 200 most recent
                     try:
                         # Calculate hold duration
                         from datetime import datetime
