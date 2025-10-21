@@ -282,11 +282,13 @@ async def get_virtual_closed_positions():
     try:
         logger.info("📊 Requesting virtual closed positions")
 
+        closed_positions = []
+        
+        # Try to get from in-memory portfolio first
         try:
             from app.backend.services.professional_portfolio import get_professional_portfolio
             portfolio = await get_professional_portfolio("admin")
 
-            closed_positions = []
             for position in portfolio.closed_positions[-50:]:
                 closed_positions.append({
                     "id": position.position_id,
@@ -301,9 +303,46 @@ async def get_virtual_closed_positions():
                     "exit_time": position.exit_time.isoformat() if position.exit_time else None,
                     "status": position.status.value,
                 })
+            
+            logger.info(f"✅ Retrieved {len(closed_positions)} positions from in-memory portfolio")
         except Exception as e:
-            logger.error(f"Professional portfolio error (closed): {e}")
-            closed_positions = []
+            logger.warning(f"⚠️ Professional portfolio error (closed): {e}")
+        
+        # FALLBACK: If no positions in memory, get from DynamoDB
+        if len(closed_positions) == 0:
+            logger.warning("⚠️ No positions in memory, fetching from DynamoDB...")
+            try:
+                from app.backend.core.database import get_database_client
+                db = get_database_client()
+                
+                # Get from portfolio_closed_positions table
+                all_positions = db.scan_table('portfolio_closed_positions')
+                
+                # Sort by closed_at descending and take last 50
+                sorted_positions = sorted(
+                    all_positions, 
+                    key=lambda p: p.get('closed_at', ''), 
+                    reverse=True
+                )[:50]
+                
+                for pos in sorted_positions:
+                    closed_positions.append({
+                        "id": pos.get('position_id'),
+                        "symbol": pos.get('symbol'),
+                        "type": pos.get('position_type', 'LONG'),
+                        "size": float(pos.get('size', 0)),
+                        "entry_price": float(pos.get('entry_price', 0)),
+                        "current_price": float(pos.get('exit_price', 0)),
+                        "pnl": float(pos.get('realized_pnl', 0)),
+                        "pnl_percentage": float(pos.get('pnl_percentage', 0)),
+                        "entry_time": pos.get('entry_time'),
+                        "exit_time": pos.get('closed_at'),
+                        "status": "closed",
+                    })
+                
+                logger.info(f"✅ Retrieved {len(closed_positions)} positions from DynamoDB")
+            except Exception as db_error:
+                logger.error(f"❌ DynamoDB fallback failed: {db_error}")
 
         return {
             "closed_positions": closed_positions,
