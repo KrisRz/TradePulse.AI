@@ -91,7 +91,10 @@ class SingletonTradingApp:
                     },
                 )
             except Exception as diag_err:
-                logger.warning(f"AWS identity diagnostic failed: {diag_err}")
+                if self.settings.is_development:
+                    logger.info("AWS: running in dev fallback creds; STS disabled")
+                else:
+                    logger.warning(f"AWS identity diagnostic failed: {diag_err}")
             
             # Step 0: Load secrets from SSM Parameter Store (production only)
             if not self.settings.is_development:

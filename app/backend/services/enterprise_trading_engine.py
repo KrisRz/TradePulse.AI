@@ -1616,15 +1616,22 @@ class EnterpriseTradingEngine:
             logger.info(f"🔍 THRESHOLDS - primary={self.thresholds.confidence.BUY_THRESHOLD:.2f}, exploratory={self.thresholds.confidence.EXPLORATORY_BUY:.2f}, consensus={self.thresholds.confidence.CONSENSUS_THRESHOLD:.2f}")
             
             # PRIMARY SIGNAL (strict criteria)
-            primary_signal = self._calculate_primary_signal(
-                confidence,
-                timing_score,
-                reversal_prob,
-                filter_score,
-                layer_results.get("features", {}),
-                layer_results  # Pass full layer results for price predictions access
-            )
-            if primary_signal[0] != "HOLD":
+            primary_ok = False
+            primary_signal = None
+            try:
+                primary_signal = self._calculate_primary_signal(
+                    confidence,
+                    timing_score,
+                    reversal_prob,
+                    filter_score,
+                    layer_results.get("features", {}),
+                    layer_results  # Pass full layer results for price predictions access
+                )
+                primary_ok = True
+            except Exception as e:
+                logger.exception(f"Primary signal calculation error: {e}")
+            
+            if primary_ok and primary_signal and primary_signal[0] != "HOLD":
                 return primary_signal[0], primary_signal[1], "primary"
             
             # EXPLORATORY SIGNAL (lower thresholds for small positions)
@@ -2062,7 +2069,8 @@ class EnterpriseTradingEngine:
             return "HOLD", confidence
             
         except Exception as e:
-            logger.error(f"Primary signal calculation error: {e}")
+            logger.exception(f"Primary signal calculation error: {e}")
+            # Ensure we have a safe fallback
             return "HOLD", 0.5
         
     def _calculate_exploratory_signal(self, confidence: float, timing_score: float, reversal_prob: float, filter_score: float, volatility: float, features: Dict[str, float] = None) -> Tuple[str, float]:

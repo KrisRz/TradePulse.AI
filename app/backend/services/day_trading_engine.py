@@ -1387,8 +1387,10 @@ class DayTradingEngine:
                         pass
             else:
                 reason = "low_confidence" if adjusted_confidence <= config.confidence_threshold else "hold_signal"
+                # Ensure HOLD decisions use no_action audit reason instead of risk_blocked
+                audit_reason = "no_action" if reason == "hold_signal" else reason
                 logger.debug(f"📊 Signal rejected: {reason}")
-                await self._audit_decision(signal, None, None, risk_assessment, reason)
+                await self._audit_decision(signal, None, None, risk_assessment, audit_reason)
                 try:
                     from time import time as _t
                     from app.backend.services.metrics import inc_decision, set_last_decision_epoch, inc_decision_by_playbook
@@ -1481,6 +1483,13 @@ class DayTradingEngine:
     async def _audit_decision(self, signal, entry_decision, exit_decision, risk_assessment, outcome: str):
         """PHASE 1A: Complete decision audit trail for professional operation"""
         try:
+            # Ensure HOLD decisions don't show risk_blocked when they're just no-action
+            final_outcome = outcome
+            if outcome == "no_action" and signal and signal.action == "HOLD":
+                final_outcome = "no_action"
+            elif outcome == "hold_signal":
+                final_outcome = "no_action"
+            
             audit_data = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "symbol": "BTCUSDT",
@@ -1492,17 +1501,21 @@ class DayTradingEngine:
                 "exit_reason": exit_decision.get('reasoning', 'none') if exit_decision else "none",
                 "risk_score": getattr(risk_assessment, 'risk_score', 0.0) if risk_assessment else 0.0,
                 "risk_block": getattr(risk_assessment, 'block_reason', None) if risk_assessment else None,
-                "outcome": outcome,
+                "outcome": final_outcome,
                 "trading_mode": self.current_mode.value,
                 "session": self.current_session.value
             }
             
+            # Enhance entry_decision with audit reason for better tracking
+            if entry_decision is None and final_outcome == "no_action":
+                entry_decision = {"should_enter": False, "reasoning": "no_action"}
+            
             # Use market data persistence for audit logging
             audit_success = await write_decisions(entry_decision, exit_decision, risk_assessment, signal)
             if audit_success:
-                logger.debug(f"📝 Decision audited: {outcome}")
+                logger.debug(f"📝 Decision audited: {final_outcome}")
             else:
-                logger.warning(f"⚠️ Decision audit failed, but continuing: {outcome}")
+                logger.warning(f"⚠️ Decision audit failed, but continuing: {final_outcome}")
             
         except Exception as e:
             logger.error(f"❌ Audit logging failed: {e}")

@@ -1054,13 +1054,39 @@ def _calculate_bollinger_position(prices: np.ndarray, current_price: float, peri
 	
 	upper_band = sma + (2 * std)
 	lower_band = sma - (2 * std)
+	mid = sma
+	
+	# Diagnostic logging for BB position calculation
+	denom = upper_band - lower_band
+	logger.info(
+		f"BB raw: close={current_price:.2f} mid={mid:.2f} upper={upper_band:.2f} lower={lower_band:.2f} denom={denom:.8f}"
+	)
 	
 	# FIXED: Add epsilon to prevent division by zero in volatile markets
 	eps = 1e-8
-	band_width = max(upper_band - lower_band, eps)
+	if denom is None or not np.isfinite(denom) or denom <= 0:
+		logger.warning(f"BB calculation: invalid denominator {denom}, using fallback")
+		# Fallback using normalized distance to mid
+		atr_estimate = std * 2  # rough ATR estimate
+		bb_pos = float(np.clip((current_price - mid) / max(1e-9, atr_estimate), -1.5, 1.5))
+		# Convert to 0-1 range
+		position = (bb_pos + 1.5) / 3.0
+	else:
+		# Pozycja w paśmie [-1, +1] (środek=0)
+		bb_pos_normalized = ((current_price - mid) / (denom / 2.0))
+		bb_pos_normalized = float(np.clip(bb_pos_normalized, -1.0, 1.0))
+		
+		# Convert to 0-1 range for compatibility
+		position = (bb_pos_normalized + 1.0) / 2.0
 	
-	position = (current_price - lower_band) / band_width
-	return float(np.clip(position, 0.0, 1.0))
+	# Final fallback for nan/inf
+	if not np.isfinite(position):
+		logger.warning(f"BB calculation: non-finite result {position}, using 0.5")
+		position = 0.5
+	
+	position = float(np.clip(position, 0.0, 1.0))
+	logger.info(f"BB final position: {position:.6f}")
+	return position
 
 def _calculate_trend_strength(prices: np.ndarray) -> float:
 	"""Calculate trend strength using linear regression slope"""

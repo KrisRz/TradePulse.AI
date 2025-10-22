@@ -342,27 +342,41 @@ class TradePulseApplication:
                     
                     logger.info("🎉 ALL PHASES COMPLETE: Full professional backend restored!")
                     print("🎉 DEBUG: All phases completed!")
+    
+    async def _auto_start_with_debounce(self):
+        """Auto-start brain controller with debounce and readiness gate"""
+        try:
+            for attempt in range(10):
+                brain_controller = self.container.get("brain_controller")
+                if brain_controller and hasattr(brain_controller, 'state'):
+                    current_state = brain_controller.state.current_state.value
+                    logger.info(f"🧠 Brain Controller state check {attempt + 1}/10: {current_state}")
+                    
+                    # Check if controller is registered and in appropriate state
+                    if current_state in {"warmup", "ready"}:
+                        # Check if already running to ensure idempotence
+                        if current_state in {"running", "starting"}:
+                            logger.info(f"📝 Brain Controller already {current_state} - no auto-start needed")
+                            return
+                        
+                        logger.info("🚀 AUTO-START: Brain Controller ready - starting trading operations")
+                        result = await brain_controller.start_trading()
+                        logger.info(f"✅ AUTO-START RESULT: {result}")
+                        return
+                    else:
+                        logger.info(f"📝 Brain Controller in state: {current_state} - waiting for readiness")
+                
+                await asyncio.sleep(0.5)  # debounce
+            
+            logger.warning("⚠️ Auto-start skipped: controller not ready after debounce")
+        except Exception as auto_start_error:
+            logger.warning(f"⚠️ Auto-start failed: {auto_start_error}")
                     
                     # 🚀 INDUSTRY STANDARD: Auto-start Brain Controller after all phases complete
                     await asyncio.sleep(3)  # Wait for all services to stabilize
                     logger.info("🚀 INDUSTRY AUTO-START: Starting Brain Controller trading after all phases complete")
                     
-                    try:
-                        brain_controller = self.container.get("brain_controller")
-                        if brain_controller and hasattr(brain_controller, 'state'):
-                            current_state = brain_controller.state.current_state.value
-                            logger.info(f"🧠 Brain Controller current state: {current_state}")
-                            
-                            if current_state == "warmup":
-                                logger.info("🚀 AUTO-START: Brain Controller ready - starting trading operations")
-                                result = await brain_controller.start_trading()
-                                logger.info(f"✅ AUTO-START RESULT: {result}")
-                            else:
-                                logger.info(f"📝 Brain Controller in state: {current_state} - no auto-start needed")
-                        else:
-                            logger.warning("⚠️ Brain Controller not available for auto-start")
-                    except Exception as auto_start_error:
-                        logger.warning(f"⚠️ Auto-start failed: {auto_start_error}")
+                    await self._auto_start_with_debounce()
                     
                     # Final status check
                     await asyncio.sleep(1)

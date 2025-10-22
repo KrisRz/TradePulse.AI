@@ -225,12 +225,28 @@ class AdaptiveExitCalculator:
             small_mult = 1.0
         
         # Calculate actual profit thresholds as % of entry price
-        # 🔧 FIX (Oct 2025): Add floor values to prevent 0.00% thresholds
+        # 🔧 FIX (Oct 2025): Add floor values to prevent 0.00% thresholds + hysteresis and fee control
         atr_pct = current_atr / entry_price if entry_price > 0 else 0.0025  # Fallback: 0.25%
         
-        excellent_profit_threshold = max(excellent_mult * atr_pct, 0.0010)  # Floor: 0.10% (10bp)
-        good_profit_threshold = max(good_mult * atr_pct, 0.0005)            # Floor: 0.05% (5bp)
-        small_profit_threshold = max(small_mult * atr_pct, 0.0002)          # Floor: 0.02% (2bp)
+        # Estimate trading costs (taker fee + spread)
+        taker_fee_bp = 0.0004  # 4bp taker fee (Binance)
+        spread_bp_est = 0.0001  # 1bp spread estimate
+        fees_bp = taker_fee_bp + spread_bp_est
+        
+        # Base thresholds
+        base_small = 0.0002  # 2bp base
+        base_good = 0.0005   # 5bp base  
+        base_excellent = 0.0010  # 10bp base
+        
+        # Fee control: when costs eat >50% of small target, adjust upward
+        if fees_bp > base_small * 0.5:
+            base_small = max(base_small, fees_bp * 1.2)
+            base_good = max(base_good, base_small * 2.5)
+            base_excellent = max(base_excellent, base_good * 2.0)
+        
+        excellent_profit_threshold = max(excellent_mult * atr_pct, base_excellent)
+        good_profit_threshold = max(good_mult * atr_pct, base_good)
+        small_profit_threshold = max(small_mult * atr_pct, base_small)
         
         return (
             take_profit_mult,
@@ -240,6 +256,46 @@ class AdaptiveExitCalculator:
             good_profit_threshold,
             small_profit_threshold
         )
+    
+    @staticmethod
+    def apply_hysteresis_to_thresholds(
+        current_pnl_pct: float,
+        thresholds: Tuple[float, float, float],  # (excellent, good, small)
+        previous_threshold_met: Optional[str] = None,
+        hysteresis_bp: float = 0.0003  # 3bp hysteresis
+    ) -> Tuple[float, float, float, Optional[str]]:
+        """
+        Apply hysteresis to exit thresholds to prevent oscillation.
+        Once a threshold is met, require pullback before re-entering that zone.
+        
+        Returns:
+            (adjusted_excellent, adjusted_good, adjusted_small, current_threshold_met)
+        """
+        excellent_thresh, good_thresh, small_thresh = thresholds
+        current_threshold_met = None
+        
+        # Determine which threshold is currently met
+        if current_pnl_pct >= excellent_thresh:
+            current_threshold_met = "excellent"
+        elif current_pnl_pct >= good_thresh:
+            current_threshold_met = "good"
+        elif current_pnl_pct >= small_thresh:
+            current_threshold_met = "small"
+        
+        # Apply hysteresis: once threshold met, require pullback to re-enter
+        adjusted_excellent = excellent_thresh
+        adjusted_good = good_thresh
+        adjusted_small = small_thresh
+        
+        if previous_threshold_met == "excellent" and current_threshold_met != "excellent":
+            # Require pullback below excellent - hysteresis before re-entering
+            adjusted_excellent = excellent_thresh + hysteresis_bp
+        elif previous_threshold_met == "good" and current_threshold_met != "good":
+            adjusted_good = good_thresh + hysteresis_bp
+        elif previous_threshold_met == "small" and current_threshold_met != "small":
+            adjusted_small = small_thresh + hysteresis_bp
+        
+        return (adjusted_excellent, adjusted_good, adjusted_small, current_threshold_met)
     
     @staticmethod
     def calculate_adaptive_consensus(

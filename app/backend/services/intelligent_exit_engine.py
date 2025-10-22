@@ -1452,25 +1452,70 @@ class IntelligentExitEngine:
         total_confidence = 0.0
         consensus_scores = []
         
+        # Weighted consensus calculation with detailed breakdown
+        reversal_weight = 0.35
+        timing_weight = 0.30
+        filters_weight = 0.20
+        trend_weight = 0.15
+        
+        weighted_exit_score = 0.0
+        weighted_hold_score = 0.0
+        layer_breakdown = {}
+        
         for layer_name, layer_data in layer_results.items():
             if isinstance(layer_data, dict):
                 recommendation = layer_data.get("recommendation", "uncertain")
                 confidence = layer_data.get("confidence", 0.0)
                 
+                # Assign weights based on layer type
+                if "reversal" in layer_name.lower():
+                    weight = reversal_weight
+                elif "timing" in layer_name.lower():
+                    weight = timing_weight
+                elif "filter" in layer_name.lower():
+                    weight = filters_weight
+                elif "trend" in layer_name.lower():
+                    weight = trend_weight
+                else:
+                    weight = 0.1  # Default weight for other layers
+                
+                layer_breakdown[layer_name] = {
+                    "recommendation": recommendation,
+                    "confidence": confidence,
+                    "weight": weight,
+                    "weighted_score": confidence * weight
+                }
+                
                 if recommendation == "exit":
                     exit_votes += 1
                     consensus_scores.append(confidence)
+                    weighted_exit_score += confidence * weight
                 elif recommendation == "hold":
                     hold_votes += 1
                     consensus_scores.append(confidence)
+                    weighted_hold_score += confidence * weight
                 
                 total_confidence += confidence
         
         total_votes = exit_votes + hold_votes
         consensus_score = np.mean(consensus_scores) if consensus_scores else 0.0
         
+        # Calculate weighted consensus
+        weighted_consensus = weighted_exit_score - weighted_hold_score
+        
+        # Detailed consensus logging
         logger.info(f"🎯 Exit consensus: {exit_votes} exit vs {hold_votes} hold votes, "
                    f"score={consensus_score:.2f}, threshold={adaptive_threshold:.2f} (regime: {regime})")
+        logger.info(f"📊 Weighted consensus breakdown:")
+        for layer_name, breakdown in layer_breakdown.items():
+            logger.info(f"   {layer_name}: {breakdown['recommendation']} "
+                       f"(conf={breakdown['confidence']:.3f}, weight={breakdown['weight']:.2f}, "
+                       f"weighted={breakdown['weighted_score']:.3f})")
+        
+        weighted_final = reversal_weight * weighted_exit_score + timing_weight * weighted_exit_score + \
+                        filters_weight * weighted_exit_score + trend_weight * weighted_exit_score
+        logger.info(f"🎯 ConsensusWeighted={weighted_consensus:.3f} vs threshold={adaptive_threshold:.2f} → "
+                   f"{'EXIT' if weighted_consensus > adaptive_threshold else 'HOLD'}")
         
         # 🔧 FIX (Oct 2025): SMART EXIT - Let AI and trailing stop work!
         # REMOVED: MIN_HOLD_BARS - anti-pattern that blocks profit protection
