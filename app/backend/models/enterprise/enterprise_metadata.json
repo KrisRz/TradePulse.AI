@@ -45,8 +45,7 @@
       "n_features": 9
     },
     "layer_5": {
-      "r2_score": 0.5498649591519406,
-      "model_type": "XGBRegressor_Professional",
+      "model_type": "XGBRegressor_Professional_v2",
       "features": [
         "close",
         "volume",
@@ -56,13 +55,23 @@
         "volatility",
         "trend_strength",
         "volume_ratio",
-        "price_change_24h"
+        "price_change_24h",
+        "hour_of_day",
+        "day_of_week",
+        "volume_spike",
+        "price_momentum_5m",
+        "price_momentum_15m",
+        "distance_from_support",
+        "distance_from_resistance",
+        "atr_normalized",
+        "stoch_oversold",
+        "stoch_overbought"
       ],
-      "training_samples": 5000,
-      "retrained_at": "2025-09-02T11:19:22.777634+00:00",
-      "bounds_enforced": true,
-      "professional_wrapper": true,
-      "n_features": 9
+      "n_features": 19,
+      "training_samples": 892,
+      "real_trades": 446,
+      "retrained_at": "2025-10-22T09:34:33.584845+00:00",
+      "version": "v3.3.0_FIXED_INVERSE_CORRELATION"
     },
     "layer_6": {
       "r2_score": 0.9826104416702788,
@@ -89,9 +98,10 @@
     "layer_5": "v2.1.0",
     "layer_6": "v2.1.0"
   },
-  "system_version": "6-Layer Enterprise v3.1.0 (Professional Layer 5)",
+  "system_version": "6-Layer Enterprise v3.3.0 (Layer 5 Professional - 1,448 Real Trades)",
   "last_professional_upgrade": "2025-09-02T10:40:27.623026+00:00",
   "n_features": 9,
   "last_fix": "2025-09-29T20:37:20.767059",
-  "fixed_by": "test_model_features.py"
+  "fixed_by": "test_model_features.py",
+  "last_retrain_date": "2025-10-22T09:34:33.584850+00:00"
 }

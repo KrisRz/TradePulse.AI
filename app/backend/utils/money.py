@@ -146,9 +146,9 @@ def calculate_pnl_percentage(entry_price: Decimal, exit_price: Decimal, position
         return Decimal("0")
 
     if position_type.upper() == "LONG":
-        return ((exit_price - entry_price) / entry_price) * Decimal("100")
+        return ((exit_price / entry_price) - Decimal("1")) * Decimal("100")
     else:  # SHORT
-        return ((entry_price - exit_price) / entry_price) * Decimal("100")
+        return ((entry_price / exit_price) - Decimal("1")) * Decimal("100")
 
 def calculate_risk_amount(entry_price: Decimal, stop_loss: Decimal, size: Decimal, position_type: str = "LONG") -> Decimal:
     """

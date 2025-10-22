@@ -452,8 +452,15 @@ class ProfessionalPortfolio:
             logger.error("Failed to open professional position", error=str(e))
             raise
     
-    async def close_position(self, position_id: str, reason: str = "manual") -> Decimal:
-        """Close a professional position with P&L calculation"""
+    async def close_position(self, position_id: str, reason: str = "manual", exit_analysis: Optional[Dict] = None) -> Decimal:
+        """
+        Close a professional position with P&L calculation
+        
+        Args:
+            position_id: ID of position to close
+            reason: Default reason if exit_analysis not provided
+            exit_analysis: 🎯 FIX #4: Exit engine analysis with intelligent exit reason
+        """
         
         if position_id not in self.positions:
             raise ValueError(f"Position {position_id} not found")
@@ -462,6 +469,18 @@ class ProfessionalPortfolio:
         
         if position.status != PositionStatus.OPEN:
             raise ValueError(f"Position {position_id} is not open")
+        
+        # 🎯 FIX #4: Extract intelligent exit reason from exit engine analysis
+        if exit_analysis:
+            intelligent_reason = exit_analysis.get("exit_reason", reason)
+            consensus_score = exit_analysis.get("consensus_score", 0.0)
+            layer_analysis = exit_analysis.get("layer_analysis", {})
+            logger.info(f"🧠 Using intelligent exit reason: {intelligent_reason} (consensus: {consensus_score:.2f})")
+        else:
+            intelligent_reason = reason
+            consensus_score = 0.0
+            layer_analysis = {}
+            logger.warning(f"⚠️ No exit analysis provided, using fallback reason: {reason}")
         
         try:
             # Get current market price using safe conversion
@@ -502,13 +521,14 @@ class ProfessionalPortfolio:
             logger.info(
                 "Professional position closed",
                 position_id=position_id,
-                reason=reason,
+                reason=intelligent_reason,  # 🎯 Use intelligent reason!
                 entry_price=float(position.entry_price),
                 exit_price=float(position.exit_price),
                 realized_pnl=float(realized_pnl),
                 pnl_pct=float(pnl_pct),
                 duration_minutes=(position.exit_time - position.entry_time).total_seconds() / 60,
-                ai_confidence=position.ai_confidence
+                ai_confidence=position.ai_confidence,
+                consensus_score=consensus_score
             )
             
             # PHASE 4.3: Track position result for continuous learning - FIXED: Ensure it actually saves
@@ -517,16 +537,22 @@ class ProfessionalPortfolio:
                 
                 logger.info(f"📊 Recording position result for learning: {position_id}")
                 
-                # Determine outcome type
-                outcome = PositionOutcome.MANUAL_CLOSE
-                if "take_profit" in reason.lower():
+                # 🎯 FIX #4: Determine outcome from INTELLIGENT exit reason
+                outcome = PositionOutcome.MANUAL_CLOSE  # Default
+                exit_reason_lower = intelligent_reason.lower()
+                
+                if "take_profit" in exit_reason_lower or "tp_triggered" in exit_reason_lower:
                     outcome = PositionOutcome.TAKE_PROFIT
-                elif "stop_loss" in reason.lower():
+                elif "stop_loss" in exit_reason_lower or "sl_triggered" in exit_reason_lower:
                     outcome = PositionOutcome.STOP_LOSS
-                elif "time" in reason.lower():
+                elif "time" in exit_reason_lower or "time_stop" in exit_reason_lower:
                     outcome = PositionOutcome.TIME_STOP
-                elif "emergency" in reason.lower():
+                elif "emergency" in exit_reason_lower or "extreme" in exit_reason_lower:
                     outcome = PositionOutcome.EMERGENCY_CLOSE
+                elif "consensus" in exit_reason_lower or "reversal" in exit_reason_lower:
+                    # Intelligent exit by 6-layer consensus!
+                    outcome = PositionOutcome.MANUAL_CLOSE  # Map to manual_close for now
+                    logger.info(f"🧠 Intelligent exit: {intelligent_reason}")
                 
                 # Extract signal action from AI reasoning
                 signal_action = None

@@ -213,6 +213,15 @@ class EnterpriseTradingEngine:
                 self.scalers = {}
                 logger.warning("⚠️ No feature scalers found - models may not work with live data")
             
+            # Load Layer 5 scaler (retrained 2025-10-22)
+            l5_scaler_path = self.model_path / "layer_5_scaler.pkl"
+            if l5_scaler_path.exists():
+                with open(l5_scaler_path, "rb") as f:
+                    self.scalers['layer_5'] = pickle.load(f)
+                logger.info("✅ Layer 5 scaler loaded (RobustScaler for 19 features)")
+            else:
+                logger.warning("⚠️ Layer 5 scaler not found - predictions may be inaccurate")
+            
             # Load each layer with precise error handling - EXPLICIT ORDERING
             layers_to_load = [
                 ("regime", "layer_1_regime.pkl", "Layer 1 (Market Regime)", 1),
@@ -488,7 +497,15 @@ class EnterpriseTradingEngine:
                     "volume_ratio": float(md.get("volume_ratio", 1.0)),
                     "price_change_24h": float(md.get("price_change_percent_24h", md.get("price_change_24h", 0.0))),
                 }
-                logger.info("🧩 Using SSOT market snapshot for features (no local recompute)")
+            logger.info("🧩 Using SSOT market snapshot for features (no local recompute)")
+            # Extra diagnostic: log MACD raw vs normalized if we detect large scale
+            try:
+                close = market_data.get("close", 0.0)
+                macd_val = market_data.get("macd", 0.0)
+                if np.isfinite(close) and abs(macd_val) > 10.0:
+                    logger.info(f"MACD scale anomaly detected (ssot): macd={macd_val:.4f} close={close:.2f} → norm≈{(macd_val/max(abs(close),1e-9)):.6f}")
+            except Exception:
+                pass
             else:
                 market_data = await self._get_market_features(symbol)
             logger.info(f"📊 PIPELINE DEBUG: Enterprise Trading Engine - Market features extracted: {len(market_data)} features")
@@ -1357,16 +1374,21 @@ class EnterpriseTradingEngine:
                     if snapshot_obj is None:
                         raise NameError("snapshot_object_missing")
                     X = build_l5_vector_from_snapshot(snapshot_obj)
-                    # Suppress LightGBM warnings about num_leaves
+                    
+                    # Apply Layer 5 scaler if available (retrained model uses RobustScaler)
+                    if 'layer_5' in self.scalers:
+                        X_scaled = self.scalers['layer_5'].transform(X)
+                        logger.debug(f"✅ L5 features scaled: shape={X_scaled.shape}")
+                    else:
+                        X_scaled = X
+                        logger.warning("⚠️ L5 scaler not available - using raw features")
+                    
+                    # XGBoost regressor prediction (no proba)
                     import warnings
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
-                        if hasattr(model, 'predict_proba'):
-                            proba = model.predict_proba(X)[0]
-                            confidence = float(proba[1]) if len(proba) > 1 else float(proba[0])
-                        else:
-                            pred = model.predict(X)[0]
-                            confidence = float(pred)
+                        pred = model.predict(X_scaled)[0]
+                        confidence = float(np.clip(pred, 0.0, 1.0))
                     inc_l5_vector_source("snapshot")
                 except Exception as e:
                     # Fallback to legacy feature dict path
@@ -1689,12 +1711,25 @@ class EnterpriseTradingEngine:
             macd = float(features.get("macd", 0.0))
             volume_ratio = float(features.get("volume_ratio", 1.0))
             
-            # 🔧 FIX (Oct 2025): Dynamic timing cap based on volatility (CRYPTO DAY TRADING)
-            # Low-vol: slightly looser cap (0.15), high-vol: looser cap (0.35)
-            # Crypto needs more room for timing signals than stocks
+            # 🔧 FIX (Oct 2025): Dynamic timing cap based on volatility + reversal strength
+            # Low-vol: 0.15, high-vol: up to 0.50
+            # Override for strong reversals or extreme RSI
             volatility = float(features.get('volatility', 0.02))
-            base_cap = 0.12
-            dynamic_cap = min(0.35, max(0.15, base_cap + 2.0 * volatility))
+            rsi = float(features.get('rsi', 50.0))
+            reversal_conf = (layer_results or {}).get("layer_3_reversal", {}).get("confidence", 0.0)
+            
+            # Base cap from volatility (normalized to typical 2% ATR)
+            ATR_norm = 0.02
+            base_cap = max(0.15, 0.35 * (volatility / ATR_norm))
+            base_cap = min(0.35, base_cap)  # Normal max
+            
+            # Override for strong signals
+            if reversal_conf > 0.85 or rsi < 10 or rsi > 90:
+                dynamic_cap = 0.50  # Allow strong timing in extreme conditions
+                logger.debug(f"⚡ TIMING CAP OVERRIDE: strong signal (reversal={reversal_conf:.2f}, RSI={rsi:.1f}) → cap=0.50")
+            else:
+                dynamic_cap = base_cap
+            
             capped_timing_score = max(-dynamic_cap, min(dynamic_cap, timing_score))
             
             filter_check = filter_score > 0.08  # SCALPING: Lower filter threshold (was 0.15)
@@ -2063,6 +2098,7 @@ class EnterpriseTradingEngine:
             
         except Exception as e:
             logger.error(f"Primary signal calculation error: {e}")
+            # Safe default HOLD on failure
             return "HOLD", 0.5
         
     def _calculate_exploratory_signal(self, confidence: float, timing_score: float, reversal_prob: float, filter_score: float, volatility: float, features: Dict[str, float] = None) -> Tuple[str, float]:
@@ -2271,12 +2307,17 @@ class EnterpriseTradingEngine:
         
         ema_12 = self._ema(prices, 12)
         ema_26 = self._ema(prices, 26)
-        macd = ema_12 - ema_26
-        
-        # Simple signal line (9-period EMA of MACD)
-        macd_signal = macd * 0.9  # Simplified
-        
-        return macd, macd_signal
+        raw_macd = float(ema_12 - ema_26)
+        close = float(prices[-1])
+        macd_norm = raw_macd
+        if np.isfinite(close) and abs(raw_macd) > 10.0:
+            macd_norm = raw_macd / max(abs(close), 1e-9)
+        macd_signal = macd_norm * 0.9
+        try:
+            logger.info(f"MACD raw={raw_macd:.4f} norm={macd_norm:.6f} close={close:.2f}")
+        except Exception:
+            pass
+        return macd_norm, macd_signal
     
     def _ema(self, prices: List[float], period: int) -> float:
         """Calculate Exponential Moving Average"""
@@ -2292,21 +2333,44 @@ class EnterpriseTradingEngine:
         return ema
     
     def _calculate_bb_position(self, prices: List[float], current_price: float) -> float:
-        """Calculate Bollinger Band position (0 = lower band, 1 = upper band)"""
-        if len(prices) < 20:
+        """Calculate Bollinger Band position with guards and fallback (0..1)."""
+        if prices is None or len(prices) < 20:
             return 0.5
-        
-        sma = np.mean(prices[-20:])
-        std = np.std(prices[-20:])
-        
-        upper_band = sma + (2 * std)
-        lower_band = sma - (2 * std)
-        
-        if upper_band == lower_band:
-            return 0.5
-        
-        position = (current_price - lower_band) / (upper_band - lower_band)
-        return float(np.clip(position, 0.0, 1.0))
+
+        window = np.array(prices[-20:], dtype=float)
+        mid = float(np.mean(window))
+        std = float(np.std(window))
+        upper = mid + 2.0 * std
+        lower = mid - 2.0 * std
+
+        try:
+            logger.info("BB raw: close=%.2f mid=%.2f up=%.2f lo=%.2f den=%.8f", current_price, mid, upper, lower, (upper - lower))
+        except Exception:
+            pass
+
+        den = upper - lower
+        if den is None or not np.isfinite(den) or den <= 0.0:
+            bb_pos_sym = np.nan
+        else:
+            bb_pos_sym = (float(current_price) - mid) / (den / 2.0)
+            bb_pos_sym = float(np.clip(bb_pos_sym, -1.0, 1.0))
+
+        if not np.isfinite(bb_pos_sym):
+            # ATR fallback in price units over the same window
+            prev = float(window[0])
+            trs: List[float] = []
+            for i in range(1, len(window)):
+                high = float(window[i])
+                low = float(window[i])
+                tr = max(high - low, abs(high - prev), abs(low - prev))
+                trs.append(tr)
+                prev = float(window[i])
+            atr_price_units = float(np.mean(trs)) if trs else 0.0
+            bb_pos_sym = (float(current_price) - mid) / max(atr_price_units, 1e-9)
+            bb_pos_sym = float(np.clip(bb_pos_sym, -1.5, 1.5))
+
+        bb_pos_01 = 0.5 + 0.5 * bb_pos_sym
+        return float(np.clip(bb_pos_01, 0.0, 1.0))
     
     def _calculate_trend_strength(self, prices: List[float]) -> float:
         """Calculate trend strength using linear regression slope"""

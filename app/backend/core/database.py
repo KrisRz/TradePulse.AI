@@ -136,6 +136,15 @@ class DynamoDBClient:
             item_id = item.get('id') or item.get('position_id') or item.get('trade_id') or item.get('pk')
             if not item_id and 'symbol' in item and 'timestamp' in item:
                 item_id = f"{item['symbol']}@{item['timestamp']}"
+            # Emergency events safety: ensure event_id exists and use it as PK surrogate
+            if table_name == 'emergency_events':
+                import uuid, time as _t
+                if not item.get('event_id'):
+                    item['event_id'] = str(uuid.uuid4())
+                # Provide sortable timestamp if missing
+                if not item.get('ts'):
+                    item['ts'] = int(_t.time() * 1000)
+                item_id = item['event_id']
             item_id = item_id or 'NO_ID'
             logger.debug(f"📝 Item data: {list(item.keys())} - ID: {item_id}")
             

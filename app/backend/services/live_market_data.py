@@ -978,7 +978,7 @@ def _calculate_technical_indicators(candles: List[Dict], current_price: float) -
 			"trend_strength": float(trend_strength)
 		}
 		
-		logger.debug(f"📊 Technical indicators calculated: RSI={rsi:.1f}, MACD={macd:.4f}, BB_pos={bollinger_position:.2f}")
+		logger.debug(f"📊 Technical indicators calculated: RSI={rsi:.1f}, MACD={macd:.4f}, BB_pos={bollinger_position:.5f}")
 		return indicators
 		
 	except Exception as e:
@@ -997,38 +997,60 @@ def _calculate_technical_indicators(candles: List[Dict], current_price: float) -
 		}
 
 def _calculate_rsi(prices: np.ndarray, period: int = 14) -> float:
-	"""Calculate RSI (Relative Strength Index)"""
-	if len(prices) < period + 1:
-		return 50.0
-	
-	deltas = np.diff(prices[-period-1:])
-	gains = np.where(deltas > 0, deltas, 0)
-	losses = np.where(deltas < 0, -deltas, 0)
-	
-	avg_gain = np.mean(gains) if len(gains) > 0 else 0
-	avg_loss = np.mean(losses) if len(losses) > 0 else 0
-	
-	if avg_loss == 0:
-		return 100.0
-	
-	rs = avg_gain / avg_loss
-	rsi = 100 - (100 / (1 + rs))
-	
-	return float(np.clip(rsi, 0, 100))
+    """Calculate RSI using Wilder's smoothing (period=14 by default)."""
+    if prices is None or len(prices) < period + 1:
+        return 50.0
+
+    diffs = np.diff(prices)
+    gains = np.where(diffs > 0, diffs, 0.0)
+    losses = np.where(diffs < 0, -diffs, 0.0)
+
+    # Wilder's initial averages
+    if len(gains) < period:
+        return 50.0
+    avg_gain = np.mean(gains[:period])
+    avg_loss = np.mean(losses[:period])
+
+    # Wilder's recursive smoothing
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+
+    if not np.isfinite(avg_loss) or avg_loss == 0.0:
+        return 100.0
+
+    rs = avg_gain / max(avg_loss, 1e-12)
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+    if not np.isfinite(rsi):
+        rsi = 50.0
+    return float(np.clip(rsi, 0.0, 100.0))
 
 def _calculate_macd(prices: np.ndarray) -> Tuple[float, float]:
-	"""Calculate MACD (Moving Average Convergence Divergence)"""
-	if len(prices) < 26:
-		return 0.0, 0.0
-	
-	ema_12 = _calculate_ema(prices, 12)
-	ema_26 = _calculate_ema(prices, 26)
-	macd_line = ema_12 - ema_26
-	
-	# Simple signal line (9-period EMA of MACD would require more data)
-	macd_signal = macd_line * 0.9  # Simplified signal
-	
-	return float(macd_line), float(macd_signal)
+    """Calculate MACD; auto-normalize when raw scale is in price units.
+
+    Returns (macd_norm, macd_signal_norm): both preferably scale ~[-0.1, 0.1].
+    """
+    if prices is None or len(prices) < 26:
+        return 0.0, 0.0
+
+    ema_12 = _calculate_ema(prices, 12)
+    ema_26 = _calculate_ema(prices, 26)
+    raw_macd = float(ema_12 - ema_26)
+    close = float(prices[-1])
+
+    macd_norm = raw_macd
+    if np.isfinite(close) and abs(raw_macd) > 10.0:
+        macd_norm = raw_macd / max(abs(close), 1e-9)
+
+    # Simple signal line proxy in same scale
+    macd_signal_norm = macd_norm * 0.9
+
+    try:
+        logger.info("MACD raw=%.4f norm=%.6f close=%.2f", raw_macd, macd_norm, close)
+    except Exception:
+        pass
+
+    return float(macd_norm), float(macd_signal_norm)
 
 def _calculate_ema(prices: np.ndarray, period: int) -> float:
 	"""Calculate Exponential Moving Average"""
@@ -1044,23 +1066,52 @@ def _calculate_ema(prices: np.ndarray, period: int) -> float:
 	return ema
 
 def _calculate_bollinger_position(prices: np.ndarray, current_price: float, period: int = 20) -> float:
-	"""Calculate position within Bollinger Bands (0 = lower band, 1 = upper band) - FIXED with epsilon"""
-	if len(prices) < period:
-		return 0.5
-	
-	recent_prices = prices[-period:]
-	sma = float(np.mean(recent_prices))
-	std = float(np.std(recent_prices))
-	
-	upper_band = sma + (2 * std)
-	lower_band = sma - (2 * std)
-	
-	# FIXED: Add epsilon to prevent division by zero in volatile markets
-	eps = 1e-8
-	band_width = max(upper_band - lower_band, eps)
-	
-	position = (current_price - lower_band) / band_width
-	return float(np.clip(position, 0.0, 1.0))
+    """Calculate position within Bollinger Bands with hard guards and fallback.
+
+    Returns 0..1 where 0=lower band, 0.5=mid, 1=upper band.
+    Also logs raw band metrics for diagnostics.
+    """
+    if prices is None or len(prices) < period:
+        return 0.5
+
+    window = prices[-period:]
+    mid = float(np.mean(window))
+    std = float(np.std(window))
+    upper = mid + 2.0 * std
+    lower = mid - 2.0 * std
+
+    try:
+        logger.info("BB raw: close=%.2f mid=%.2f up=%.2f lo=%.2f den=%.8f", current_price, mid, upper, lower, (upper - lower))
+    except Exception:
+        pass
+
+    den = upper - lower
+    if den is None or not np.isfinite(den) or den <= 0.0:
+        bb_pos_sym = np.nan
+    else:
+        # symmetric scale [-1,1], center at mid
+        bb_pos_sym = (current_price - mid) / (den / 2.0)
+        bb_pos_sym = float(np.clip(bb_pos_sym, -1.0, 1.0))
+
+    if not np.isfinite(bb_pos_sym):
+        # Fallback using ATR in price units over the same window
+        highs = window  # approximate if highs not available
+        lows = window
+        prev = float(window[0])
+        trs = []
+        for i in range(1, len(window)):
+            high = float(highs[i])
+            low = float(lows[i])
+            tr = max(high - low, abs(high - prev), abs(low - prev))
+            trs.append(tr)
+            prev = float(window[i])
+        atr_price_units = float(np.mean(trs)) if trs else 0.0
+        bb_pos_sym = (current_price - mid) / max(atr_price_units, 1e-9)
+        bb_pos_sym = float(np.clip(bb_pos_sym, -1.5, 1.5))
+
+    # Convert symmetric [-1,1] to [0,1]
+    bb_pos_01 = 0.5 + 0.5 * bb_pos_sym
+    return float(np.clip(bb_pos_01, 0.0, 1.0))
 
 def _calculate_trend_strength(prices: np.ndarray) -> float:
 	"""Calculate trend strength using linear regression slope"""

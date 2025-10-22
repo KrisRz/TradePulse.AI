@@ -542,6 +542,39 @@ class IntelligentExitEngine:
                 market_data["current_signal_action"] = "HOLD"
                 market_data["current_signal_confidence"] = 0.0
             
+            # Circuit breaker soft mode: if active, don't generate new signals - only allow stop updates
+            try:
+                from app.backend.services.emergency_controls import get_emergency_system
+                emergency = await get_emergency_system()
+                circuit_breaker_active = await emergency.is_trading_halted()
+            except Exception:
+                circuit_breaker_active = False
+
+            if circuit_breaker_active:
+                return {
+                    "should_exit": False,
+                    "confidence": 0.0,
+                    "exit_reason": "halt_circuit_breaker",
+                    "consensus_score": 0.0,
+                    "layer_analysis": {},
+                    "emergency_conditions": {"emergency_exit": False, "reasons": [], "severity": "normal"},
+                    "current_price": current_price,
+                    "analysis_time_ms": 0,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "engine_status": "operational",
+                    "layer_health": self.layer_health.copy(),
+                    "position_id": position_data.get("position_id"),
+                    "symbol": symbol,
+                    "entry_price": position_data.get("entry_price", 0),
+                    "current_pnl": 0.0,
+                    "pnl_percent": 0.0,
+                    "position_age_hours": self._calculate_position_age(position_data),
+                    "risk_score": 0.5,
+                    "drawdown": 0.0,
+                    "volatility": market_data.get("volatility", 0.0),
+                    "allow_stop_updates": True
+                }
+
             # Run 6-layer exit analysis
             layer_results = await self._run_six_layer_exit_analysis(
                 symbol, position_data, current_price, market_data
@@ -846,23 +879,45 @@ class IntelligentExitEngine:
         volatility = market_data.get("volatility", 0.02)
         trend_strength = market_data.get("trend_strength", 0.5)
         
-        # Determine market regime
+        # Determine base market regime
         if volatility > 0.05 and volume_ratio > 1.5:
-            regime = "volatile"
-            exit_recommendation = "hold"  # Wait for volatility to settle
+            base_regime = "volatile"
+            exit_recommendation = "hold"
             confidence = 0.7
         elif trend_strength > 0.8:
-            regime = "trending"
-            exit_recommendation = "hold"  # Trend continuation likely
+            base_regime = "trending"
+            exit_recommendation = "hold"
             confidence = 0.8
         elif volatility < 0.02 and volume_ratio < 0.8:
-            regime = "consolidating"
-            exit_recommendation = "exit"  # Low momentum, consider exit
+            base_regime = "consolidating"
+            exit_recommendation = "exit"
             confidence = 0.6
         else:
-            regime = "balanced"
+            base_regime = "balanced"
             exit_recommendation = "hold"
             confidence = 0.5
+
+        # Override regime when circuit breaker active or high volatility metrics
+        circuit_breaker_active = False
+        try:
+            from app.backend.services.emergency_controls import get_emergency_system
+            emergency = await get_emergency_system()
+            circuit_breaker_active = await emergency.is_trading_halted()
+        except Exception:
+            pass
+
+        regime = base_regime
+        atr_pct = market_data.get("volatility", volatility)
+        if circuit_breaker_active or market_data.get("volume_ratio", 1.0) >= 8.0 or atr_pct >= 0.01:
+            regime = "high_volatility"
+
+        try:
+            logger.info(
+                "Regime final=%s (base=%s, vol_ratio=%.2f, atr_pct=%.4f, CB=%s)",
+                regime, base_regime, market_data.get("volume_ratio", 1.0), atr_pct, circuit_breaker_active
+            )
+        except Exception:
+            pass
         
         return {
             "recommendation": exit_recommendation,
@@ -871,7 +926,7 @@ class IntelligentExitEngine:
             "volatility": volatility,
             "volume_ratio": volume_ratio,
             "trend_strength": trend_strength,
-            "reasoning": f"Market regime: {regime} with {volatility:.1%} volatility"
+            "reasoning": f"Market regime: {regime} (base={base_regime}) with {volatility:.1%} volatility"
         }
     
     async def _analyze_lstm_predictions(self, symbol: str, current_price: float, market_data: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -1447,8 +1502,21 @@ class IntelligentExitEngine:
         else:
             reversal_override = False
         
-        exit_votes = 0
-        hold_votes = 0
+        # 🎯 FIX #1: USE WEIGHTED CONSENSUS (not 1:1 voting!)
+        # Each layer has different importance based on day trading performance
+        layer_weights = {
+            "layer_1_regime": 0.20,      # Market regime context
+            "layer_2_lstm": 0.25,        # LSTM predictions (MOST IMPORTANT)
+            "layer_3_reversal": 0.20,    # Reversal detection
+            "layer_4_filters": 0.10,     # Technical filters (REDUCED - too aggressive)
+            "layer_5_confidence": 0.15,  # Confidence scoring (INCREASED - more accurate)
+            "layer_6_timing": 0.10       # Timing analysis
+        }
+        
+        exit_score = 0.0
+        hold_score = 0.0
+        exit_votes = 0  # Keep for logging
+        hold_votes = 0  # Keep for logging
         total_confidence = 0.0
         consensus_scores = []
         
@@ -1456,21 +1524,30 @@ class IntelligentExitEngine:
             if isinstance(layer_data, dict):
                 recommendation = layer_data.get("recommendation", "uncertain")
                 confidence = layer_data.get("confidence", 0.0)
+                weight = layer_weights.get(layer_name, 0.10)
                 
                 if recommendation == "exit":
                     exit_votes += 1
+                    exit_score += weight * confidence
                     consensus_scores.append(confidence)
                 elif recommendation == "hold":
                     hold_votes += 1
+                    hold_score += weight * confidence
                     consensus_scores.append(confidence)
                 
                 total_confidence += confidence
         
         total_votes = exit_votes + hold_votes
-        consensus_score = np.mean(consensus_scores) if consensus_scores else 0.0
+        # Weighted consensus score (not simple mean!)
+        consensus_score = exit_score if exit_score > hold_score else hold_score
         
-        logger.info(f"🎯 Exit consensus: {exit_votes} exit vs {hold_votes} hold votes, "
-                   f"score={consensus_score:.2f}, threshold={adaptive_threshold:.2f} (regime: {regime})")
+        # Determine decision for clear logging
+        decision = "EXIT" if (exit_score > hold_score and exit_score > adaptive_threshold) else "HOLD"
+        threshold_status = f"{'above' if exit_score > adaptive_threshold else 'below'} threshold"
+        
+        logger.info(f"🎯 Exit consensus: votes={exit_votes}v{hold_votes} | "
+                   f"exit_score={exit_score:.3f} vs hold_score={hold_score:.3f} | "
+                   f"threshold={adaptive_threshold:.2f} ({threshold_status}) → {decision}")
         
         # 🔧 FIX (Oct 2025): SMART EXIT - Let AI and trailing stop work!
         # REMOVED: MIN_HOLD_BARS - anti-pattern that blocks profit protection
@@ -1478,7 +1555,7 @@ class IntelligentExitEngine:
         # 
         # Professional exit logic:
         # 1. Trailing stop protects profit (ATR-based from peak)
-        # 2. 6-layer consensus detects reversals
+        # 2. 6-layer consensus detects reversals (WEIGHTED!)
         # 3. TP/SL provide hard limits
         # 
         # NO artificial time delays - exit when conditions say exit!
@@ -1500,8 +1577,30 @@ class IntelligentExitEngine:
                 "layer_votes": {"exit": exit_votes, "hold": hold_votes}
             }
         
-        # Determine final decision with adaptive threshold + hysteresis
-        if exit_votes > hold_votes and consensus_score > adaptive_threshold:
+        # 🎯 FIX #2: PATIENCE THRESHOLD based on ENTRY CONFIDENCE (not time!)
+        # High confidence entries deserve more patience from exit engine
+        entry_confidence = position_data.get('confidence_score', 0.5)
+        position_age_minutes = self._calculate_position_age(position_data) * 60 if position_data else 999
+        
+        patience_threshold_boost = 0.0
+        if entry_confidence >= 0.85:
+            min_patience_minutes = 15  # Day trading: 15min for high-conf entries
+            patience_threshold_boost = 0.15  # Harder to exit
+        elif entry_confidence >= 0.75:
+            min_patience_minutes = 10  # 10min for medium-conf
+            patience_threshold_boost = 0.10
+        else:
+            min_patience_minutes = 5   # 5min for low-conf
+            patience_threshold_boost = 0.0
+        
+        # Apply patience boost if position is young
+        if position_age_minutes < min_patience_minutes:
+            adaptive_threshold += patience_threshold_boost
+            logger.info(f"⏱️ PATIENCE: Position {position_age_minutes:.1f}min < {min_patience_minutes}min (entry_conf={entry_confidence:.1%}), "
+                       f"threshold boosted to {adaptive_threshold:.2f}")
+        
+        # Determine final decision with WEIGHTED SCORES (not votes!)
+        if exit_score > hold_score and exit_score > adaptive_threshold:
             decision = {
                 "should_exit": True,
                 "confidence": consensus_score,
@@ -1581,19 +1680,23 @@ class IntelligentExitEngine:
                 emergency_conditions["reasons"].append("take_profit_triggered")
                 emergency_conditions["severity"] = "high"
         
-        # Check extreme volatility - DAY TRADING: Higher tolerance for Bitcoin
+        # 🎯 FIX #3: RELAX EMERGENCY CONDITIONS for Bitcoin day trading
+        # Bitcoin regularly has 5-10% swings and 20-30% volatility
+        # Only trigger on TRULY extreme conditions
         volatility = market_data.get("volatility", 0.0)
-        if volatility > 0.25:  # DAY TRADING: 25% volatility threshold (Bitcoin can be 20%+)
+        if volatility > 0.40:  # DAY TRADING: 40% volatility threshold (was 25%)
             emergency_conditions["emergency_exit"] = True
             emergency_conditions["reasons"].append("extreme_volatility")
             emergency_conditions["severity"] = "high"
+            logger.warning(f"🌪️ EXTREME VOLATILITY: {volatility:.1%} > 40% threshold")
         
         # Check extreme loss - DAY TRADING: More tolerant for Bitcoin volatility
         pnl_pct = self._calculate_pnl_percentage(position_data, current_price)
-        if pnl_pct < -5.0:  # DAY TRADING: 5% loss tolerance for Bitcoin volatility (was 10%)
+        if pnl_pct < -8.0:  # DAY TRADING: 8% loss tolerance for Bitcoin (was 5%)
             emergency_conditions["emergency_exit"] = True
             emergency_conditions["reasons"].append("extreme_loss")
             emergency_conditions["severity"] = "critical"
+            logger.warning(f"💀 EXTREME LOSS: {pnl_pct:.2f}% < -8% threshold")
         
         # DAY TRADING: Strategy mismatch DISABLED - too aggressive for day trading
         # In day trading, AI signals change frequently, don't exit on every signal change

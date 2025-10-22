@@ -604,9 +604,12 @@ class EmergencyControlSystem:
         """Save emergency event to database"""
         try:
             from decimal import Decimal
+            import uuid, time as _t
+            event_id = event.event_id or f"emergency_{int(_t.time())}"
             event_data = {
-                "event_id": event.event_id,
-                "timestamp": int(event.timestamp.timestamp()),
+                "event_id": event_id,
+                "timestamp": int(event.timestamp.timestamp()) if event.timestamp else int(_t.time()),
+                "ts": int(_t.time() * 1000),
                 "level": event.level.value,
                 "breaker_type": event.breaker_type.value,
                 "description": event.description,
@@ -622,6 +625,7 @@ class EmergencyControlSystem:
             if inspect.isawaitable(result):
                 await result
             
+            logger.info(f"Emergency saved id=%s", event_id)
         except Exception as e:
             logger.error(f"Failed to save emergency event: {e}")
     
