@@ -34,7 +34,7 @@ resource "aws_dynamodb_table" "market_context_cache" {
     Project     = var.project_name
     Environment = var.environment
     ManagedBy   = "Terraform"
-    Purpose     = "Historical market context (14-day data, day trading optimized)"
+    Purpose     = "Historical market context 14-day data day trading optimized"
   }
 }
 

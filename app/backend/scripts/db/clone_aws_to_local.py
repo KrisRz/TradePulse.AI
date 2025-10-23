@@ -24,7 +24,7 @@ def aws_client() -> boto3.client:
 def local_client() -> boto3.client:
     return boto3.client(
         "dynamodb",
-        region_name="us-east-1",
+        region_name="eu-west-2",
         endpoint_url=LOCAL_ENDPOINT,
         aws_access_key_id="dummy",
         aws_secret_access_key="dummy",

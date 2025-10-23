@@ -19,14 +19,14 @@ os.environ['ENVIRONMENT'] = 'development'
 os.environ['DYNAMODB_ENDPOINT'] = 'http://localhost:8000'
 os.environ['AWS_ACCESS_KEY_ID'] = 'dummy'
 os.environ['AWS_SECRET_ACCESS_KEY'] = 'dummy'
-os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
+os.environ['AWS_DEFAULT_REGION'] = 'eu-west-2'
 
 def create_dynamodb_client():
     """Create DynamoDB client for local instance"""
     return boto3.client(
         'dynamodb',
         endpoint_url='http://localhost:8000',
-        region_name='us-east-1',
+        region_name='eu-west-2',
         aws_access_key_id='dummy',
         aws_secret_access_key='dummy'
     )

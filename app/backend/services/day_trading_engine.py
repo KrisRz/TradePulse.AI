@@ -744,11 +744,12 @@ class DayTradingEngine:
             market_data = await get_live_market_data()  # Current market state (SSOT snapshot)
             try:
                 # Export snapshot age if embedded
-                snap = market_data.get("snapshot")
-                if snap and hasattr(snap, "asof"):
-                    from time import time as _now
-                    from app.backend.services.metrics import set_snapshot_age_seconds
-                    set_snapshot_age_seconds(max(0.0, _now() - float(getattr(snap, "asof", 0.0))))
+                if market_data is not None:
+                    snap = market_data.get("snapshot")
+                    if snap and hasattr(snap, "asof"):
+                        from time import time as _now
+                        from app.backend.services.metrics import set_snapshot_age_seconds
+                        set_snapshot_age_seconds(max(0.0, _now() - float(getattr(snap, "asof", 0.0))))
             except Exception:
                 pass
             service = await get_live_market_data_service()
@@ -808,15 +809,15 @@ class DayTradingEngine:
                     
                     # 🔧 FIX (Oct 2025): Adaptive volume gate scaling
                     # When zVol < 1.0 and ATR/close < 0.10%, scale thresholds to 2.2/1.2
-                    vol_ratio = market_data.get("volume_ratio", 1.0)
-                    volatility = market_data.get("volatility", 0.05)
+                    vol_ratio = market_data.get("volume_ratio", 1.0) if market_data else 1.0
+                    volatility = market_data.get("volatility", 0.05) if market_data else 0.05
                     atr_pct = volatility  # ATR/close approximation
                     
                     # 🔧 FIX (Oct 2025): Adaptive volume gate with capitulation detection
                     # In oversold context (BB_pos ≤ 0.05 & RSI ≤ 36), use composite volume metric
                     # This catches capitulation spikes that would otherwise be blocked
-                    rsi = market_data.get("rsi", 50.0)
-                    bb_pos = market_data.get("bb_position", 0.5)
+                    rsi = market_data.get("rsi", 50.0) if market_data else 50.0
+                    bb_pos = market_data.get("bb_position", 0.5) if market_data else 0.5
                     
                     is_oversold = (bb_pos <= 0.05 and rsi <= 36)
                     is_low_vol_regime = (vol_ratio < 1.0 and atr_pct < 0.001)
@@ -963,6 +964,11 @@ class DayTradingEngine:
                     return
             
             # (C) Enterprise signal (6-layer analysis) with REAL DATA
+            # CRITICAL: Validate market_data is not None
+            if market_data is None:
+                logger.error("❌ Market data is None - cannot generate signal")
+                return
+            
             signal = await self.enterprise_engine.generate_signal("BTCUSDT", market_snapshot=market_data.get("snapshot", market_data))
             
             # Enhanced layer analysis logging
@@ -1134,6 +1140,16 @@ class DayTradingEngine:
                 entry_decision = await self._run_professional_entry_analysis(
                     signal, portfolio, candles, tick, risk_assessment, market_data
                 )
+                
+                # CRITICAL: Defensive check for None return
+                if entry_decision is None:
+                    logger.error("⚠️ Entry analysis returned None - using safe fallback")
+                    entry_decision = {
+                        "should_enter": False,
+                        "confidence": 0.0,
+                        "reasoning": "Entry analysis returned None"
+                    }
+                
                 # Attach playbook context for audit/metrics
                 try:
                     if isinstance(entry_decision, dict):
@@ -1415,6 +1431,15 @@ class DayTradingEngine:
     async def _run_professional_entry_analysis(self, signal: Any, portfolio: Any, candles: List, tick: float, risk_assessment: Any, market_snapshot: Dict[str, Any]) -> Dict[str, Any]:
         """PHASE 1A: Professional entry analysis with risk integration"""
         try:
+            # CRITICAL: Validate entry engine is initialized
+            if self.entry_engine is None:
+                logger.error("❌ Entry engine not initialized")
+                return {
+                    "should_enter": False,
+                    "confidence": 0.0,
+                    "reasoning": "Entry engine not initialized"
+                }
+            
             # Use provided SSOT market snapshot
             market_data = market_snapshot
             
@@ -1437,6 +1462,15 @@ class DayTradingEngine:
                 },
                 market_data_override=market_data
             )
+            
+            # CRITICAL: Validate entry result is not None
+            if entry_result is None:
+                logger.error("❌ Entry engine returned None result")
+                return {
+                    "should_enter": False,
+                    "confidence": 0.0,
+                    "reasoning": "Entry engine returned None"
+                }
             
             # Safe formatting for optimal price
             try:
@@ -1463,7 +1497,9 @@ class DayTradingEngine:
             }
             
         except Exception as e:
-            logger.error(f"Day trading entry analysis failed: {e}")
+            logger.error(f"❌ Day trading entry analysis failed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return {
                 "should_enter": False, 
                 "confidence": 0.0,

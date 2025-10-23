@@ -38,7 +38,7 @@ class DatabaseConfig(BaseSettings):
     
     # DynamoDB Configuration
     dynamodb_endpoint: Optional[str] = Field(default="http://localhost:8000", env="DYNAMODB_ENDPOINT")
-    dynamodb_region: str = Field(default="us-east-1", env="DYNAMODB_REGION")
+    dynamodb_region: str = Field(default="eu-west-2", env="DYNAMODB_REGION")
     
     # Connection pooling
     max_connections: int = Field(default=50, env="DB_MAX_CONNECTIONS")
@@ -144,7 +144,7 @@ class ExternalServicesConfig(BaseSettings):
     # AWS Services
     aws_access_key_id: Optional[SecretStr] = Field(default=None, env="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: Optional[SecretStr] = Field(default=None, env="AWS_SECRET_ACCESS_KEY")
-    aws_region: str = Field(default="us-east-1", env="AWS_REGION")
+    aws_region: str = Field(default="eu-west-2", env="AWS_REGION")
     
     # Model Storage
     model_bucket: Optional[str] = Field(default=None, env="MODEL_BUCKET")

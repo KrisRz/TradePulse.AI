@@ -50,7 +50,7 @@ BACKUP_PATH.mkdir(exist_ok=True, parents=True)
 
 # DynamoDB config
 DYNAMODB_ENDPOINT = "http://localhost:8000"
-DYNAMODB_REGION = "us-east-1"
+DYNAMODB_REGION = "eu-west-2"
 
 
 class ProfessionalLayer5Retrainer:

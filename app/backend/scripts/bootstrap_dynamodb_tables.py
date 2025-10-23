@@ -21,7 +21,7 @@ logger = structlog.get_logger(__name__)
 
 # DynamoDB Local configuration
 DYNAMODB_ENDPOINT = "http://localhost:8000"
-DYNAMODB_REGION = "us-east-1"
+DYNAMODB_REGION = "eu-west-2"
 
 
 def get_dynamodb_client():

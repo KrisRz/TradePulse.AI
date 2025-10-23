@@ -15,7 +15,7 @@ def create_dynamodb_client():
     return boto3.client(
         'dynamodb',
         endpoint_url='http://localhost:8000',
-        region_name='us-east-1',
+        region_name='eu-west-2',
         aws_access_key_id='local-dev-key',
         aws_secret_access_key='local-dev-secret'
     )

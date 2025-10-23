@@ -2,7 +2,7 @@
 # Copy this file to terraform.tfvars and customize the values
 
 # Basic Configuration
-region       = "eu-central-1"
+region       = "eu-west-2"
 environment  = "prod"
 project_name = "tradepulse"
 

@@ -813,6 +813,9 @@ async def get_live_market_data() -> Dict:
 			set_snapshot_asof_epoch(float(base_data["timestamp_epoch"]))
 		except Exception:
 			pass
+		
+		# CRITICAL: Return the market data
+		return base_data
 
 	except Exception as e:
 		logger.error(f"Failed to get live market data: {e}")
