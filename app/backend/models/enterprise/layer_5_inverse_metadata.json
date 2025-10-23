@@ -1,0 +1,6 @@
+{
+  "version": "inverse_fix_1.0",
+  "trained_at": "2025-10-23T18:59:47.476260+00:00",
+  "training_logic": "INVERSE - PnL outcome as ground truth",
+  "note": "Fixed backwards model that learned high confidence = loss"
+}

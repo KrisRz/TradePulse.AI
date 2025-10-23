@@ -1328,8 +1328,7 @@ class TableSchemas:
                         {'AttributeName': 'symbol', 'KeyType': 'HASH'},
                         {'AttributeName': 'entry_time', 'KeyType': 'RANGE'}
                     ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'BillingMode': 'PAY_PER_REQUEST'
+                    'Projection': {'ProjectionType': 'ALL'}
                 }
             ]
         }
