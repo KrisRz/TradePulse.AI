@@ -475,17 +475,18 @@ class EnterpriseTradingEngine:
             
             logger.info("🔍 PIPELINE DEBUG: Enterprise Trading Engine - Extracting market features...")
             snapshot_obj = None
+            market_data: Dict[str, Any] = {}
             if market_snapshot is not None:
                 # Map LiveMarketData snapshot to enterprise feature schema (SSOT)
                 if hasattr(market_snapshot, "indicators") or hasattr(market_snapshot, "to_dict"):
                     # Real MarketSnapshot object
                     snapshot_obj = market_snapshot
+                    md = market_snapshot.to_dict() if hasattr(market_snapshot, "to_dict") else {}
                 elif isinstance(market_snapshot, dict) and "snapshot" in market_snapshot:
                     snapshot_obj = market_snapshot.get("snapshot")
-                if hasattr(market_snapshot, "to_dict"):
-                    md = market_snapshot.to_dict()
-                else:
                     md = market_snapshot
+                else:
+                    md = market_snapshot if isinstance(market_snapshot, dict) else {}
                 market_data = {
                     "close": float(md.get("price", 0.0)),
                     "volume": float(md.get("volume", 0.0)),
@@ -497,7 +498,28 @@ class EnterpriseTradingEngine:
                     "volume_ratio": float(md.get("volume_ratio", 1.0)),
                     "price_change_24h": float(md.get("price_change_percent_24h", md.get("price_change_24h", 0.0))),
                 }
-            logger.info("🧩 Using SSOT market snapshot for features (no local recompute)")
+                logger.info("🧩 Using SSOT market snapshot for features (no local recompute)")
+            else:
+                # Fallback: fetch live market data (includes indicators + snapshot)
+                try:
+                    from app.backend.services import get_live_market_data
+                    md = await get_live_market_data()
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to fetch live market data snapshot: {e}")
+                    md = {}
+                market_data = {
+                    "close": float(md.get("price", current_price)),
+                    "volume": float(md.get("volume", 0.0)),
+                    "rsi": float(md.get("rsi", 50.0)),
+                    "macd": float(md.get("macd", 0.0)),
+                    "bb_position": float(md.get("bollinger_position", md.get("bb_pos", md.get("bb_position", 0.5)))),
+                    "volatility": float(md.get("volatility", 0.02)),
+                    "trend_strength": float(md.get("trend_strength", 0.0)),
+                    "volume_ratio": float(md.get("volume_ratio", 1.0)),
+                    "price_change_24h": float(md.get("price_change_percent_24h", md.get("price_change_24h", 0.0))),
+                }
+                logger.info("🧩 Built features from live market data (snapshot unavailable)")
+            
             # Extra diagnostic: log MACD raw vs normalized if we detect large scale
             try:
                 close = market_data.get("close", 0.0)
@@ -506,9 +528,6 @@ class EnterpriseTradingEngine:
                     logger.info(f"MACD scale anomaly detected (ssot): macd={macd_val:.4f} close={close:.2f} → norm≈{(macd_val/max(abs(close),1e-9)):.6f}")
             except Exception:
                 pass
-            else:
-                market_data = await self._get_market_features(symbol)
-            logger.info(f"📊 PIPELINE DEBUG: Enterprise Trading Engine - Market features extracted: {len(market_data)} features")
             
             # Run 6-layer analysis
             logger.info("🤖 PIPELINE DEBUG: Enterprise Trading Engine - Running 6-layer AI analysis...")

@@ -1,6 +1,6 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { 
-  Archive, BarChart3, TrendingUp, Download, Filter, DollarSign, Clock, Activity, FileText, Award
+  Archive, BarChart3, TrendingUp, Download, Filter, DollarSign, Clock, Activity, FileText, Award, Target, Calendar, Eye
 } from 'lucide-preact';
 
 interface ClosedPosition {
@@ -121,29 +121,49 @@ export default function ClosedPositionsAnalytics() {
     try {
       setLoading(true);
       
-      // PRODUCTION: Fetch real closed positions from professional backend
-      const response = await fetch('/api/portfolio/virtual/history', {
+      // PROFESSIONAL: Fetch real closed positions from backend (DynamoDB via API)
+      const resp = await fetch(`/api/real_trading/positions/closed?limit=200`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch closed positions: ${response.status}`);
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch closed positions: ${resp.status}`);
       }
 
-      const data = await response.json();
-      
-      // Use real data from backend
-      const realPositions = data.positions || [];
-      setClosedPositions(realPositions);
+      const payload = await resp.json();
+      const apiPositions = payload?.data?.closed_positions || [];
+
+      // Map API payload to ClosedPosition[] interface
+      const mapped: ClosedPosition[] = apiPositions.map((p: any) => ({
+        id: p.position_id || p.id || crypto.randomUUID(),
+        symbol: p.symbol || 'BTCUSDT',
+        side: (p.type || p.side || 'LONG').toString().toLowerCase() as 'long' | 'short',
+        size: Number(p.quantity ?? p.size ?? 0.01),
+        entryPrice: Number(p.entry_price ?? 0),
+        exitPrice: Number(p.current_price ?? p.exit_price ?? p.price_target ?? 0),
+        realizedPnL: Number(p.pnl ?? p.realized_pnl ?? 0),
+        realizedPnLPercent: Number(p.pnl_percentage ?? p.realized_pnl_percentage ?? 0),
+        openTime: p.entry_time || '',
+        closeTime: p.exit_time || p.closed_at || '',
+        holdDuration: p.hold_duration || 'N/A',
+        exitReason: (p.outcome || 'manual').toString().replace('-', '_') as any,
+        aiConfidence: Math.round((p.ai_confidence ?? 0) * 100) / 100,
+        strategy: p.strategy || 'default',
+        commissions: Number(p.commissions ?? 0),
+        exchange: p.exchange || 'binance',
+        leverage: Number(p.leverage ?? 1)
+      }));
+
+      setClosedPositions(mapped);
       setLoading(false);
+      console.log(`✅ Loaded ${mapped.length} real closed positions from backend`);
       
     } catch (error) {
       console.error('❌ Failed to load real closed positions:', error);
       setLoading(false);
-      // NO FALLBACK DATA - production ready
       setClosedPositions([]);
     }
   };

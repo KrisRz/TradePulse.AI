@@ -13,19 +13,35 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# CRITICAL: RandomForest L5 model was trained on exactly these 6 features
-# DO NOT CHANGE without retraining the model
+# CRITICAL: XGBRegressor L5 model was trained on exactly these 19 features
+# RETRAINED: 2025-10-22 with micro-PnL calibration
 L5_RF_MODEL_FEATURES: List[str] = [
+    # Base features (9)
     "close", 
     "volume", 
     "rsi", 
     "macd", 
+    "bb_position",
     "volatility", 
-    "trend_strength"
+    "trend_strength",
+    "volume_ratio",
+    "price_change_24h",
+    # NEW features (10) - added to fix inverse correlation
+    "hour_of_day",
+    "day_of_week",
+    "volume_spike",
+    "price_momentum_5m",
+    "price_momentum_15m",
+    "distance_from_support",
+    "distance_from_resistance",
+    "atr_normalized",
+    "stoch_oversold",
+    "stoch_overbought"
 ]
 
 # Default values for missing features (based on typical market conditions)
 FEATURE_DEFAULTS = {
+    # Base features
     "close": 1.0,
     "volume": 0.0,
     "rsi": 50.0,
@@ -34,25 +50,36 @@ FEATURE_DEFAULTS = {
     "volatility": 0.02,
     "trend_strength": 0.0,
     "volume_ratio": 1.0,
-    "price_change_24h": 0.0
+    "price_change_24h": 0.0,
+    # NEW features
+    "hour_of_day": 0.5,  # Noon UTC default
+    "day_of_week": 0.5,  # Mid-week default
+    "volume_spike": 1.0,  # Normal volume
+    "price_momentum_5m": 0.0,  # No momentum
+    "price_momentum_15m": 0.0,
+    "distance_from_support": 0.02,  # 2% from support
+    "distance_from_resistance": 0.02,  # 2% from resistance
+    "atr_normalized": 0.01,  # 1% ATR
+    "stoch_oversold": 0.0,  # Not oversold
+    "stoch_overbought": 0.0  # Not overbought
 }
 
 def build_l5_rf_vector(features: Dict[str, float]) -> np.ndarray:
     """
-    Build feature vector specifically for L5 RandomForest model.
+    Build feature vector specifically for L5 XGBRegressor model.
     
-    CRITICAL: This model was trained on exactly 6 features in this order.
+    CRITICAL: This model was RETRAINED 2025-10-22 on exactly 19 features.
     Feeding it more or fewer features will cause prediction errors.
     
     Args:
-        features: Dictionary with all available features (can have 9+ features)
+        features: Dictionary with all available features
         
     Returns:
-        numpy array with shape (1, 6) containing exactly the features
-        the L5 RandomForest model expects
+        numpy array with shape (1, 19) containing exactly the features
+        the L5 XGBRegressor model expects
     """
     try:
-        # Extract only the 6 features the model was trained on
+        # Extract all 19 features the model was trained on
         vector = []
         missing_features = []
         
@@ -66,18 +93,21 @@ def build_l5_rf_vector(features: Dict[str, float]) -> np.ndarray:
         
         # Log missing features for debugging
         if missing_features:
-            logger.warning(f"L5 RF missing features: {missing_features} -> using defaults")
+            logger.warning(f"L5 XGB missing features: {missing_features} -> using defaults")
         
         # Return as numpy array with correct shape
-        arr = np.array([vector], dtype=np.float32)  # shape: (1, 6)
+        arr = np.array([vector], dtype=np.float32)  # shape: (1, 19)
         
-        logger.debug(f"L5 RF vector built: shape={arr.shape}, features={L5_RF_MODEL_FEATURES}")
+        logger.debug(f"L5 XGB vector built: shape={arr.shape}, 19 features")
         return arr
         
     except Exception as e:
-        logger.error(f"Failed to build L5 RF vector: {e}")
-        # Return safe fallback with neutral values
-        fallback = np.array([[1.0, 0.0, 50.0, 0.0, 0.02, 0.0]], dtype=np.float32)
+        logger.error(f"Failed to build L5 XGB vector: {e}")
+        # Return safe 19-feature fallback with neutral values
+        fallback = np.array([[
+            1.0, 0.0, 50.0, 0.0, 0.5, 0.02, 0.0, 1.0, 0.0,  # 9 base features
+            0.5, 0.5, 1.0, 0.0, 0.0, 0.02, 0.02, 0.01, 0.0, 0.0  # 10 new features
+        ]], dtype=np.float32)
         return fallback
 
 def build_model_vector(features: Dict[str, float], model_features: List[str]) -> np.ndarray:
@@ -117,72 +147,118 @@ def build_model_vector(features: Dict[str, float], model_features: List[str]) ->
 
 def predict_l5_rf_safe(model: Any, features: Dict[str, float]) -> float:
     """
-    Safe prediction for L5 RandomForest model with proper feature vector.
+    Safe prediction for L5 XGBRegressor model with proper feature vector.
     
     Args:
-        model: Trained L5 RandomForest model (expects 6 features)
-        features: Feature dictionary (can contain 9+ features)
+        model: Trained L5 XGBRegressor model (expects 19 features)
+        features: Feature dictionary (can contain many features)
         
     Returns:
         Confidence prediction as float
     """
     try:
-        # Build the exact 6-feature vector the model expects
+        # Build the exact 19-feature vector the model expects
         X = build_l5_rf_vector(features)
         
-        # Predict using numpy array (no feature names to avoid warnings)
-        if hasattr(model, 'predict_proba'):
-            proba = model.predict_proba(X)[0]
-            return float(proba[1]) if len(proba) > 1 else float(proba[0])
-        else:
-            pred = model.predict(X)[0]
-            return float(pred)
+        # Predict using numpy array (XGBoost regressor returns single value)
+        pred = model.predict(X)[0]
+        return float(np.clip(pred, 0.0, 1.0))
             
     except Exception as e:
-        logger.warning(f"L5 RF prediction failed: {e}")
+        logger.warning(f"L5 XGB prediction failed: {e}")
         return 0.5  # Neutral confidence
 
 
 # SSOT: build vector from MarketSnapshot
 def build_l5_vector_from_snapshot(snapshot: Any) -> np.ndarray:
-    """Build L5 RF vector (1x6) from MarketSnapshot with prevalidation and stable names.
-
-    Expected mapping (SSOT):
-    - price → close
-    - volume → volume
-    - indicators.rsi → rsi
-    - indicators.macd → macd
-    - indicators.volatility → volatility
-    - indicators.trend_strength → trend_strength
+    """Build L5 XGBRegressor vector (1x19) from MarketSnapshot with all 19 features.
+    
+    RETRAINED 2025-10-22: Now expects 19 features to fix inverse correlation.
     """
     try:
-        # Normalize snapshot to object with attributes
+        from datetime import datetime
+        
+        # Extract base features
         obj = snapshot
-        # Extract fields deterministically (no eval)
-        price = getattr(obj, "price", None)
-        volume = getattr(obj, "volume", None)
+        price = getattr(obj, "price", None) or 1.0
+        volume = getattr(obj, "volume", None) or 0.0
         inds = getattr(obj, "indicators", None)
-        rsi = getattr(inds, "rsi", None) if inds is not None else None
-        macd = getattr(inds, "macd", None) if inds is not None else None
-        volatility = getattr(inds, "volatility", None) if inds is not None else None
-        trend_strength = getattr(inds, "trend_strength", None) if inds is not None else None
-
-        # Prevalidation for clearer errors than NameError
-        missing = []
-        if price is None: missing.append("price")
-        if volume is None: missing.append("volume")
-        if rsi is None: missing.append("rsi")
-        if macd is None: missing.append("macd")
-        if volatility is None: missing.append("volatility")
-        if trend_strength is None: missing.append("trend_strength")
-        if missing:
-            raise ValueError(f"MissingFeatures:{','.join(missing)}")
-
-        vec = np.array([[float(price), float(volume), float(rsi), float(macd), float(volatility), float(trend_strength)]], dtype=np.float32)
+        
+        # Base indicators (9)
+        rsi = getattr(inds, "rsi", None) if inds else None
+        macd = getattr(inds, "macd", None) if inds else None
+        bb_upper = getattr(inds, "bb_upper", None) if inds else None
+        bb_lower = getattr(inds, "bb_lower", None) if inds else None
+        volatility = getattr(inds, "volatility", None) if inds else None
+        trend_strength = getattr(inds, "trend_strength", None) if inds else None
+        volume_ratio = getattr(inds, "volume_ratio", None) if inds else None
+        price_change_24h = getattr(inds, "price_change_24h", None) if inds else None
+        
+        # Calculate bb_position
+        if bb_upper and bb_lower and bb_upper != bb_lower:
+            bb_position = (price - bb_lower) / (bb_upper - bb_lower)
+        else:
+            bb_position = 0.5
+        
+        # NEW features (10) - calculate from available data
+        now = datetime.now()
+        hour_of_day = now.hour / 24.0
+        day_of_week = now.weekday() / 7.0
+        
+        # Volume spike (defaults to 1.0 = normal)
+        volume_spike = volume_ratio if volume_ratio else 1.0
+        
+        # Price momentum (would need historical data - use fallback)
+        price_momentum_5m = 0.0
+        price_momentum_15m = 0.0
+        
+        # Support/Resistance distances (would need S/R calc - use fallback)
+        distance_from_support = 0.02
+        distance_from_resistance = 0.02
+        
+        # ATR normalized (from volatility)
+        atr_normalized = volatility if volatility else 0.01
+        
+        # Stochastic (from RSI as proxy)
+        stoch_oversold = 1.0 if (rsi and rsi < 20) else 0.0
+        stoch_overbought = 1.0 if (rsi and rsi > 80) else 0.0
+        
+        # Build 19-feature vector
+        vec = np.array([[
+            float(price),
+            float(volume),
+            float(rsi if rsi else 50.0),
+            float(macd if macd else 0.0),
+            float(bb_position),
+            float(volatility if volatility else 0.02),
+            float(trend_strength if trend_strength else 0.0),
+            float(volume_ratio if volume_ratio else 1.0),
+            float(price_change_24h if price_change_24h else 0.0),
+            float(hour_of_day),
+            float(day_of_week),
+            float(volume_spike),
+            float(price_momentum_5m),
+            float(price_momentum_15m),
+            float(distance_from_support),
+            float(distance_from_resistance),
+            float(atr_normalized),
+            float(stoch_oversold),
+            float(stoch_overbought)
+        ]], dtype=np.float32)
+        
+        logger.debug(f"✅ L5 vector built: shape={vec.shape} (19 features)")
         return vec
+        
     except Exception as e:
         logger.warning(f"Failed to build L5 vector from snapshot: {e}")
-        return np.array([[1.0, 0.0, 50.0, 0.0, 0.02, 0.0]], dtype=np.float32)
+        # Return 19-feature fallback with defaults
+        fallback = np.array([[
+            1.0, 0.0, 50.0, 0.0, 0.5,  # close, volume, rsi, macd, bb_position
+            0.02, 0.0, 1.0, 0.0,  # volatility, trend, volume_ratio, price_change
+            0.5, 0.5, 1.0, 0.0, 0.0,  # hour, day, spike, momentum_5m, momentum_15m
+            0.02, 0.02, 0.01, 0.0, 0.0  # support, resistance, atr, oversold, overbought
+        ]], dtype=np.float32)
+        return fallback
 
 def save_model_with_metadata(model: Any, features: List[str], model_path: str, 
                            model_type: str = "unknown", version: str = "v1") -> None:

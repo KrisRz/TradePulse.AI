@@ -238,13 +238,15 @@ async def get_virtual_positions():
             try:
                 from app.backend.core.database import DynamoDBClient
                 from app.backend.core.config import get_settings
+                from dateutil import parser as dateparser
                 
                 settings = get_settings()
                 db_client = DynamoDBClient(local_development=settings.is_development)
                 
-                # Scan portfolio_closed_positions table (source of truth)
-                all_closed = db_client.scan_table('portfolio_closed_positions')
-                logger.info(f"🔍 DynamoDB scan returned {len(all_closed)} positions")
+                # PROFESSIONAL FIX: Read from position_results (REAL LIVE DATA - 1,007 positions)
+                # NOT from portfolio_closed_positions (old hardcoded data)
+                all_closed = db_client.scan_table('position_results')
+                logger.info(f"🔍 DynamoDB position_results returned {len(all_closed)} positions (LIVE DATA)")
                 
                 # DEBUG: Count position types BEFORE sorting
                 if len(all_closed) > 0:
@@ -256,36 +258,45 @@ async def get_virtual_positions():
                     logger.info(f"🔍 Sample position keys: {list(all_closed[0].keys())}")
                     logger.info(f"🔍 Sample closed_at: {all_closed[0].get('closed_at')}")
                 
-                # Sort by closed_at descending and take last 200
-                all_closed.sort(key=lambda x: x.get('closed_at', ''), reverse=True)
+                # Parse timestamps and sort by closed_at descending
+                positions_with_time = []
+                for pos in all_closed:
+                    if 'closed_at' in pos:
+                        try:
+                            closed_str = pos['closed_at']
+                            if isinstance(closed_str, str):
+                                dt = dateparser.parse(closed_str)
+                            else:
+                                from datetime import datetime, timezone
+                                dt = datetime.fromtimestamp(int(closed_str) / 1000, tz=timezone.utc)
+                            positions_with_time.append((dt, pos))
+                        except:
+                            pass
                 
-                # DEBUG: Count position types in TOP 200
-                top_200 = all_closed[:200]
-                type_counts_top = {}
-                for p in top_200:
-                    ptype = p.get('position_type', 'unknown')
-                    type_counts_top[ptype] = type_counts_top.get(ptype, 0) + 1
-                logger.info(f"🔍 Position types in TOP 200: {type_counts_top}")
+                positions_with_time.sort(key=lambda x: x[0], reverse=True)
+                logger.info(f"🔍 Sorted {len(positions_with_time)} positions by closed_at")
                 
-                for pos_data in top_200:  # Limit to 200 most recent
+                # Take top 200 most recent
+                top_200 = positions_with_time[:200]
+                logger.info(f"🔍 Returning {len(top_200)} most recent positions to frontend")
+                
+                for dt, pos_data in top_200:  # Limit to 200 most recent
                     try:
-                        # Calculate hold duration
-                        from datetime import datetime
-                        entry_time_str = pos_data.get('entry_time', '')
-                        exit_time_str = pos_data.get('exit_time', '')
+                        # Calculate hold duration from time_in_position_minutes (position_results format)
+                        time_in_minutes = pos_data.get('time_in_position_minutes', 0)
+                        hours = int(time_in_minutes // 60)
+                        minutes = int(time_in_minutes % 60)
+                        hold_duration = f"{hours}h {minutes}m" if time_in_minutes else "N/A"
                         
-                        if not entry_time_str or not exit_time_str:
-                            logger.warning(f"⚠️ Missing time data for position {pos_data.get('position_id')}")
-                            hold_duration = "N/A"
-                            entry_time = None
-                            exit_time = None
-                        else:
-                            entry_time = datetime.fromisoformat(entry_time_str)
-                            exit_time = datetime.fromisoformat(exit_time_str)
-                            hold_duration = str(exit_time - entry_time)
+                        # Use closed_at as exit_time
+                        exit_time = dt.isoformat()
+                        
+                        # Entry time (may not be in position_results)
+                        entry_time = pos_data.get('entry_time', '')
                         
                         # Parse PnL values (handle Decimal from DynamoDB)
-                        realized_pnl_raw = pos_data.get('realized_pnl', 0)
+                        # position_results uses pnl_absolute not realized_pnl
+                        realized_pnl_raw = pos_data.get('pnl_absolute', pos_data.get('realized_pnl', 0))
                         pnl_percentage_raw = pos_data.get('pnl_percentage', 0)
                         
                         # Convert Decimal to float if needed
@@ -301,7 +312,14 @@ async def get_virtual_positions():
                             pnl_percentage = float(pnl_percentage_raw) if pnl_percentage_raw else 0.0
                         
                         # Get position type and normalize to uppercase for frontend
-                        position_type = pos_data.get('position_type', 'long').upper()
+                        position_type = pos_data.get('position_type', 'LONG').upper()
+                        
+                        # Get entry/exit prices (handle Decimal)
+                        entry_price_raw = pos_data.get('entry_price', 0)
+                        exit_price_raw = pos_data.get('exit_price', 0)
+                        
+                        entry_price = float(entry_price_raw) if entry_price_raw else 0.0
+                        exit_price = float(exit_price_raw) if exit_price_raw else entry_price
                         
                         closed_positions.append({
                             "id": pos_data.get('position_id', 'unknown'),
@@ -309,18 +327,20 @@ async def get_virtual_positions():
                             "symbol": pos_data.get('symbol', 'BTCUSDT'),
                             "type": position_type,  # LONG or SHORT (uppercase)
                             "side": position_type,  # LONG or SHORT (uppercase)
-                            "size": float(pos_data.get('size', 0)),
-                            "quantity": float(pos_data.get('size', 0)),
-                            "entry_price": float(pos_data.get('entry_price', 0)),
-                            "current_price": float(pos_data.get('exit_price', 0)),
+                            "size": 0.01,  # position_results doesn't store size, use default
+                            "quantity": 0.01,  # position_results doesn't store size, use default
+                            "entry_price": entry_price,
+                            "current_price": exit_price,
                             "pnl": realized_pnl,
                             "unrealized_pnl": realized_pnl,
                             "pnl_percentage": pnl_percentage,
                             "unrealized_pnl_percentage": pnl_percentage,
-                            "entry_time": pos_data.get('entry_time', ''),
-                            "exit_time": pos_data.get('exit_time', ''),
+                            "entry_time": entry_time,
+                            "exit_time": exit_time,
                             "status": 'closed',
                             "hold_duration": hold_duration,
+                            "outcome": pos_data.get('outcome', 'completed'),
+                            "was_successful": pos_data.get('was_successful', False)
                         })
                     except Exception as parse_error:
                         logger.error(f"⚠️ Failed to parse closed position from DynamoDB: {parse_error}", exc_info=True)

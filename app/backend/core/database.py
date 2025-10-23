@@ -79,12 +79,13 @@ class DynamoDBClient:
         # Use singleton DynamoDB resource to prevent multiple client creation
         self.dynamodb = get_dynamodb_singleton()
         
-        # Test connection only once during initialization
+        # Test connection only once during initialization with throttled logging
         if not hasattr(DynamoDBClient, '_connection_verified'):
             try:
                 self.dynamodb.meta.client.list_tables()
                 logger.info("✅ DynamoDB connection verified")
                 DynamoDBClient._connection_verified = True
+                DynamoDBClient._logged_verification = True
             except Exception as e:
                 logger.error(f"DynamoDB connection failed: {e}")
                 
@@ -103,7 +104,10 @@ class DynamoDBClient:
                     config=config
                 )
         else:
-            logger.debug("🔄 PIPELINE DEBUG: DynamoDB connection already verified, skipping test")
+            # Only log once more instead of spamming
+            if not hasattr(DynamoDBClient, '_logged_verification'):
+                logger.debug("🔄 DynamoDB connection already verified")
+                DynamoDBClient._logged_verification = True
     
     def get_table(self, table_name: str) -> Any:
         """Get a DynamoDB table"""
@@ -1329,6 +1333,26 @@ class TableSchemas:
                 }
             ]
         }
+    
+    @staticmethod
+    def get_market_context_cache_schema() -> Dict[str, Any]:
+        """Market context cache table for S/R levels and pattern stats."""
+        return {
+            'TableName': 'market_context_cache',
+            'BillingMode': 'PAY_PER_REQUEST',
+            'KeySchema': [
+                {'AttributeName': 'symbol', 'KeyType': 'HASH'},
+                {'AttributeName': 'period', 'KeyType': 'RANGE'}
+            ],
+            'AttributeDefinitions': [
+                {'AttributeName': 'symbol', 'AttributeType': 'S'},
+                {'AttributeName': 'period', 'AttributeType': 'S'}
+            ],
+            'TimeToLiveSpecification': {
+                'Enabled': True,
+                'AttributeName': 'ttl'
+            }
+        }
 
 class DatabaseManager:
     """Database manager for table operations and data management"""
@@ -1743,7 +1767,8 @@ def ensure_required_tables() -> bool:
             schemas.get_notification_templates_schema(),
             TableSchemas.get_health_checks_schema(),
             schemas.get_learning_engine_state_schema(),
-            TableSchemas.get_trade_analyses_schema()
+            TableSchemas.get_trade_analyses_schema(),
+            TableSchemas.get_market_context_cache_schema()
         ]
         
         success_count = 0

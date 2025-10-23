@@ -135,9 +135,10 @@ try:
     try:
         from app.backend.services.virtual_portfolio_manager import VirtualPortfolioManager
     except ImportError:
-        logger.warning("VirtualPortfolioManager not available - using placeholder")
+        # This is expected during early initialization - the real manager is registered via DI later
+        logger.debug("VirtualPortfolioManager not yet loaded - using placeholder (will be initialized via DI)")
         class VirtualPortfolioManager:
-            """Placeholder for VirtualPortfolioManager"""
+            """Placeholder for VirtualPortfolioManager (real instance loaded via DI during startup)"""
             pass
 
 except ImportError as e:

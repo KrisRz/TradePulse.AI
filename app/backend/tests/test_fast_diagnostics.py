@@ -70,3 +70,4 @@ def test_pnl_percentage_long_short():
     assert pnl_long_up > 0 and pnl_long_down < 0
     assert pnl_short_down > 0 and pnl_short_up < 0
 
+

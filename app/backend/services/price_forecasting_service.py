@@ -154,17 +154,30 @@ class PriceForecastingService:
                 self.is_loading = False
                 return
             
-            # PROFESSIONAL FIX: Share LSTM models if available (prevent duplicate loading)
+            # PROFESSIONAL FIX: Try to use shared LSTM models from DI container first
+            if not shared_models:
+                try:
+                    from app.backend.core.container import get_container
+                    container = get_container()
+                    tf_service = container.get("tensorflow_async_service")
+                    if tf_service and hasattr(tf_service, 'models'):
+                        shared_models = tf_service.models
+                        logger.info("🔗 Using LSTM models from TensorFlowAsyncService (DI)")
+                except Exception:
+                    pass
+            
+            # Use shared models if available
             if shared_models:
-                logger.info("🔗 Using shared LSTM models from Enterprise Engine")
+                logger.info("🔗 Using shared LSTM models (prevents duplicate RAM usage)")
                 for horizon in ["1h", "4h", "24h"]:
                     lstm_key = f"lstm_{horizon}"
                     if lstm_key in shared_models:
                         self.models[horizon] = shared_models[lstm_key]
                         logger.info(f"✅ Shared LSTM model: {lstm_key}")
             
-            # Only load models if not shared
+            # Only load models if not shared (fallback)
             if not self.models:
+                logger.warning("⚠️  No shared models available, loading LSTMs separately (RAM overhead)")
                 logger.info("📥 Loading LSTM models...")
                 await self._load_lstm_models()
             
@@ -344,9 +357,19 @@ class PriceForecastingService:
         # Get model prediction
         raw_prediction = model.predict(input_seq, verbose=0)[0][0]
         
-        # Convert to price (assuming model predicts returns)
-        predicted_return = float(raw_prediction)
-        predicted_price = current_price * (1 + predicted_return)
+        # PROFESSIONAL FIX: Detect if model predicts returns or multipliers
+        # Returns: typically -0.05 to +0.05 (±5%)
+        # Multipliers: typically 0.95 to 1.05 (centered around 1.0)
+        raw_value = float(raw_prediction)
+        
+        if 0.8 < raw_value < 1.2:
+            # Model predicts MULTIPLIER (e.g., 0.98 = 2% drop)
+            predicted_price = current_price * raw_value
+            logger.debug(f"LAYER-7: Model output={raw_value:.4f} (multiplier) → price=${predicted_price:,.2f}")
+        else:
+            # Model predicts RETURN (e.g., -0.02 = 2% drop)
+            predicted_price = current_price * (1 + raw_value)
+            logger.debug(f"LAYER-7: Model output={raw_value:.4f} (return) → price=${predicted_price:,.2f}")
         
         # Calculate confidence interval (using historical variance)
         volatility = features.get("volatility", 0.02)

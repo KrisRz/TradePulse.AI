@@ -6,10 +6,20 @@ cd /Applications/Projects/TradePulse.AI
 
 set -euo pipefail
 
+# FORCE Python 3.11.9 via pyenv
+if command -v pyenv >/dev/null 2>&1; then
+    export PYENV_VERSION=3.11.9
+    eval "$(pyenv init --path 2>/dev/null || true)"
+    eval "$(pyenv init - 2>/dev/null || true)"
+    echo "🐍 Using Python $(python --version) via pyenv"
+else
+    echo "⚠️  pyenv not found, using system Python: $(python3 --version)"
+fi
+
 # Create virtual environment if it doesn't exist
 if [ ! -d ".venv" ]; then
     echo "📦 Creating Python virtual environment..."
-    python3 -m venv .venv
+    python -m venv .venv
 fi
 
 # Activate virtual environment
@@ -82,6 +92,17 @@ fi
 # Optional: show short credential fingerprints (first 4 chars) for verification only
 if [ -n "${BINANCE_API_KEY:-}" ] && [ -n "${BINANCE_SECRET_KEY:-}" ]; then
   echo "🔑 Binance creds detected: K=$(printf "%s" "$BINANCE_API_KEY" | cut -c1-4)*** S=$(printf "%s" "$BINANCE_SECRET_KEY" | cut -c1-4)***"
+  
+  # Validate key format (should be 64 alphanumeric chars)
+  KEY_LEN=$(echo -n "$BINANCE_API_KEY" | wc -c | tr -d ' ')
+  SECRET_LEN=$(echo -n "$BINANCE_SECRET_KEY" | wc -c | tr -d ' ')
+  
+  if [ "$KEY_LEN" -ne 64 ]; then
+    echo "⚠️  WARNING: BINANCE_API_KEY should be 64 chars, got $KEY_LEN"
+  fi
+  if [ "$SECRET_LEN" -ne 64 ]; then
+    echo "⚠️  WARNING: BINANCE_SECRET_KEY should be 64 chars, got $SECRET_LEN"
+  fi
 else
   echo "⚠️  Binance API credentials not set; client will use public endpoints."
 fi

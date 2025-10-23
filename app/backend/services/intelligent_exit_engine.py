@@ -580,8 +580,16 @@ class IntelligentExitEngine:
                 symbol, position_data, current_price, market_data
             )
             
-            # Calculate consensus decision (with position_data for hysteresis)
-            exit_decision = await self._calculate_exit_consensus(layer_results, position_data)
+            # DAY TRADING SAFETY OVERRIDES: Check time-based exit rules BEFORE consensus
+            safety_override = await self._check_day_trading_safety_overrides(
+                position_data, current_price, market_data
+            )
+            if safety_override["should_exit"]:
+                logger.info(f"🚨 DAY TRADING SAFETY OVERRIDE: {safety_override['reason']}")
+                exit_decision = safety_override
+            else:
+                # Calculate consensus decision (with position_data for hysteresis)
+                exit_decision = await self._calculate_exit_consensus(layer_results, position_data)
             
             # REVERSAL CONFIRMATION: Track reversal hits for confirmation (DYNAMIC TICKS!)
             if position_id and "layer_3_reversal" in layer_results:
@@ -799,6 +807,68 @@ class IntelligentExitEngine:
         for tr in trs[1:]:
             atr = atr + alpha * (tr - atr)
         return float(atr)
+    
+    async def _check_day_trading_safety_overrides(
+        self, position_data: Dict[str, Any], current_price: float, market_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Day trading safety overrides for stuck/losing positions.
+        
+        Returns exit decision if override triggers, otherwise {"should_exit": False}.
+        """
+        try:
+            entry_time = position_data.get("entry_time")
+            if not entry_time:
+                return {"should_exit": False}
+            
+            # Parse entry time if string
+            if isinstance(entry_time, str):
+                entry_time = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
+            
+            now = datetime.now(timezone.utc)
+            age_minutes = (now - entry_time).total_seconds() / 60
+            
+            entry_price = float(position_data.get("entry_price", current_price))
+            pnl_pct = ((current_price - entry_price) / entry_price) * 100.0
+            
+            regime = market_data.get("regime", "unknown")
+            volatility = market_data.get("volatility", 0.02)
+            low_vol = regime in ("low_volatility", "balanced") and volatility < 0.004
+            
+            # 1) Time stop for losers in low volatility
+            if age_minutes >= 360 and pnl_pct <= -0.8 and low_vol:
+                logger.info(f"⏰ TIME STOP: {age_minutes:.0f}min, PnL={pnl_pct:.2f}%, low_vol={low_vol}")
+                return {
+                    "should_exit": True,
+                    "confidence": 0.90,
+                    "reason": "day_trading_time_stop_lowvol",
+                    "consensus_score": 0.90
+                }
+            
+            # 2) Stagnation breaker (sideways with no movement)
+            if age_minutes >= 240 and abs(pnl_pct) < 0.3 and low_vol:
+                logger.info(f"🔄 STAGNATION: {age_minutes:.0f}min, PnL={pnl_pct:.2f}%, freeing capital")
+                return {
+                    "should_exit": True,
+                    "confidence": 0.75,
+                    "reason": "day_trading_stagnation_trim",
+                    "consensus_score": 0.75
+                }
+            
+            # 3) Soft max age (8 hours for day trading)
+            if age_minutes >= 480:
+                logger.info(f"📆 MAX AGE: {age_minutes:.0f}min ({age_minutes/60:.1f}h), closing for day trading")
+                return {
+                    "should_exit": True,
+                    "confidence": 0.85,
+                    "reason": "day_trading_max_age_close",
+                    "consensus_score": 0.85
+                }
+            
+            return {"should_exit": False}
+            
+        except Exception as e:
+            logger.error(f"Safety override check failed: {e}")
+            return {"should_exit": False}
     
     async def _run_six_layer_exit_analysis(
         self, symbol: str, position_data: Dict[str, Any], 

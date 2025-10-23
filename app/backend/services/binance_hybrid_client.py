@@ -713,10 +713,23 @@ class BinanceHybridClient:
     
     async def _get_from_rest_api(self, data_type: str, symbol: str, **kwargs) -> Any:
         """Get data from REST API with proper error handling"""
+        # PROFESSIONAL FIX: Only reinit session after multiple consecutive failures
         # Check if session is closed and recreate if needed
         if not self.rest_session or self.rest_session.closed:
-            logger.info("🔄 REST session closed, reinitializing...")
-            await self._init_rest_session()
+            if not hasattr(self, '_rest_session_errors'):
+                self._rest_session_errors = 0
+            
+            self._rest_session_errors += 1
+            
+            # Only churn after 3 consecutive errors (prevents flapping)
+            if self._rest_session_errors >= 3:
+                logger.warning(f"🔄 REST session closed after {self._rest_session_errors} errors, reinitializing...")
+                await self._init_rest_session()
+                self._rest_session_errors = 0  # Reset counter
+            else:
+                logger.debug(f"⚠️ REST session issue (error {self._rest_session_errors}/3), will reinit if persists")
+                # Don't churn yet, wait for more errors
+                await self._init_rest_session()  # Still need to init if first time
         
         if data_type == "ticker":
             return await self._rest_get_ticker(symbol)
@@ -762,6 +775,17 @@ class BinanceHybridClient:
         if not self.api_key or not self.secret_key:
             logger.warning("🔑 No API keys configured - authentication test skipped")
             return False
+        
+        # Validate key format before attempting auth
+        if len(self.api_key) != 64 or not self.api_key.isalnum():
+            logger.error(f"❌ BINANCE_API_KEY format invalid: expected 64 alphanumeric chars, got {len(self.api_key)} chars")
+            logger.error("💡 Check key format in Binance console → API Management")
+            return False
+        
+        if len(self.secret_key) != 64 or not self.secret_key.isalnum():
+            logger.error(f"❌ BINANCE_SECRET_KEY format invalid: expected 64 alphanumeric chars, got {len(self.secret_key)} chars")
+            logger.error("💡 Check secret format in Binance console → API Management")
+            return False
             
         try:
             # Ensure session is valid
@@ -779,8 +803,25 @@ class BinanceHybridClient:
                     data = await response.json()
                     logger.info(f"✅ BINANCE AUTHENTICATION SUCCESS - Account: {data.get('accountType', 'UNKNOWN')}")
                     return True
+                elif response.status == 401:
+                    error_data = await response.json()
+                    error_code = error_data.get('code', 'UNKNOWN')
+                    error_msg = error_data.get('msg', 'Unknown error')
+                    
+                    logger.error(f"❌ BINANCE AUTH FAILED (401) - Code: {error_code}, Message: {error_msg}")
+                    
+                    if error_code == -2015:
+                        logger.error("💡 FIX CHECKLIST:")
+                        logger.error("   1. Verify keys match base URL (testnet.binance.vision vs api.binance.com)")
+                        logger.error("   2. Check API key status in Binance console → API Management")
+                        logger.error("   3. Enable 'Reading' permission and 'Spot & Margin Trading' if needed")
+                        logger.error("   4. If using IP restrictions, add your current IP or disable")
+                        logger.error("   5. Verify system clock is synced (±1s tolerance)")
+                    
+                    return False
                 else:
-                    logger.warning(f"❌ BINANCE AUTHENTICATION FAILED: {response.status} - {await response.text()}")
+                    text = await response.text()
+                    logger.warning(f"❌ BINANCE AUTHENTICATION FAILED: {response.status} - {text}")
                     return False
                     
         except Exception as e:

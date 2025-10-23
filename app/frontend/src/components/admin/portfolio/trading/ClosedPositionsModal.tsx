@@ -242,3 +242,4 @@ export default function ClosedPositionsModal({ positions, isOpen, onClose }: Clo
   );
 }
 
+

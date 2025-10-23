@@ -356,26 +356,98 @@ async def get_closed_positions(
     admin_user: User = Depends(require_admin_role)
 ):
     """
-    🔴 GET LIVE CLOSED POSITIONS - Real Exchange Data
-    Returns closed positions history from connected exchange
+    🔴 GET LIVE CLOSED POSITIONS - Real Position Results from Database
+    Returns closed positions history from position_results table
     """
     try:
-        # In development mode, return empty positions
-        # In production, this would fetch from actual exchange API
+        # PROFESSIONAL FIX: Read actual closed positions from DynamoDB
+        from app.backend.core.database import get_database_client
+        from datetime import datetime, timezone
+        from dateutil import parser as dateparser
         
-        closed_positions = []
+        db_client = get_database_client()
+        
+        # Get position_results (closed positions)
+        try:
+            response = db_client.scan_table('position_results')
+            all_positions = response if isinstance(response, list) else []
+            
+            # Parse and sort by closed_at (newest first)
+            positions_with_time = []
+            for pos in all_positions:
+                if 'closed_at' in pos:
+                    try:
+                        closed_str = pos['closed_at']
+                        if isinstance(closed_str, str):
+                            dt = dateparser.parse(closed_str)
+                        else:
+                            dt = datetime.fromtimestamp(int(closed_str) / 1000, tz=timezone.utc)
+                        positions_with_time.append((dt, pos))
+                    except:
+                        pass
+            
+            positions_with_time.sort(key=lambda x: x[0], reverse=True)
+            
+            # Take only the requested limit
+            limited_positions = positions_with_time[:limit]
+            
+            # Format for frontend
+            closed_positions = []
+            for dt, pos in limited_positions:
+                closed_positions.append({
+                    "position_id": pos.get("position_id", "N/A"),
+                    "symbol": pos.get("symbol", "BTCUSDT"),
+                    "entry_price": float(pos.get("entry_price", 0)),
+                    "exit_price": float(pos.get("exit_price", 0)),
+                    "quantity": 0.01,  # Not stored in results
+                    "pnl": float(pos.get("pnl_absolute", 0)),
+                    "pnl_percentage": float(pos.get("pnl_percentage", 0)),
+                    "outcome": pos.get("outcome", "unknown"),
+                    "was_successful": pos.get("was_successful", False),
+                    "closed_at": dt.isoformat(),
+                    "time_in_position_minutes": pos.get("time_in_position_minutes", 0)
+                })
+            
+        except Exception as e:
+            logger.warning(f"Failed to read from position_results: {e}")
+            closed_positions = []
+        
+        # Calculate analytics from ALL positions (not just the limited set)
+        all_results = [pos for _, pos in positions_with_time]
+        
+        total_trades = len(all_results)
+        profitable_trades = sum(1 for pos in all_results if pos.get('was_successful', False))
+        losing_trades = total_trades - profitable_trades
+        
+        total_pnl = sum(float(pos.get('pnl_absolute', 0)) for pos in all_results)
+        win_rate = (profitable_trades / total_trades * 100) if total_trades > 0 else 0.0
+        
+        avg_hold_time_minutes = sum(pos.get('time_in_position_minutes', 0) for pos in all_results) / total_trades if total_trades > 0 else 0
+        avg_hold_hours = int(avg_hold_time_minutes // 60)
+        avg_hold_mins = int(avg_hold_time_minutes % 60)
+        
+        pnls = [float(pos.get('pnl_absolute', 0)) for pos in all_results]
+        best_trade = max(pnls) if pnls else 0.0
+        worst_trade = min(pnls) if pnls else 0.0
+        
+        avg_pnl_per_trade = total_pnl / total_trades if total_trades > 0 else 0.0
+        
+        # Profit factor: total gains / total losses
+        total_gains = sum(p for p in pnls if p > 0)
+        total_losses = abs(sum(p for p in pnls if p < 0))
+        profit_factor = total_gains / total_losses if total_losses > 0 else 0.0
         
         analytics = {
-            "total_trades": 0,
-            "profitable_trades": 0,
-            "losing_trades": 0,
-            "total_pnl": 0.0,
-            "win_rate": 0.0,
-            "avg_hold_time": "0h 0m",
-            "best_trade": 0.0,
-            "worst_trade": 0.0,
-            "profit_factor": 0.0,
-            "avg_pnl_per_trade": 0.0,
+            "total_trades": total_trades,
+            "profitable_trades": profitable_trades,
+            "losing_trades": losing_trades,
+            "total_pnl": round(total_pnl, 2),
+            "win_rate": round(win_rate, 2),
+            "avg_hold_time": f"{avg_hold_hours}h {avg_hold_mins}m",
+            "best_trade": round(best_trade, 2),
+            "worst_trade": round(worst_trade, 2),
+            "profit_factor": round(profit_factor, 2),
+            "avg_pnl_per_trade": round(avg_pnl_per_trade, 2),
             "total_commissions": 0.0,
             "sharpe_ratio": 0.0
         }

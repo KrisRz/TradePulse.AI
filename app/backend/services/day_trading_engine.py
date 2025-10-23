@@ -1386,9 +1386,14 @@ class DayTradingEngine:
                     except Exception:
                         pass
             else:
-                reason = "low_confidence" if adjusted_confidence <= config.confidence_threshold else "hold_signal"
-                logger.debug(f"📊 Signal rejected: {reason}")
-                await self._audit_decision(signal, None, None, risk_assessment, reason)
+                # PROFESSIONAL FIX: Don't spam logs for HOLD signals (they're no-ops)
+                if signal.action != "HOLD":
+                    reason = "low_confidence" if adjusted_confidence <= config.confidence_threshold else "hold_signal"
+                    logger.debug(f"📊 Signal rejected: {reason}")
+                    await self._audit_decision(signal, None, None, risk_assessment, reason)
+                # For HOLD signals, audit quietly without "rejection" language
+                else:
+                    await self._audit_decision(signal, None, None, risk_assessment, "hold_no_action")
                 try:
                     from time import time as _t
                     from app.backend.services.metrics import inc_decision, set_last_decision_epoch, inc_decision_by_playbook
