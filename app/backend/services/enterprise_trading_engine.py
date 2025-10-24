@@ -1383,16 +1383,31 @@ class EnterpriseTradingEngine:
         try:
             if "confidence" in self.models:
                 model = self.models["confidence"]
+                # Determine expected feature size for compatibility (handles older 7/9‑feature and new 19‑feature models)
+                expected_size = self._get_model_expected_size(model, 19)
                 # SSOT: try to build vector from latest features snapshot if available
                 confidence = None
                 try:
                     from app.backend.services.metrics import inc_l5_vector_source, inc_l5_builder_error, preinit_l5_vector_source_series
                     preinit_l5_vector_source_series()
                     # Prefer real snapshot object if provided
-                    from app.backend.ml.infer import build_l5_vector_from_snapshot
                     if snapshot_obj is None:
                         raise NameError("snapshot_object_missing")
-                    X = build_l5_vector_from_snapshot(snapshot_obj)
+                    # Build vector according to model's expected size
+                    if expected_size == 19:
+                        from app.backend.ml.infer import build_l5_vector_from_snapshot
+                        X = build_l5_vector_from_snapshot(snapshot_obj)
+                    else:
+                        # Older models (7/9) - extract from feature dict using required names
+                        default_order = [
+                            "close","volume","rsi","macd","bb_position","volatility","trend_strength"
+                        ]
+                        if expected_size >= 9:
+                            default_order = [
+                                "close","volume","rsi","macd","bb_position","volatility","trend_strength",
+                                "volume_ratio","price_change_24h"
+                            ]
+                        X = self._build_feature_array(model, features, default_order, layer_name="layer_5")
                     
                     # Apply Layer 5 scaler if available (retrained model uses RobustScaler)
                     if 'layer_5' in self.scalers:
@@ -1410,9 +1425,27 @@ class EnterpriseTradingEngine:
                         confidence = float(np.clip(pred, 0.0, 1.0))
                     inc_l5_vector_source("snapshot")
                 except Exception as e:
-                    # Fallback to legacy feature dict path
-                    from app.backend.ml.infer import predict_l5_rf_safe
-                    confidence = predict_l5_rf_safe(model, features)
+                    # Fallback: build vector based on model's expected size from raw features
+                    try:
+                        if expected_size == 19:
+                            from app.backend.ml.infer import build_l5_rf_vector
+                            X_fallback = build_l5_rf_vector(features)
+                        else:
+                            default_order = [
+                                "close","volume","rsi","macd","bb_position","volatility","trend_strength"
+                            ]
+                            if expected_size >= 9:
+                                default_order = [
+                                    "close","volume","rsi","macd","bb_position","volatility","trend_strength",
+                                    "volume_ratio","price_change_24h"
+                                ]
+                            X_fallback = self._build_feature_array(model, features, default_order, layer_name="layer_5")
+                        pred = model.predict(X_fallback)[0]
+                        confidence = float(np.clip(pred, 0.0, 1.0))
+                    except Exception as inner:
+                        logger.warning(f"L5 fallback prediction failed: {inner}")
+                        # Last resort: neutral confidence
+                        confidence = 0.5
                     try:
                         from app.backend.services.metrics import inc_l5_vector_source
                         inc_l5_vector_source("fallback")

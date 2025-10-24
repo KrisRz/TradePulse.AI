@@ -161,7 +161,7 @@ class IntelligentEntryEngine:
         self._threshold_refresh_interval = 3600  # 1 hour
         
         # PRICE MOMENTUM CONFIRMATION: Wait for price movement in trade direction
-        self.price_confirmation_threshold = 0.002  # 0.2% price movement required
+        self.price_confirmation_threshold = 0.001  # 0.1% price movement required (more permissive for day trading)
         self.price_momentum_periods = 5  # Check last 5 price points
         self.max_wait_for_confirmation = 300  # Max 5 minutes wait for price confirmation
         
@@ -192,9 +192,9 @@ class IntelligentEntryEngine:
         self.phase3_start = 3.0     # Phase 3: 3+ minutes - full optimization
         
         # PHASE-BASED THRESHOLDS for gradual confidence building (BITCOIN SCALPING OPTIMIZED)
-        self.phase1_confidence_threshold = 0.60  # Medium threshold during initial warmup (was 0.75, too high!)
-        self.phase2_confidence_threshold = 0.58  # Slightly lower during phase 2 (was 0.70)
-        self.phase3_confidence_threshold = 0.55  # Normal threshold after full warmup (was 0.65)
+        self.phase1_confidence_threshold = 0.58  # Slightly lower to enable earlier entries
+        self.phase2_confidence_threshold = 0.56  # Lower phase 2
+        self.phase3_confidence_threshold = 0.55  # Keep phase 3
         
         # MINIMUM DATA REQUIREMENTS for each phase
         self.min_price_history_basic = 5   # Phase 1: 5 points = 60 seconds at 12s intervals
@@ -430,6 +430,12 @@ class IntelligentEntryEngine:
                 logger.info("✅ PIPELINE DEBUG: Entry Engine - Background price poller started (5s interval)")
             except Exception as e:
                 logger.warning(f"⚠️ PIPELINE DEBUG: Entry Engine - Failed to start price poller: {e}")
+
+            # Seed price history with recent 1m candles to accelerate warmup
+            try:
+                await self._seed_price_history_from_candles(target_points=max(self.min_price_history_full, 20))
+            except Exception as e:
+                logger.debug(f"Price history seeding skipped: {e}")
             
             self.is_initialized = True
             logger.info("✅ Enhanced Intelligent Entry Engine initialized successfully")
@@ -456,6 +462,54 @@ class IntelligentEntryEngine:
             except Exception as e:
                 logger.debug(f"price poll failed: {e}")
             await asyncio.sleep(interval_sec)
+
+    async def _seed_price_history_from_candles(self, target_points: int = 20) -> None:
+        """Seed price history using recent 1m candles to accelerate warmup."""
+        try:
+            from app.backend.services.live_market_data import get_live_market_data_service
+            service = await get_live_market_data_service()
+            candles = []
+            try:
+                if hasattr(service, 'get_recent_candles'):
+                    candles = service.get_recent_candles("1m", target_points)
+            except Exception:
+                candles = []
+            # REST fallback if cache is empty
+            if not candles:
+                try:
+                    import requests
+                    url = "https://api.binance.com/api/v3/klines"
+                    params = {"symbol": "BTCUSDT", "interval": "1m", "limit": target_points}
+                    resp = requests.get(url, params=params, timeout=5)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candles = [
+                            {"close": float(k[4])} for k in data[-target_points:] if isinstance(k, list) and len(k) >= 5
+                        ]
+                        logger.info(f"✅ REST fallback fetched {len(candles)} candles for seeding")
+                except Exception as _e:
+                    logger.debug(f"REST fallback failed: {_e}")
+            if not candles:
+                logger.debug("No recent candles available for seeding")
+                return
+            closes = []
+            for c in candles[-target_points:]:
+                try:
+                    if isinstance(c, dict):
+                        closes.append(float(c.get("close") or c.get("c") or 0.0))
+                    elif isinstance(c, (list, tuple)) and len(c) >= 5:
+                        closes.append(float(c[4]))
+                except Exception:
+                    continue
+            added = 0
+            for px in closes:
+                if px and px > 0:
+                    await self.update_price_history(px)
+                    added += 1
+            if added > 0:
+                logger.info(f"✅ Seeded price history with {added} points from recent 1m candles")
+        except Exception as e:
+            logger.debug(f"Price history seeding failed: {e}")
     
     async def _load_adaptive_thresholds(self):
         """Load learned entry thresholds from Continuous Learning Engine"""
@@ -2316,9 +2370,8 @@ class IntelligentEntryEngine:
         elif phase == 2:
             phase_consensus_thresh = 0.58  # Medium consensus required during Phase 2 (was 0.60)
         elif phase == 3:
-            # 🔧 FIX (Oct 2025): Phase 3 (fully warmed) - crypto day trading needs lower threshold
-            # Consensus 0.62-0.64 is good enough for 70% confidence BUY signals
-            phase_consensus_thresh = 0.60  # Was missing → fallback to 0.65 (too high!)
+            # Fully warmed phase: slightly lower consensus for more day-trade entries
+            phase_consensus_thresh = 0.58
         
         # Enhanced checks with phase-based and exploratory support
         meets_consensus = enter_votes > wait_votes and consensus_score > phase_consensus_thresh
@@ -2333,7 +2386,7 @@ class IntelligentEntryEngine:
         meets_signal = signal_action in ["BUY", "SELL"] and signal_confidence > signal_thresh
         
         # Timing: respect Enterprise L6_time as override if strong
-        timing_ok = meets_historical or l6_timing >= 0.70
+        timing_ok = meets_historical or l6_timing >= 0.65
         
         # For exploratory signals, treat disabled models as neutral
         if is_exploratory and enter_votes == 0 and wait_votes == 0:

@@ -131,11 +131,11 @@ class DayTradingEngine:
         # Previous: on=3.5, off=2.0, safe_ticks=3 (too restrictive - blocked valid entries)
         # New: on=4.5, off=2.5, safe_ticks=2 (allows more entries, still protects from extremes)
         self.cb_active = False
-        self.cb_threshold_on = 4.5  # Raised from 3.5 (only extreme spikes trigger halt)
-        self.cb_threshold_off = 2.5  # Raised from 2.0 (easier to recover)
+        self.cb_threshold_on = 5.0  # Trigger only on very extreme spikes
+        self.cb_threshold_off = 3.0  # Require modest stabilization then resume
         self.cb_safe_ticks = 0
-        self.cb_safe_required = 2  # Reduced from 3 (faster recovery)
-        self.cb_safe_window_sec = 90  # Allow accumulation across 90s in micro-vol
+        self.cb_safe_required = 1  # Faster recovery to avoid over-blocking
+        self.cb_safe_window_sec = 60  # Shorter window for recovery accumulation
         # EMA z-score for smoothing (prevents single spike halts)
         self.z_ema = None
         self.z_ema_alpha = 0.3  # 30% weight to new value, 70% to EMA

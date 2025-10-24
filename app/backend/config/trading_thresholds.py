@@ -17,20 +17,20 @@ class ConfidenceThresholds:
     # 🎯 BALANCED THRESHOLDS: Lowered to allow trading in low-volatility sideways markets
     # Previous 85% threshold was too strict - prevented all trading even with good AI signals
     # New approach: Let AI signals through, rely on improved position sizing + exit logic for risk management
-    BUY_THRESHOLD: float = 0.70      # 70% confidence required for BUY signals (balanced for sideways markets)
-    SELL_THRESHOLD: float = 0.70     # 70% confidence required for SELL signals (balanced for sideways markets)
+    BUY_THRESHOLD: float = 0.62      # Relaxed to 62% to accommodate new model calibration
+    SELL_THRESHOLD: float = 0.62     # Symmetric SELL threshold
     
     # EXPLORATORY SIGNAL THRESHOLDS - Re-enabled with moderate thresholds
-    EXPLORATORY_BUY: float = 0.55    # 55% confidence minimum (allows probing in uncertain conditions)
-    EXPLORATORY_SELL: float = 0.55   # 55% confidence minimum (allows probing in uncertain conditions)
+    EXPLORATORY_BUY: float = 0.55    # Keep exploratory at 55%
+    EXPLORATORY_SELL: float = 0.55   # Keep exploratory at 55%
     
     # HOLD DECISION THRESHOLDS
-    HOLD_LOWER_BOUND: float = 0.70   # Below 70% = potential SELL signal (raised from 35%)
-    HOLD_UPPER_BOUND: float = 0.85   # Above 85% = potential BUY signal (raised from 65%)
+    HOLD_LOWER_BOUND: float = 0.62   # Align hold band with relaxed thresholds
+    HOLD_UPPER_BOUND: float = 0.85   # Leave upper bound as-is
     # Between 70% and 85% = HOLD
     
     # MINIMUM THRESHOLDS (Absolute minimums)
-    ABSOLUTE_MINIMUM: float = 0.70   # Never trade below 70% confidence (EMERGENCY FIX - was 30%!)
+    ABSOLUTE_MINIMUM: float = 0.55   # Allow trades ≥55% when other gates pass
     
     # SPECIAL THRESHOLDS
     HIGH_CONFIDENCE: float = 0.90    # High confidence threshold for premium signals (raised from 80%)
