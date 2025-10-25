@@ -542,54 +542,13 @@ class IntelligentExitEngine:
                 market_data["current_signal_action"] = "HOLD"
                 market_data["current_signal_confidence"] = 0.0
             
-            # Circuit breaker soft mode: if active, don't generate new signals - only allow stop updates
-            try:
-                from app.backend.services.emergency_controls import get_emergency_system
-                emergency = await get_emergency_system()
-                circuit_breaker_active = await emergency.is_trading_halted()
-            except Exception:
-                circuit_breaker_active = False
-
-            if circuit_breaker_active:
-                return {
-                    "should_exit": False,
-                    "confidence": 0.0,
-                    "exit_reason": "halt_circuit_breaker",
-                    "consensus_score": 0.0,
-                    "layer_analysis": {},
-                    "emergency_conditions": {"emergency_exit": False, "reasons": [], "severity": "normal"},
-                    "current_price": current_price,
-                    "analysis_time_ms": 0,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "engine_status": "operational",
-                    "layer_health": self.layer_health.copy(),
-                    "position_id": position_data.get("position_id"),
-                    "symbol": symbol,
-                    "entry_price": position_data.get("entry_price", 0),
-                    "current_pnl": 0.0,
-                    "pnl_percent": 0.0,
-                    "position_age_hours": self._calculate_position_age(position_data),
-                    "risk_score": 0.5,
-                    "drawdown": 0.0,
-                    "volatility": market_data.get("volatility", 0.0),
-                    "allow_stop_updates": True
-                }
-
             # Run 6-layer exit analysis
             layer_results = await self._run_six_layer_exit_analysis(
                 symbol, position_data, current_price, market_data
             )
             
-            # DAY TRADING SAFETY OVERRIDES: Check time-based exit rules BEFORE consensus
-            safety_override = await self._check_day_trading_safety_overrides(
-                position_data, current_price, market_data
-            )
-            if safety_override["should_exit"]:
-                logger.info(f"🚨 DAY TRADING SAFETY OVERRIDE: {safety_override['reason']}")
-                exit_decision = safety_override
-            else:
-                # Calculate consensus decision (with position_data for hysteresis)
-                exit_decision = await self._calculate_exit_consensus(layer_results, position_data)
+            # Calculate consensus decision (with position_data for hysteresis)
+            exit_decision = await self._calculate_exit_consensus(layer_results, position_data)
             
             # REVERSAL CONFIRMATION: Track reversal hits for confirmation (DYNAMIC TICKS!)
             if position_id and "layer_3_reversal" in layer_results:
@@ -808,68 +767,6 @@ class IntelligentExitEngine:
             atr = atr + alpha * (tr - atr)
         return float(atr)
     
-    async def _check_day_trading_safety_overrides(
-        self, position_data: Dict[str, Any], current_price: float, market_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Day trading safety overrides for stuck/losing positions.
-        
-        Returns exit decision if override triggers, otherwise {"should_exit": False}.
-        """
-        try:
-            entry_time = position_data.get("entry_time")
-            if not entry_time:
-                return {"should_exit": False}
-            
-            # Parse entry time if string
-            if isinstance(entry_time, str):
-                entry_time = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
-            
-            now = datetime.now(timezone.utc)
-            age_minutes = (now - entry_time).total_seconds() / 60
-            
-            entry_price = float(position_data.get("entry_price", current_price))
-            pnl_pct = ((current_price - entry_price) / entry_price) * 100.0
-            
-            regime = market_data.get("regime", "unknown")
-            volatility = market_data.get("volatility", 0.02)
-            low_vol = regime in ("low_volatility", "balanced") and volatility < 0.004
-            
-            # 1) Time stop for losers in low volatility
-            if age_minutes >= 360 and pnl_pct <= -0.8 and low_vol:
-                logger.info(f"⏰ TIME STOP: {age_minutes:.0f}min, PnL={pnl_pct:.2f}%, low_vol={low_vol}")
-                return {
-                    "should_exit": True,
-                    "confidence": 0.90,
-                    "reason": "day_trading_time_stop_lowvol",
-                    "consensus_score": 0.90
-                }
-            
-            # 2) Stagnation breaker (sideways with no movement)
-            if age_minutes >= 240 and abs(pnl_pct) < 0.3 and low_vol:
-                logger.info(f"🔄 STAGNATION: {age_minutes:.0f}min, PnL={pnl_pct:.2f}%, freeing capital")
-                return {
-                    "should_exit": True,
-                    "confidence": 0.75,
-                    "reason": "day_trading_stagnation_trim",
-                    "consensus_score": 0.75
-                }
-            
-            # 3) Soft max age (8 hours for day trading)
-            if age_minutes >= 480:
-                logger.info(f"📆 MAX AGE: {age_minutes:.0f}min ({age_minutes/60:.1f}h), closing for day trading")
-                return {
-                    "should_exit": True,
-                    "confidence": 0.85,
-                    "reason": "day_trading_max_age_close",
-                    "consensus_score": 0.85
-                }
-            
-            return {"should_exit": False}
-            
-        except Exception as e:
-            logger.error(f"Safety override check failed: {e}")
-            return {"should_exit": False}
-    
     async def _run_six_layer_exit_analysis(
         self, symbol: str, position_data: Dict[str, Any], 
         current_price: float, market_data: Dict[str, Any]
@@ -949,45 +846,23 @@ class IntelligentExitEngine:
         volatility = market_data.get("volatility", 0.02)
         trend_strength = market_data.get("trend_strength", 0.5)
         
-        # Determine base market regime
+        # Determine market regime
         if volatility > 0.05 and volume_ratio > 1.5:
-            base_regime = "volatile"
-            exit_recommendation = "hold"
+            regime = "volatile"
+            exit_recommendation = "hold"  # Wait for volatility to settle
             confidence = 0.7
         elif trend_strength > 0.8:
-            base_regime = "trending"
-            exit_recommendation = "hold"
+            regime = "trending"
+            exit_recommendation = "hold"  # Trend continuation likely
             confidence = 0.8
         elif volatility < 0.02 and volume_ratio < 0.8:
-            base_regime = "consolidating"
-            exit_recommendation = "exit"
+            regime = "consolidating"
+            exit_recommendation = "exit"  # Low momentum, consider exit
             confidence = 0.6
         else:
-            base_regime = "balanced"
+            regime = "balanced"
             exit_recommendation = "hold"
             confidence = 0.5
-
-        # Override regime when circuit breaker active or high volatility metrics
-        circuit_breaker_active = False
-        try:
-            from app.backend.services.emergency_controls import get_emergency_system
-            emergency = await get_emergency_system()
-            circuit_breaker_active = await emergency.is_trading_halted()
-        except Exception:
-            pass
-
-        regime = base_regime
-        atr_pct = market_data.get("volatility", volatility)
-        if circuit_breaker_active or market_data.get("volume_ratio", 1.0) >= 8.0 or atr_pct >= 0.01:
-            regime = "high_volatility"
-
-        try:
-            logger.info(
-                "Regime final=%s (base=%s, vol_ratio=%.2f, atr_pct=%.4f, CB=%s)",
-                regime, base_regime, market_data.get("volume_ratio", 1.0), atr_pct, circuit_breaker_active
-            )
-        except Exception:
-            pass
         
         return {
             "recommendation": exit_recommendation,
@@ -996,7 +871,7 @@ class IntelligentExitEngine:
             "volatility": volatility,
             "volume_ratio": volume_ratio,
             "trend_strength": trend_strength,
-            "reasoning": f"Market regime: {regime} (base={base_regime}) with {volatility:.1%} volatility"
+            "reasoning": f"Market regime: {regime} with {volatility:.1%} volatility"
         }
     
     async def _analyze_lstm_predictions(self, symbol: str, current_price: float, market_data: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -1611,13 +1486,8 @@ class IntelligentExitEngine:
         # Weighted consensus score (not simple mean!)
         consensus_score = exit_score if exit_score > hold_score else hold_score
         
-        # Determine decision for clear logging
-        decision = "EXIT" if (exit_score > hold_score and exit_score > adaptive_threshold) else "HOLD"
-        threshold_status = f"{'above' if exit_score > adaptive_threshold else 'below'} threshold"
-        
-        logger.info(f"🎯 Exit consensus: votes={exit_votes}v{hold_votes} | "
-                   f"exit_score={exit_score:.3f} vs hold_score={hold_score:.3f} | "
-                   f"threshold={adaptive_threshold:.2f} ({threshold_status}) → {decision}")
+        logger.info(f"🎯 Exit consensus: {exit_votes} exit vs {hold_votes} hold votes, "
+                   f"exit_score={exit_score:.3f}, hold_score={hold_score:.3f}, threshold={adaptive_threshold:.2f} (regime: {regime})")
         
         # 🔧 FIX (Oct 2025): SMART EXIT - Let AI and trailing stop work!
         # REMOVED: MIN_HOLD_BARS - anti-pattern that blocks profit protection

@@ -98,12 +98,6 @@ def clamp_confidence(confidence: float, lo: float = 0.05, hi: float = 0.95) -> f
     Returns:
         Clamped confidence value
     """
-    # Epsilon-band: treat very low confidence as "no signal" (0.0)
-    EPSILON = 0.07
-    if confidence < EPSILON:
-        logger.debug(f"Epsilon-band: confidence {confidence:.3f} < {EPSILON} → treating as no_signal (0.0)")
-        return 0.0
-    
     if confidence > hi:
         logger.warning(f"Clamping overconfident prediction: {confidence:.3f} -> {hi}")
         return hi
@@ -329,20 +323,6 @@ def log_prediction_details(model: Any, features: Dict[str, float], confidence: f
     """
     feature_info = get_model_feature_info(model)
 
-    # Compute a simple checksum and index→name→value map for diagnostics
-    try:
-        ordered_cols = TRAIN_COLS
-        values = [features.get(c, 0.0) for c in ordered_cols]
-        import hashlib, json
-        pre_str = json.dumps({c: features.get(c, 0.0) for c in ordered_cols}, sort_keys=True)
-        checksum = hashlib.sha1(pre_str.encode("utf-8")).hexdigest()
-        logger.info(
-            f"Model prediction details | class={prediction_class} conf={confidence:.3f} features={feature_info['feature_count']} checksum={checksum}"
-        )
-        # Compact mapping log
-        preview = ", ".join([f"{i}:{name}={values[i]:.6f}" for i, name in enumerate(ordered_cols)])
-        logger.info(f"Feature mapping (pre-scaler): {preview}")
-    except Exception:
-        logger.info(
-            f"Model prediction details | class={prediction_class} conf={confidence:.3f} features={feature_info['feature_count']}"
-        )
+    logger.info(
+        f"Model prediction details | class={prediction_class} conf={confidence:.3f} features={feature_info['feature_count']}"
+    )

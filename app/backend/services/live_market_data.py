@@ -805,18 +805,31 @@ async def get_live_market_data() -> Dict:
 		base_data.update(technical_indicators)
 		# Attach SSOT snapshot metadata and export snapshot age
 		try:
-			# Build validated SSOT snapshot (TTL + sanity gate)
-			from app.backend.services.market_snapshot import get_validated_snapshot
-			base_data["snapshot"] = get_validated_snapshot("BTCUSDT", "1m", base_data)
+			from time import time as _now
+			base_data["timestamp_epoch"] = _now()
+			# Build immutable MarketSnapshot and embed for SSOT
+			from app.backend.services.market_snapshot import build_snapshot_from_market_data
+			base_data["snapshot"] = build_snapshot_from_market_data(base_data, symbol="BTCUSDT")
 			from app.backend.services.metrics import set_snapshot_age_seconds, set_snapshot_asof_epoch, set_history_asof_epoch
 			set_snapshot_age_seconds(0.0)
 			set_snapshot_asof_epoch(float(base_data["timestamp_epoch"]))
+			# Export latest history as-of from last closed candle if available
+			try:
+				last_candle = candles[-1] if candles else None
+				if last_candle:
+					if isinstance(last_candle, dict):
+						close_ts = float(last_candle.get("close_time", last_candle.get("timestamp", 0)))
+					else:
+						# Binance list format: [open_time, open, high, low, close, volume, close_time, ...]
+						close_ts = float(last_candle[6]) if len(last_candle) >= 7 else 0.0
+					if close_ts:
+						set_history_asof_epoch(close_ts/1000.0 if close_ts > 1e12 else close_ts)
+			except Exception:
+				pass
 		except Exception:
 			pass
-		
-		# CRITICAL: Return the market data
 		return base_data
-
+		
 	except Exception as e:
 		logger.error(f"Failed to get live market data: {e}")
 		raise
@@ -965,7 +978,7 @@ def _calculate_technical_indicators(candles: List[Dict], current_price: float) -
 			"trend_strength": float(trend_strength)
 		}
 		
-		logger.debug(f"📊 Technical indicators calculated: RSI={rsi:.1f}, MACD={macd:.4f}, BB_pos={bollinger_position:.5f}")
+		logger.debug(f"📊 Technical indicators calculated: RSI={rsi:.1f}, MACD={macd:.4f}, BB_pos={bollinger_position:.2f}")
 		return indicators
 		
 	except Exception as e:
@@ -984,98 +997,38 @@ def _calculate_technical_indicators(candles: List[Dict], current_price: float) -
 		}
 
 def _calculate_rsi(prices: np.ndarray, period: int = 14) -> float:
-	"""Calculate RSI using Wilder's smoothing (period=14 by default).
-	
-	CRITICAL FIX: Ensure we use RAW close prices, not normalized ones.
-	Dynamic warmup based on indicator needs (not hardcoded).
-	"""
-	# PROFESSIONAL FIX: Calculate dynamic warmup from all indicator needs
-	# RSI needs 5x period, BB needs 3x window, LSTM needs historical context
-	MIN_WARMUP = max(
-		period * 5,      # RSI warmup (14*5 = 70)
-		20 * 3,          # BB window warmup (20*3 = 60)
-		100              # LSTM minimum context
-	)
-	
-	if prices is None or len(prices) < MIN_WARMUP:
-		logger.debug(f"RSI warmup: {len(prices) if prices is not None else 0}/{MIN_WARMUP} candles")
-		return 50.0  # Neutral until warm
-
-	# Use recent window for calculation (avoid stale data)
-	prices = prices[-MIN_WARMUP:]
-	
-	diffs = np.diff(prices)
-	gains = np.where(diffs > 0, diffs, 0.0)
-	losses = np.where(diffs < 0, -diffs, 0.0)
-
-	# Wilder's initial averages
-	if len(gains) < period:
+	"""Calculate RSI (Relative Strength Index)"""
+	if len(prices) < period + 1:
 		return 50.0
-	avg_gain = np.mean(gains[:period])
-	avg_loss = np.mean(losses[:period])
-
-	# Wilder's recursive smoothing
-	for i in range(period, len(gains)):
-		avg_gain = (avg_gain * (period - 1) + gains[i]) / period
-		avg_loss = (avg_loss * (period - 1) + losses[i]) / period
-
-	if not np.isfinite(avg_loss) or avg_loss == 0.0:
+	
+	deltas = np.diff(prices[-period-1:])
+	gains = np.where(deltas > 0, deltas, 0)
+	losses = np.where(deltas < 0, -deltas, 0)
+	
+	avg_gain = np.mean(gains) if len(gains) > 0 else 0
+	avg_loss = np.mean(losses) if len(losses) > 0 else 0
+	
+	if avg_loss == 0:
 		return 100.0
-
-	rs = avg_gain / max(avg_loss, 1e-12)
-	rsi = 100.0 - (100.0 / (1.0 + rs))
 	
-	if not np.isfinite(rsi):
-		rsi = 50.0
+	rs = avg_gain / avg_loss
+	rsi = 100 - (100 / (1 + rs))
 	
-	# Sanity check: RSI should be 0-100
-	rsi = float(np.clip(rsi, 0.0, 100.0))
-	
-	# Log extreme values for debugging
-	if rsi < 10.0 or rsi > 90.0:
-		logger.info(f"RSI extreme: {rsi:.1f} (avg_gain={avg_gain:.6f}, avg_loss={avg_loss:.6f})")
-	
-	return rsi
+	return float(np.clip(rsi, 0, 100))
 
 def _calculate_macd(prices: np.ndarray) -> Tuple[float, float]:
-    """Calculate MACD with consistent ATR-based normalization.
-    
-    CRITICAL FIX: Use ATR for normalization to avoid scale mixing.
-    Returns (macd_hist_norm, macd_signal_norm) in consistent units.
-    """
-    if prices is None or len(prices) < 26:
-        return 0.0, 0.0
-
-    # Calculate EMAs on same price array
-    ema_12 = _calculate_ema(prices, 12)
-    ema_26 = _calculate_ema(prices, 26)
-    macd_line = float(ema_12 - ema_26)
-    
-    # Signal line (9-period EMA of MACD line)
-    # For simplicity, approximate as 0.9 * macd_line (proper implementation would track history)
-    signal_line = macd_line * 0.9
-    macd_hist = macd_line - signal_line
-    
-    # Normalize by ATR (last 14 periods) for consistent scale
-    if len(prices) >= 14:
-        recent_prices = prices[-14:]
-        atr = float(np.std(np.diff(recent_prices)) * np.sqrt(14))
-        
-        if atr > 0:
-            macd_hist_norm = macd_hist / atr
-            macd_signal_norm = signal_line / atr
-        else:
-            # Fallback: normalize by current price
-            macd_hist_norm = macd_hist / max(abs(prices[-1]), 1e-9)
-            macd_signal_norm = signal_line / max(abs(prices[-1]), 1e-9)
-    else:
-        # Not enough data, normalize by current price
-        macd_hist_norm = macd_hist / max(abs(prices[-1]), 1e-9)
-        macd_signal_norm = signal_line / max(abs(prices[-1]), 1e-9)
-
-    logger.debug(f"MACD: raw={macd_hist:.2f} norm={macd_hist_norm:.6f}")
-
-    return float(macd_hist_norm), float(macd_signal_norm)
+	"""Calculate MACD (Moving Average Convergence Divergence)"""
+	if len(prices) < 26:
+		return 0.0, 0.0
+	
+	ema_12 = _calculate_ema(prices, 12)
+	ema_26 = _calculate_ema(prices, 26)
+	macd_line = ema_12 - ema_26
+	
+	# Simple signal line (9-period EMA of MACD would require more data)
+	macd_signal = macd_line * 0.9  # Simplified signal
+	
+	return float(macd_line), float(macd_signal)
 
 def _calculate_ema(prices: np.ndarray, period: int) -> float:
 	"""Calculate Exponential Moving Average"""
@@ -1091,44 +1044,23 @@ def _calculate_ema(prices: np.ndarray, period: int) -> float:
 	return ema
 
 def _calculate_bollinger_position(prices: np.ndarray, current_price: float, period: int = 20) -> float:
-    """Calculate position within Bollinger Bands (0..1 where 0=lower, 0.5=mid, 1=upper).
-    
-    CRITICAL FIX: Allow values outside [0,1] BEFORE clipping to detect "outside band" conditions.
-    This is essential for day trading signals.
-    """
-    if prices is None or len(prices) < period:
-        return 0.5
-
-    window = prices[-period:]
-    mid = float(np.mean(window))
-    std = float(np.std(window))
-    
-    # Bollinger Bands: 2 standard deviations
-    upper = mid + 2.0 * std
-    lower = mid - 2.0 * std
-    width = upper - lower
-
-    try:
-        logger.debug(f"BB: close={current_price:.2f} mid={mid:.2f} up={upper:.2f} lo={lower:.2f} width={width:.2f}")
-    except Exception:
-        pass
-
-    # Calculate raw position (can be <0 or >1 if outside bands)
-    if width <= 0.0 or not np.isfinite(width):
-        return 0.5  # Flat market, neutral position
-    
-    raw_position = (current_price - lower) / width
-    
-    # Log extreme positions (outside bands = strong signal)
-    if raw_position < 0.0:
-        logger.info(f"BB: Price BELOW lower band: {raw_position:.3f} (oversold)")
-    elif raw_position > 1.0:
-        logger.info(f"BB: Price ABOVE upper band: {raw_position:.3f} (overbought)")
-    
-    # Clip to [0,1] for feature consistency, but we detected extremes above
-    bb_position = float(np.clip(raw_position, 0.0, 1.0))
-    
-    return bb_position
+	"""Calculate position within Bollinger Bands (0 = lower band, 1 = upper band) - FIXED with epsilon"""
+	if len(prices) < period:
+		return 0.5
+	
+	recent_prices = prices[-period:]
+	sma = float(np.mean(recent_prices))
+	std = float(np.std(recent_prices))
+	
+	upper_band = sma + (2 * std)
+	lower_band = sma - (2 * std)
+	
+	# FIXED: Add epsilon to prevent division by zero in volatile markets
+	eps = 1e-8
+	band_width = max(upper_band - lower_band, eps)
+	
+	position = (current_price - lower_band) / band_width
+	return float(np.clip(position, 0.0, 1.0))
 
 def _calculate_trend_strength(prices: np.ndarray) -> float:
 	"""Calculate trend strength using linear regression slope"""
