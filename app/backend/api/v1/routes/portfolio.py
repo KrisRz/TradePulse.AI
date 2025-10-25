@@ -6,7 +6,7 @@ Real DynamoDB integration for virtual portfolio data
 from fastapi import APIRouter, Depends, HTTPException, status
 # from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 # from api.v1.routes.auth import verify_production_jwt_token
@@ -239,14 +239,22 @@ async def get_virtual_positions():
                 from app.backend.core.database import DynamoDBClient
                 from app.backend.core.config import get_settings
                 from dateutil import parser as dateparser
+                import os
+                
+                # FORCE AWS DynamoDB connection (not local) - deployed app uses AWS
+                # Remove local endpoint to ensure we connect to AWS eu-west-2 region
+                original_endpoint = os.environ.get('DYNAMODB_ENDPOINT')
+                if original_endpoint:
+                    os.environ.pop('DYNAMODB_ENDPOINT', None)
+                    logger.info(f"🌍 Removed local DYNAMODB_ENDPOINT, connecting to AWS DynamoDB (eu-west-2)")
                 
                 settings = get_settings()
-                db_client = DynamoDBClient(local_development=settings.is_development)
+                # Force AWS connection by setting local_development=False
+                db_client = DynamoDBClient(local_development=False)
                 
-                # PROFESSIONAL FIX: Read from position_results (REAL LIVE DATA - 1,007 positions)
-                # NOT from portfolio_closed_positions (old hardcoded data)
-                all_closed = db_client.scan_table('position_results')
-                logger.info(f"🔍 DynamoDB position_results returned {len(all_closed)} positions (LIVE DATA)")
+                # Read from portfolio_closed_positions table on AWS DynamoDB
+                all_closed = db_client.scan_table('portfolio_closed_positions')
+                logger.info(f"🔍 AWS DynamoDB portfolio_closed_positions returned {len(all_closed)} positions (LIVE DATA FROM AWS)")
                 
                 # DEBUG: Count position types BEFORE sorting
                 if len(all_closed) > 0:
@@ -267,7 +275,6 @@ async def get_virtual_positions():
                             if isinstance(closed_str, str):
                                 dt = dateparser.parse(closed_str)
                             else:
-                                from datetime import datetime, timezone
                                 dt = datetime.fromtimestamp(int(closed_str) / 1000, tz=timezone.utc)
                             positions_with_time.append((dt, pos))
                         except:
@@ -282,25 +289,23 @@ async def get_virtual_positions():
                 
                 for dt, pos_data in top_200:  # Limit to 200 most recent
                     try:
-                        # Calculate hold duration from time_in_position_minutes (position_results format)
-                        time_in_minutes = pos_data.get('time_in_position_minutes', 0)
+                        # Calculate hold duration from duration_minutes (portfolio_closed_positions format)
+                        from decimal import Decimal
+                        duration_raw = pos_data.get('duration_minutes', 0)
+                        time_in_minutes = float(duration_raw) if duration_raw else 0
                         hours = int(time_in_minutes // 60)
                         minutes = int(time_in_minutes % 60)
                         hold_duration = f"{hours}h {minutes}m" if time_in_minutes else "N/A"
                         
-                        # Use closed_at as exit_time
-                        exit_time = dt.isoformat()
-                        
-                        # Entry time (may not be in position_results)
+                        # Get entry and exit times
                         entry_time = pos_data.get('entry_time', '')
+                        exit_time = pos_data.get('exit_time', dt.isoformat())
                         
                         # Parse PnL values (handle Decimal from DynamoDB)
-                        # position_results uses pnl_absolute not realized_pnl
-                        realized_pnl_raw = pos_data.get('pnl_absolute', pos_data.get('realized_pnl', 0))
+                        realized_pnl_raw = pos_data.get('realized_pnl', 0)
                         pnl_percentage_raw = pos_data.get('pnl_percentage', 0)
                         
                         # Convert Decimal to float if needed
-                        from decimal import Decimal
                         if isinstance(realized_pnl_raw, Decimal):
                             realized_pnl = float(realized_pnl_raw)
                         else:
@@ -317,9 +322,19 @@ async def get_virtual_positions():
                         # Get entry/exit prices (handle Decimal)
                         entry_price_raw = pos_data.get('entry_price', 0)
                         exit_price_raw = pos_data.get('exit_price', 0)
+                        size_raw = pos_data.get('size', 0.01)
                         
                         entry_price = float(entry_price_raw) if entry_price_raw else 0.0
                         exit_price = float(exit_price_raw) if exit_price_raw else entry_price
+                        size = float(size_raw) if size_raw else 0.01
+                        
+                        # Get exit reason from status or ai_reasoning
+                        exit_reason = pos_data.get('status', 'completed')
+                        ai_reasoning = pos_data.get('ai_reasoning', '')
+                        if 'stop_loss' in ai_reasoning.lower():
+                            exit_reason = 'stop_loss'
+                        elif 'take_profit' in ai_reasoning.lower():
+                            exit_reason = 'take_profit'
                         
                         closed_positions.append({
                             "id": pos_data.get('position_id', 'unknown'),
@@ -327,8 +342,8 @@ async def get_virtual_positions():
                             "symbol": pos_data.get('symbol', 'BTCUSDT'),
                             "type": position_type,  # LONG or SHORT (uppercase)
                             "side": position_type,  # LONG or SHORT (uppercase)
-                            "size": 0.01,  # position_results doesn't store size, use default
-                            "quantity": 0.01,  # position_results doesn't store size, use default
+                            "size": size,
+                            "quantity": size,
                             "entry_price": entry_price,
                             "current_price": exit_price,
                             "pnl": realized_pnl,
@@ -337,21 +352,28 @@ async def get_virtual_positions():
                             "unrealized_pnl_percentage": pnl_percentage,
                             "entry_time": entry_time,
                             "exit_time": exit_time,
-                            "status": 'closed',
+                            "status": exit_reason,
                             "hold_duration": hold_duration,
-                            "outcome": pos_data.get('outcome', 'completed'),
-                            "was_successful": pos_data.get('was_successful', False)
+                            "confidence": float(pos_data.get('ai_confidence', 0)) if pos_data.get('ai_confidence') else 0,
+                            "ai_reasoning": ai_reasoning
                         })
                     except Exception as parse_error:
                         logger.error(f"⚠️ Failed to parse closed position from DynamoDB: {parse_error}", exc_info=True)
                         logger.error(f"⚠️ Problematic position data: {pos_data}")
                         continue
                 
-                logger.info(f"✅ Loaded {len(closed_positions)} closed positions from DynamoDB (live data)")
+                logger.info(f"✅ Loaded {len(closed_positions)} closed positions from AWS DynamoDB (live data)")
                 logger.info(f"📊 Position types: {[p.get('type') for p in closed_positions[:5]]}")
                 
+                # Restore original endpoint if it was set
+                if original_endpoint:
+                    os.environ['DYNAMODB_ENDPOINT'] = original_endpoint
+                
             except Exception as db_error:
-                logger.error(f"❌ Failed to load closed positions from DynamoDB: {db_error}")
+                logger.error(f"❌ Failed to load closed positions from AWS DynamoDB: {db_error}", exc_info=True)
+                # Restore original endpoint if it was set
+                if 'original_endpoint' in locals() and original_endpoint:
+                    os.environ['DYNAMODB_ENDPOINT'] = original_endpoint
                 # FALLBACK: Use in-memory portfolio if DynamoDB fails
                 logger.info("📦 Falling back to in-memory closed positions...")
                 for position in portfolio.closed_positions:
