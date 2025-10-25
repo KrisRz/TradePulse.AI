@@ -1416,10 +1416,10 @@ class IntelligentExitEngine:
             regime = "unknown"
         
         # 🔧 FIX (Oct 2025): CRYPTO DAY TRADING - Use reasonable exit threshold
-        # Consensus 0.60-0.65 is GOOD for exit (4 exit vs 1-2 hold votes)
-        # Don't artificially raise it - let 6-layer AI work!
-        # Trailing stop from peak protects profit naturally
-        adaptive_threshold = max(adaptive_threshold, 0.60)  # Reasonable minimum for crypto
+        # CRITICAL FIX (Oct 25): Lowered from 0.60 to 0.40 to close positions faster
+        # Win rate 7.75% indicates positions held too long - need faster exits
+        # Exit Engine showing 34% confidence but 60% threshold blocked all exits
+        adaptive_threshold = max(adaptive_threshold, 0.40)  # Lowered for faster position closing
         
         # 🎯 SMART REVERSAL CHECK: Only force exit on VERY strong signals (6+)
         # Was: 4+ signals override → Now: 6+ signals override (Bitcoin-adjusted)

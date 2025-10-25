@@ -14,15 +14,16 @@ logger = structlog.get_logger(__name__)
 class ConfidenceThresholds:
     """Unified confidence thresholds for all trading decisions"""
     
-    # 🎯 BALANCED THRESHOLDS: Lowered to allow trading in low-volatility sideways markets
-    # Previous 85% threshold was too strict - prevented all trading even with good AI signals
-    # New approach: Let AI signals through, rely on improved position sizing + exit logic for risk management
-    BUY_THRESHOLD: float = 0.62      # Relaxed to 62% to accommodate new model calibration
-    SELL_THRESHOLD: float = 0.62     # Symmetric SELL threshold
+    # 🎯 BALANCED THRESHOLDS: Raised to improve win rate (currently 7.75%)
+    # CRITICAL FIX (Oct 25): Increased from 62% to 70% to filter weak signals
+    # Win rate 7.75% (42/542) indicates too many low-quality entries
+    # Higher threshold = fewer but better quality trades
+    BUY_THRESHOLD: float = 0.70      # Raised from 0.62 to improve win rate
+    SELL_THRESHOLD: float = 0.70     # Symmetric SELL threshold
     
-    # EXPLORATORY SIGNAL THRESHOLDS - Re-enabled with moderate thresholds
-    EXPLORATORY_BUY: float = 0.55    # Keep exploratory at 55%
-    EXPLORATORY_SELL: float = 0.55   # Keep exploratory at 55%
+    # EXPLORATORY SIGNAL THRESHOLDS - Raised to reduce noise
+    EXPLORATORY_BUY: float = 0.65    # Raised from 0.55 to reduce weak signals
+    EXPLORATORY_SELL: float = 0.65   # Raised from 0.55 to reduce weak signals
     
     # HOLD DECISION THRESHOLDS
     HOLD_LOWER_BOUND: float = 0.62   # Align hold band with relaxed thresholds
