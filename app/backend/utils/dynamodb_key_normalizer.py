@@ -28,8 +28,8 @@ TABLE_KEY_SCHEMAS = {
         "timestamp": "N"  # Number (RANGE key: epoch timestamp)
     },
     "live_candles": {
-        "symbol": "S",  # String
-        "timestamp": "N"  # Number (consistent with Terraform)
+        "PK": "S",  # String (composite: symbol#interval)
+        "SK": "N"  # Number (timestamp)
     },
     "tradepulse-live_candles-production": {
         "symbol": "S",  # String

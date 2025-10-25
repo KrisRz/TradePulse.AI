@@ -68,8 +68,8 @@ async def start_candle_persistence() -> None:
             ttl_timestamp = int((datetime.now(timezone.utc) + timedelta(days=90)).timestamp())
             
             item: Dict[str, Any] = {
-                "pk": f"{symbol}#{interval}",  # Composite partition key
-                "ts": timestamp_ms,            # Sort key (timestamp)
+                "PK": f"{symbol}#{interval}",  # Composite partition key (UPPERCASE)
+                "SK": timestamp_ms,             # Sort key (timestamp) (UPPERCASE)
                 "symbol": symbol,
                 "interval": interval,
                 "timestamp": timestamp_ms,     # Keep for backward compatibility
@@ -90,8 +90,8 @@ async def start_candle_persistence() -> None:
                 client.put_item_conditional(
                     table_name, 
                     item, 
-                    condition_expression="attribute_not_exists(#ts)",
-                    expression_attribute_names={"#ts": "ts"}
+                    condition_expression="attribute_not_exists(#sk)",
+                    expression_attribute_names={"#sk": "SK"}
                 )
             except Exception as e:
                 if "ConditionalCheckFailedException" in str(e):
