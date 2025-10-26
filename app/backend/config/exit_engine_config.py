@@ -95,8 +95,9 @@ class AdaptiveExitCalculator:
     }
     
     # Sharpe-optimized base thresholds (target Sharpe > 2.0)
+    # 🚨 DAY TRADING FIX (Oct 26): Lowered from 0.55 to 0.40 for faster exits
     BASE_CONFIDENCE_TARGET = 0.60  # 60% minimum (1.5 Sharpe)
-    BASE_CONSENSUS_TARGET = 0.55   # 55% layer agreement
+    BASE_CONSENSUS_TARGET = 0.40   # 40% layer agreement (was 0.55, lowered for day trading)
     EMERGENCY_THRESHOLD = 0.90     # 90% emergency exits
     
     # ATR-based profit multiples (industry standard)
@@ -254,9 +255,10 @@ class AdaptiveExitCalculator:
         base_consensus = AdaptiveExitCalculator.BASE_CONSENSUS_TARGET
         
         # Regime adjustments
+        # 🚨 DAY TRADING FIX (Oct 26): Removed LOW_VOLATILITY +0.05 penalty
         regime_adjustments = {
             ExitMarketRegime.HIGH_VOLATILITY: -0.05,  # Easier exits in volatility
-            ExitMarketRegime.LOW_VOLATILITY: +0.05,   # Harder exits in low vol
+            ExitMarketRegime.LOW_VOLATILITY: 0.00,    # No penalty (was +0.05, removed for day trading)
             ExitMarketRegime.TRENDING: +0.05,         # Let trends run
             ExitMarketRegime.CONSOLIDATING: 0.0,      # Normal
             ExitMarketRegime.BREAKOUT: +0.10,         # Let breakouts run

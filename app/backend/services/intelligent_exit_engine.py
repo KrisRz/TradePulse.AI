@@ -1421,6 +1421,21 @@ class IntelligentExitEngine:
         # Exit Engine showing 34% confidence but 60% threshold blocked all exits
         adaptive_threshold = max(adaptive_threshold, 0.40)  # Lowered for faster position closing
         
+        # 🚨 SMART EXIT (Oct 26): Detect stale losing positions (day trading)
+        # Instead of dumb 12h force exit, intelligently lower threshold for stale losses
+        position_age_hours = self._calculate_position_age(position_data)
+        current_price = position_data.get('current_price', 0)
+        current_pnl_pct = self._calculate_pnl_percentage(position_data, current_price) if position_data and current_price > 0 else 0.0
+        
+        # If position is losing AND stale (no movement for 8h+), lower threshold
+        if position_age_hours >= 8.0 and -0.5 < current_pnl_pct < 0.0:
+            # Position losing (but not hitting stop loss) and stale - make exit easier
+            stale_penalty = 0.15  # Lower threshold by 15%
+            original_threshold = adaptive_threshold
+            adaptive_threshold = max(adaptive_threshold - stale_penalty, 0.30)  # Floor at 30%
+            logger.warning(f"⚠️ STALE LOSING POSITION: {position_age_hours:.1f}h old, PnL {current_pnl_pct:+.2f}%, "
+                          f"lowering threshold from {original_threshold:.2f} to {adaptive_threshold:.2f}")
+        
         # 🎯 SMART REVERSAL CHECK: Only force exit on VERY strong signals (6+)
         # Was: 4+ signals override → Now: 6+ signals override (Bitcoin-adjusted)
         reversal_layer = layer_results.get("layer_3_reversal", {})
