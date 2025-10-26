@@ -122,7 +122,7 @@ export default function ClosedPositionsAnalytics() {
       setLoading(true);
       
       // PROFESSIONAL: Fetch real closed positions from backend (DynamoDB via API)
-      const resp = await fetch(`/api/real_trading/positions/closed?limit=200`, {
+      const resp = await fetch(`/api/portfolio/virtual/positions`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
@@ -134,7 +134,7 @@ export default function ClosedPositionsAnalytics() {
       }
 
       const payload = await resp.json();
-      const apiPositions = payload?.data?.closed_positions || [];
+      const apiPositions = payload?.closed_positions || [];
 
       // Map API payload to ClosedPosition[] interface
       const mapped: ClosedPosition[] = apiPositions.map((p: any) => ({

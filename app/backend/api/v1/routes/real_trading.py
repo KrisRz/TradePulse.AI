@@ -360,17 +360,30 @@ async def get_closed_positions(
     Returns closed positions history from position_results table
     """
     try:
-        # PROFESSIONAL FIX: Read actual closed positions from DynamoDB
+        # PROFESSIONAL FIX: Read actual closed positions from AWS DynamoDB
         from app.backend.core.database import get_database_client
         from datetime import datetime, timezone
         from dateutil import parser as dateparser
+        import os
+        
+        # FORCE AWS DynamoDB connection (not local) - deployed app uses AWS
+        original_endpoint = os.environ.get('DYNAMODB_ENDPOINT')
+        if original_endpoint:
+            os.environ.pop('DYNAMODB_ENDPOINT', None)
+            logger.info(f"🌍 Removed local DYNAMODB_ENDPOINT, connecting to AWS DynamoDB (eu-west-2)")
         
         db_client = get_database_client()
         
-        # Get position_results (closed positions)
+        # Get portfolio_closed_positions (AWS DynamoDB)
         try:
-            response = db_client.scan_table('position_results')
+            response = db_client.scan_table('portfolio_closed_positions')
             all_positions = response if isinstance(response, list) else []
+            
+            # Restore original endpoint if it was set
+            if original_endpoint:
+                os.environ['DYNAMODB_ENDPOINT'] = original_endpoint
+            
+            logger.info(f"🔍 AWS DynamoDB portfolio_closed_positions returned {len(all_positions)} positions")
             
             # Parse and sort by closed_at (newest first)
             positions_with_time = []
@@ -391,21 +404,51 @@ async def get_closed_positions(
             # Take only the requested limit
             limited_positions = positions_with_time[:limit]
             
-            # Format for frontend
+            # Format for frontend (portfolio_closed_positions schema)
             closed_positions = []
             for dt, pos in limited_positions:
+                from decimal import Decimal
+                
+                # Parse PnL values (handle Decimal from DynamoDB)
+                realized_pnl_raw = pos.get('realized_pnl', 0)
+                pnl_percentage_raw = pos.get('pnl_percentage', 0)
+                
+                if isinstance(realized_pnl_raw, Decimal):
+                    realized_pnl = float(realized_pnl_raw)
+                else:
+                    realized_pnl = float(realized_pnl_raw) if realized_pnl_raw else 0.0
+                    
+                if isinstance(pnl_percentage_raw, Decimal):
+                    pnl_percentage = float(pnl_percentage_raw)
+                else:
+                    pnl_percentage = float(pnl_percentage_raw) if pnl_percentage_raw else 0.0
+                
+                # Calculate hold duration from duration_minutes
+                duration_raw = pos.get('duration_minutes', 0)
+                time_in_minutes = float(duration_raw) if duration_raw else 0
+                
                 closed_positions.append({
                     "position_id": pos.get("position_id", "N/A"),
                     "symbol": pos.get("symbol", "BTCUSDT"),
+                    "type": pos.get("position_type", "LONG").upper(),
+                    "side": pos.get("position_type", "LONG").upper(),
                     "entry_price": float(pos.get("entry_price", 0)),
                     "exit_price": float(pos.get("exit_price", 0)),
-                    "quantity": 0.01,  # Not stored in results
-                    "pnl": float(pos.get("pnl_absolute", 0)),
-                    "pnl_percentage": float(pos.get("pnl_percentage", 0)),
-                    "outcome": pos.get("outcome", "unknown"),
-                    "was_successful": pos.get("was_successful", False),
+                    "current_price": float(pos.get("exit_price", 0)),
+                    "quantity": float(pos.get("size", 0.01)),
+                    "size": float(pos.get("size", 0.01)),
+                    "pnl": realized_pnl,
+                    "realized_pnl": realized_pnl,
+                    "pnl_percentage": pnl_percentage,
+                    "realized_pnl_percentage": pnl_percentage,
+                    "outcome": pos.get("status", "completed"),
+                    "was_successful": realized_pnl > 0,
                     "closed_at": dt.isoformat(),
-                    "time_in_position_minutes": pos.get("time_in_position_minutes", 0)
+                    "exit_time": pos.get("exit_time", dt.isoformat()),
+                    "entry_time": pos.get("entry_time", ""),
+                    "hold_duration": f"{int(time_in_minutes // 60)}h {int(time_in_minutes % 60)}m" if time_in_minutes else "N/A",
+                    "ai_confidence": float(pos.get("ai_confidence", 0)) if pos.get("ai_confidence") else 0,
+                    "ai_reasoning": pos.get("ai_reasoning", "")
                 })
             
         except Exception as e:
@@ -416,17 +459,17 @@ async def get_closed_positions(
         all_results = [pos for _, pos in positions_with_time]
         
         total_trades = len(all_results)
-        profitable_trades = sum(1 for pos in all_results if pos.get('was_successful', False))
+        profitable_trades = sum(1 for pos in all_results if float(pos.get('realized_pnl', 0)) > 0)
         losing_trades = total_trades - profitable_trades
         
-        total_pnl = sum(float(pos.get('pnl_absolute', 0)) for pos in all_results)
+        total_pnl = sum(float(pos.get('realized_pnl', 0)) for pos in all_results)
         win_rate = (profitable_trades / total_trades * 100) if total_trades > 0 else 0.0
         
-        avg_hold_time_minutes = sum(pos.get('time_in_position_minutes', 0) for pos in all_results) / total_trades if total_trades > 0 else 0
+        avg_hold_time_minutes = sum(float(pos.get('duration_minutes', 0)) for pos in all_results) / total_trades if total_trades > 0 else 0
         avg_hold_hours = int(avg_hold_time_minutes // 60)
         avg_hold_mins = int(avg_hold_time_minutes % 60)
         
-        pnls = [float(pos.get('pnl_absolute', 0)) for pos in all_results]
+        pnls = [float(pos.get('realized_pnl', 0)) for pos in all_results]
         best_trade = max(pnls) if pnls else 0.0
         worst_trade = min(pnls) if pnls else 0.0
         
