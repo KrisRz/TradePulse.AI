@@ -12,15 +12,19 @@
 1. Exit Engine Progressive Loss Cutting
 2. Layer 4 Regime Adaptation (Sideways/Trending/Volatile)
 3. Layer 5 Model v2.0 Retrained (15 features, fresh data)
-4. WebSocket Keepalive (AWS App Runner optimized)
+4. WebSocket Keepalive (AWS App Runner optimized) + **Syntax Fix Deployed**
 5. Low-Vol Optimizations (timing cap, exploratory threshold)
-6. Missing Features Fixed (bb_position, volume_ratio, price_change_24h)
+6. **DEPLOYED TO AWS** ✅ (2025-11-01 00:35 UTC)
+
+**ACTIVE ISSUES** ⚠️:
+1. Missing Features on AWS: bb_position, volume_ratio, price_change_24h still using defaults
+2. Layer 5 underfitting (R²=0.2262, needs PnL-based retraining)
 
 **PENDING** ⏳:
-1. Deploy to AWS (all fixes ready)
-2. Emergency Mode Verification
-3. Learning Engine Status Check
-4. Session Analysis (requires recent data)
+1. Emergency Mode Verification (AWS)
+2. Learning Engine Status Check (AWS)
+3. Session Analysis (requires recent data)
+4. Fix missing features issue on AWS
 
 ---
 
