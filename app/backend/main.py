@@ -1,6 +1,10 @@
 """
 TradePulse.AI - Enterprise Backend Entry Point
 Professional Clean Architecture Implementation with Real Data Only
+
+AI Models Version: Nov 2025
+- Layer 3 Exit Model: v3.0 (trained on 3-month Binance data, 72% accuracy)
+- Layer 5 Confidence Model: v2.0 (15 features, enhanced session context)
 """
 
 import sys
