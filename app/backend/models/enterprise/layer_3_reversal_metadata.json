@@ -1,0 +1,26 @@
+{
+  "model_name": "layer_3_reversal",
+  "model_type": "LightGBM",
+  "version": "3.0",
+  "trained_at": "2025-10-31T23:23:47.137153+00:00",
+  "features": [
+    "close",
+    "volume",
+    "rsi",
+    "macd",
+    "bb_position",
+    "volatility",
+    "trend_strength",
+    "volume_ratio"
+  ],
+  "num_features": 8,
+  "target_definition": "EXIT (1) if simulated max_drawdown < -0.5%, HOLD (0) otherwise",
+  "data_source": "Binance 3-month fresh data (Aug-Oct 2025) with position simulation",
+  "training_examples": 18716,
+  "test_examples": 4679,
+  "accuracy": 0.7366958751870057,
+  "auc": 0.8041432019767432,
+  "f1": 0.6257594167679222,
+  "cv_auc_mean": 0.7865837219737628,
+  "cv_auc_std": 0.00927321744082133
+}

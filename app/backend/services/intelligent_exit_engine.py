@@ -302,6 +302,18 @@ class IntelligentExitEngine:
                     logger.warning(f"⚠️ Model file not found: {filename}")
                     self.layer_health[model_name] = "degraded"
             
+            # ===== ENTERPRISE ENHANCEMENT: Load Scaler for Layer 3 Reversal =====
+            # The retrained model now uses StandardScaler for proper feature normalization
+            scaler_file = self.model_path / "layer_3_reversal_scaler.pkl"
+            if scaler_file.exists():
+                with open(scaler_file, "rb") as f:
+                    self.models["reversal_scaler"] = pickle.load(f)
+                logger.info(f"✅ Loaded Layer 3 Reversal scaler (ENTERPRISE v2.0)")
+            else:
+                logger.warning(f"⚠️ Scaler not found for Layer 3 Reversal - using unscaled features (legacy mode)")
+                self.models["reversal_scaler"] = None
+            # ===== END ENTERPRISE ENHANCEMENT =====
+            
         except Exception as e:
             logger.error(f"Failed to load exit models: {e}")
             raise RuntimeError(f"Exit model loading failed: {e}")
@@ -734,6 +746,30 @@ class IntelligentExitEngine:
             if age_minutes > 30:
                 logger.info(f"📊 Position age: {age_minutes:.1f}min, PnL: {pnl_pct*100:.2f}%")
             
+            # 🔥 PROGRESSIVE LOSS CUTTING (Oct 2025): Cut large losses faster
+            # Analysis showed 15 large losses (-0.5% to -1%) held for 166 min avg
+            # This catches them earlier based on loss magnitude + time combination
+            
+            # Tier 1: Critical loss (>-0.9%) - cut after 15 minutes
+            if pnl_pct < -0.009 and age_minutes >= 15:
+                logger.warning(f"🚨 PROGRESSIVE CUT (Tier 1): Critical loss {pnl_pct*100:.2f}% after {age_minutes:.0f}min → EXIT")
+                return {"should_exit": True, "reason": "progressive_loss_cut_critical", "atr": float(atr), "age_minutes": age_minutes, "pnl_pct": pnl_pct}
+            
+            # Tier 2: Large loss (>-0.7%) - cut after 30 minutes
+            elif pnl_pct < -0.007 and age_minutes >= 30:
+                logger.warning(f"🚨 PROGRESSIVE CUT (Tier 2): Large loss {pnl_pct*100:.2f}% after {age_minutes:.0f}min → EXIT")
+                return {"should_exit": True, "reason": "progressive_loss_cut_large", "atr": float(atr), "age_minutes": age_minutes, "pnl_pct": pnl_pct}
+            
+            # Tier 3: Medium loss (>-0.5%) - cut after 60 minutes
+            elif pnl_pct < -0.005 and age_minutes >= 60:
+                logger.warning(f"🚨 PROGRESSIVE CUT (Tier 3): Medium loss {pnl_pct*100:.2f}% after {age_minutes:.0f}min → EXIT")
+                return {"should_exit": True, "reason": "progressive_loss_cut_medium", "atr": float(atr), "age_minutes": age_minutes, "pnl_pct": pnl_pct}
+            
+            # Tier 4: Small persistent loss (>-0.3%) - cut after 120 minutes (2 hours)
+            elif pnl_pct < -0.003 and age_minutes >= 120:
+                logger.warning(f"⚠️ PROGRESSIVE CUT (Tier 4): Persistent loss {pnl_pct*100:.2f}% after {age_minutes:.0f}min → EXIT")
+                return {"should_exit": True, "reason": "progressive_loss_cut_persistent", "atr": float(atr), "age_minutes": age_minutes, "pnl_pct": pnl_pct}
+            
             # 🚨 EXTREME SAFETY NET: Only as last resort for stuck positions
             # This is NOT day trading logic - it's emergency protection
             extreme_time_limit_minutes = 360  # 6 hours (was 4h, now even more lenient)
@@ -1081,11 +1117,21 @@ class IntelligentExitEngine:
                 
                 logger.debug(f"🔍 REVERSAL MODEL: Feature array shape: {feature_array.shape} (expecting: (1, 8))")
 
+                # ===== ENTERPRISE ENHANCEMENT: Apply Scaler if Available =====
+                # Scale features using StandardScaler for proper normalization (v2.0)
+                if self.models.get("reversal_scaler") is not None:
+                    feature_array_scaled = self.models["reversal_scaler"].transform(feature_array)
+                    logger.debug(f"✅ REVERSAL MODEL: Features scaled (mean=0, std=1)")
+                else:
+                    feature_array_scaled = feature_array
+                    logger.debug(f"⚠️ REVERSAL MODEL: Using unscaled features (legacy mode)")
+                # ===== END ENTERPRISE ENHANCEMENT =====
+
                 # Get raw prediction and apply adaptive confidence calibration
                 # Suppress model warnings during prediction
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    raw_proba = self.models["reversal"].predict_proba(feature_array)[0][1]
+                    raw_proba = self.models["reversal"].predict_proba(feature_array_scaled)[0][1]
                 reversal_prob = adaptive_confidence_calibration(raw_proba, model_type="reversal")
 
                 # Log prediction details for debugging

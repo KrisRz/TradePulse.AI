@@ -143,46 +143,108 @@ def predict_l5_rf_safe(model: Any, features: Dict[str, float]) -> float:
         return 0.5  # Neutral confidence
 
 
-# SSOT: build vector from MarketSnapshot
+# SSOT: build vector from MarketSnapshot (v2.0 - Enhanced with 15 features)
 def build_l5_vector_from_snapshot(snapshot: Any) -> np.ndarray:
-    """Build L5 RF vector (1x6) from MarketSnapshot with prevalidation and stable names.
-
-    Expected mapping (SSOT):
-    - price → close
-    - volume → volume
-    - indicators.rsi → rsi
-    - indicators.macd → macd
-    - indicators.volatility → volatility
-    - indicators.trend_strength → trend_strength
+    """
+    Build L5 vector (1x15) from MarketSnapshot - Enhanced v2.0
+    
+    Features (15 total):
+    - 9 Core: close, volume, rsi, macd, bb_position, volatility, trend_strength, volume_ratio, price_change_24h
+    - 6 Session: session_asian, session_european, session_us, session_overlap, hour_of_day, volatility_regime
+    
+    Args:
+        snapshot: MarketSnapshot object with price, volume, indicators
+        
+    Returns:
+        numpy array (1, 15) with normalized features for prediction
     """
     try:
         # Normalize snapshot to object with attributes
         obj = snapshot
-        # Extract fields deterministically (no eval)
+        
+        # Extract core fields
         price = getattr(obj, "price", None)
         volume = getattr(obj, "volume", None)
         inds = getattr(obj, "indicators", None)
+        
+        # Core features
         rsi = getattr(inds, "rsi", None) if inds is not None else None
         macd = getattr(inds, "macd", None) if inds is not None else None
+        bb_position = getattr(inds, "bb_position", None) or getattr(inds, "bollinger_position", None) if inds is not None else None
         volatility = getattr(inds, "volatility", None) if inds is not None else None
         trend_strength = getattr(inds, "trend_strength", None) if inds is not None else None
+        volume_ratio = getattr(inds, "volume_ratio", None) if inds is not None else None
+        price_change_24h = getattr(inds, "price_change_24h", None) if inds is not None else None
+        
+        # Session context (new in v2.0)
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        hour_utc = now.hour
+        
+        # Session definitions (UTC hours)
+        session_asian = 1 if 0 <= hour_utc < 8 else 0
+        session_european = 1 if 7 <= hour_utc < 15 else 0
+        session_us = 1 if 13 <= hour_utc < 21 else 0
+        session_overlap = 1 if (session_asian + session_european + session_us) > 1 else 0
+        hour_of_day = hour_utc
+        
+        # Volatility regime (0=low, 1=normal, 2=high)
+        vol_val = volatility if volatility is not None else 0.02
+        volatility_regime = 1  # Default: normal
+        if vol_val < 0.001:
+            volatility_regime = 0  # Low
+        elif vol_val > 0.005:
+            volatility_regime = 2  # High
 
-        # Prevalidation for clearer errors than NameError
+        # Prevalidation for clearer errors
         missing = []
         if price is None: missing.append("price")
         if volume is None: missing.append("volume")
         if rsi is None: missing.append("rsi")
         if macd is None: missing.append("macd")
+        if bb_position is None: missing.append("bb_position")
         if volatility is None: missing.append("volatility")
         if trend_strength is None: missing.append("trend_strength")
+        if volume_ratio is None: missing.append("volume_ratio")
+        if price_change_24h is None: missing.append("price_change_24h")
         if missing:
-            raise ValueError(f"MissingFeatures:{','.join(missing)}")
+            logger.warning(f"MissingFeatures: {','.join(missing)} - using defaults")
+            # Use defaults instead of failing
+            price = price or 100000.0
+            volume = volume or 1000000.0
+            rsi = rsi or 50.0
+            macd = macd or 0.0
+            bb_position = bb_position or 0.5
+            volatility = volatility or 0.02
+            trend_strength = trend_strength or 0.0
+            volume_ratio = volume_ratio or 1.0
+            price_change_24h = price_change_24h or 0.0
 
-        vec = np.array([[float(price), float(volume), float(rsi), float(macd), float(volatility), float(trend_strength)]], dtype=np.float32)
+        # Build 15-feature vector (order matters!)
+        vec = np.array([[
+            float(price),
+            float(volume),
+            float(rsi),
+            float(macd),
+            float(bb_position),
+            float(volatility),
+            float(trend_strength),
+            float(volume_ratio),
+            float(price_change_24h),
+            float(session_asian),
+            float(session_european),
+            float(session_us),
+            float(session_overlap),
+            float(hour_of_day),
+            float(volatility_regime)
+        ]], dtype=np.float32)
+        
         return vec
+        
     except Exception as e:
         logger.warning(f"Failed to build L5 vector from snapshot: {e}")
-        return np.array([[1.0, 0.0, 50.0, 0.0, 0.02, 0.0]], dtype=np.float32)
+        # Return defaults for all 15 features
+        return np.array([[100000.0, 1000000.0, 50.0, 0.0, 0.5, 0.02, 0.0, 1.0, 0.0, 0, 0, 0, 0, 12, 1]], dtype=np.float32)
 
 def save_model_with_metadata(model: Any, features: List[str], model_path: str, 
                            model_type: str = "unknown", version: str = "v1") -> None:

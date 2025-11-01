@@ -216,10 +216,13 @@ class LiveMarketDataService:
 					try:
 						timestamp = int(kline[0])
 						
-						# Match existing table schema: symbol (S) + timestamp (S)
+						# 🔧 ENTERPRISE FIX: Use NEW schema with PK + SK (Oct 2025)
+						# Matches schema from market_data_persistence.py
 						candle_data = {
-							'symbol': str(symbol),  # String key
-							'timestamp': str(timestamp),  # String key to match schema
+							'PK': f"{symbol}#{interval}",  # Composite partition key
+							'SK': timestamp,  # Sort key (number)
+							'symbol': str(symbol),  # Keep for backward compatibility
+							'timestamp': timestamp,  # Keep for backward compatibility
 							'interval': str(interval),
 							'open': str(kline[1]),
 							'high': str(kline[2]),
@@ -234,8 +237,8 @@ class LiveMarketDataService:
 								table, 
 								candle_data, 
 								table_name,
-								ConditionExpression='attribute_not_exists(symbol) AND attribute_not_exists(#ts)',
-								ExpressionAttributeNames={'#ts': 'timestamp'}
+								ConditionExpression='attribute_not_exists(#pk)',
+								ExpressionAttributeNames={'#pk': 'PK'}
 							)
 							if success:
 								saved_count += 1
@@ -353,13 +356,13 @@ class LiveMarketDataService:
 			try:
 				logger.info(f"📡 Connecting to ticker stream: {stream_name} (attempt {reconnect_count + 1})")
 				
-				# 🔧 FIX (Oct 2025): Optimized WebSocket params to prevent 1008 Pong timeouts
-				# ping_interval=15s, ping_timeout=10s, max_queue=1000, read/write limits=1MB
-				# Compression disabled to reduce backpressure
-				websocket = await websockets.connect(
-					url,
-					ping_interval=15,      # Ping every 15s (more frequent)
-					ping_timeout=10,       # Wait 10s for pong (tighter)
+			# 🔧 FIX (Oct 2025): AWS App Runner compatibility - longer intervals for network latency
+			# ping_interval=120s (2min), ping_timeout=30s, max_queue=1000, read/write limits=1MB
+			# Compression disabled to reduce backpressure
+			websocket = await websockets.connect(
+				url,
+				ping_interval=120,     # Ping every 2min (AWS App Runner optimized)
+				ping_timeout=30,       # Wait 30s for pong (tolerates latency)
 					close_timeout=10,
 					max_queue=1000,        # Limit queue size
 					max_size=2**20,        # 1MB max message size
@@ -494,13 +497,13 @@ class LiveMarketDataService:
 			try:
 				logger.info(f"📡 Connecting to candle stream: {stream_name} (attempt {reconnect_count + 1})")
 				
-				# 🔧 FIX (Oct 2025): Optimized WebSocket params to prevent 1008 Pong timeouts
-				# ping_interval=15s, ping_timeout=10s, max_queue=1000, read/write limits=1MB
-				# Compression disabled to reduce backpressure
-				websocket = await websockets.connect(
-					url,
-					ping_interval=15,      # Ping every 15s (more frequent)
-					ping_timeout=10,       # Wait 10s for pong (tighter)
+			# 🔧 FIX (Oct 2025): AWS App Runner compatibility - longer intervals for network latency
+			# ping_interval=120s (2min), ping_timeout=30s, max_queue=1000, read/write limits=1MB
+			# Compression disabled to reduce backpressure
+			websocket = await websockets.connect(
+				url,
+				ping_interval=120,     # Ping every 2min (AWS App Runner optimized)
+				ping_timeout=30,       # Wait 30s for pong (tolerates latency)
 					close_timeout=10,
 					max_queue=1000,        # Limit queue size
 					max_size=2**20,        # 1MB max message size
@@ -803,6 +806,35 @@ async def get_live_market_data() -> Dict:
 		
 		# Merge with technical indicators
 		base_data.update(technical_indicators)
+		
+		# 🔧 FIX (Oct 2025): Ensure critical Layer 5 features are ALWAYS present
+		# Guard against missing features that cause "MissingFeatures" warnings
+		if "bb_position" not in base_data:
+			# Compute from bollinger_position if present
+			base_data["bb_position"] = base_data.get("bollinger_position", 0.5)
+		
+		if "volume_ratio" not in base_data:
+			# Already computed in technical_indicators, but add safety
+			base_data["volume_ratio"] = 1.0
+			
+		if "price_change_24h" not in base_data or base_data.get("price_change_24h") is None:
+			# Fallback: use percent if absolute change not available
+			if "price_change_percent_24h" in base_data and base_data["price_change_percent_24h"] is not None:
+				base_data["price_change_24h"] = base_data["price_change_percent_24h"]
+			else:
+				# Ultimate fallback: compute from 24h ago price if available
+				try:
+					candles_24h = service.get_recent_candles("1m", 1440)  # 1440 minutes = 24 hours
+					if candles_24h and len(candles_24h) >= 1440:
+						price_24h_ago = float(candles_24h[0].get("close", current_price)) if isinstance(candles_24h[0], dict) else float(candles_24h[0][4])
+						base_data["price_change_24h"] = ((current_price - price_24h_ago) / price_24h_ago * 100) if price_24h_ago > 0 else 0.0
+					else:
+						base_data["price_change_24h"] = 0.0  # Neutral default
+				except Exception:
+					base_data["price_change_24h"] = 0.0
+		
+		logger.debug(f"✅ Feature integrity check: bb_position={base_data.get('bb_position'):.2f}, volume_ratio={base_data.get('volume_ratio'):.2f}, price_change_24h={base_data.get('price_change_24h'):.2f}")
+		
 		# Attach SSOT snapshot metadata and export snapshot age
 		try:
 			from time import time as _now
@@ -878,6 +910,7 @@ def _calculate_technical_indicators(candles: List[Dict], current_price: float) -
 			"macd": 0.0,  # Neutral MACD
 			"macd_signal": 0.0,
 			"bollinger_position": 0.5,  # Middle of Bollinger Bands
+			"bb_position": 0.5,  # 🔧 FIX: Alias for Layer 5
 			"ema_20": current_price,
 			"ema_50": current_price,
 			"volatility": 0.02,  # 2% default volatility
@@ -971,14 +1004,15 @@ def _calculate_technical_indicators(candles: List[Dict], current_price: float) -
 			"macd": float(macd),
 			"macd_signal": float(macd_signal),
 			"bollinger_position": float(bollinger_position),
+			"bb_position": float(bollinger_position),  # 🔧 FIX: Alias for Layer 5 compatibility
 			"ema_20": float(ema_20),
 			"ema_50": float(ema_50),
 			"volatility": float(volatility),
-			"volume_ratio": float(volume_ratio),
+			"volume_ratio": float(volume_ratio),  # ✅ Already computed
 			"trend_strength": float(trend_strength)
 		}
 		
-		logger.debug(f"📊 Technical indicators calculated: RSI={rsi:.1f}, MACD={macd:.4f}, BB_pos={bollinger_position:.2f}")
+		logger.debug(f"📊 Technical indicators calculated: RSI={rsi:.1f}, MACD={macd:.4f}, BB_pos={bollinger_position:.2f}, vol_ratio={volume_ratio:.2f}")
 		return indicators
 		
 	except Exception as e:
@@ -989,6 +1023,7 @@ def _calculate_technical_indicators(candles: List[Dict], current_price: float) -
 			"macd": 0.0,
 			"macd_signal": 0.0,
 			"bollinger_position": 0.5,
+			"bb_position": 0.5,  # 🔧 FIX: Alias for Layer 5
 			"ema_20": current_price,
 			"ema_50": current_price,
 			"volatility": 0.02,

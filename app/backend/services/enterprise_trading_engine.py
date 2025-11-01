@@ -1001,6 +1001,47 @@ class EnterpriseTradingEngine:
                 'reasoning': 'Error in spike detection'
             }
     
+    def _detect_market_regime(self, features: Dict[str, float]) -> str:
+        """
+        🎯 MARKET REGIME DETECTION: Adapt filter thresholds to market conditions
+        
+        Returns:
+            - 'sideways': Low volatility, weak trend → RELAX filter (day trading opportunities)
+            - 'trending': Normal volatility, strong trend → NORMAL filter
+            - 'volatile': High volatility → STRICT filter (avoid false signals)
+        """
+        try:
+            volatility = features.get('volatility', 0.03)
+            trend_strength = abs(features.get('trend_strength', 0.0))
+            atr = features.get('atr', volatility * features.get('close', 100000))  # Approximate ATR
+            
+            # Volatility thresholds (crypto day trading)
+            low_vol_threshold = 0.012   # < 1.2% = low volatility
+            high_vol_threshold = 0.040  # > 4.0% = high volatility
+            
+            # Trend strength thresholds
+            weak_trend_threshold = 0.015  # < 1.5% slope = weak/sideways
+            strong_trend_threshold = 0.045  # > 4.5% slope = strong trend
+            
+            # Volatile regime: High ATR/volatility
+            if volatility > high_vol_threshold:
+                return 'volatile'
+            
+            # Sideways regime: Low volatility + weak trend
+            if volatility < low_vol_threshold and trend_strength < weak_trend_threshold:
+                return 'sideways'
+            
+            # Trending regime: Normal volatility + strong trend
+            if trend_strength > strong_trend_threshold:
+                return 'trending'
+            
+            # Default: sideways (conservative for day trading)
+            return 'sideways'
+            
+        except Exception as e:
+            logger.warning(f"Market regime detection error: {e}, defaulting to 'sideways'")
+            return 'sideways'
+    
     def _smart_timing_filter(self, reversal_prob: float, features: Dict[str, float], volume_spike_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         🎯 SMART TIMING FILTER: Filter false reversals from real opportunities
@@ -1010,12 +1051,20 @@ class EnterpriseTradingEngine:
         - Volatility confirmation
         - Trend exhaustion
         - Proper timing
+        
+        🔥 ENHANCED (Oct 2025): Market regime adaptation
+        - Sideways: RELAXED filter (more day trading opportunities)
+        - Trending: NORMAL filter (standard criteria)
+        - Volatile: STRICT filter (avoid false signals in chaos)
         """
         try:
             volume_ratio = features.get('volume_ratio', 1.0)
             volatility = features.get('volatility', 0.03)
             trend_strength = abs(features.get('trend_strength', 0.0))
             rsi = features.get('rsi', 50.0)
+            
+            # 🔥 NEW: Detect market regime
+            market_regime = self._detect_market_regime(features)
             
             # Start with base reversal probability
             filtered_prob = reversal_prob
@@ -1074,14 +1123,46 @@ class EnterpriseTradingEngine:
             # Clamp to valid range
             filtered_prob = max(0.10, min(filtered_prob, 0.95))
             
+            # 🔥 REGIME-ADAPTIVE FILTER THRESHOLDS (Oct 2025)
+            # Adapt filter strictness to market conditions
+            if market_regime == 'sideways':
+                # RELAXED: In sideways, timing is less critical → lower threshold
+                filter_threshold = 0.50 if reversal_prob < 0.70 else 0.45
+                min_volume_ratio = 0.8   # Allow lower volume (was 1.2)
+                min_volatility = 0.008   # Allow lower volatility (was 0.015)
+                confidence_penalty = 0.65  # Less aggressive penalty (was 0.50)
+            elif market_regime == 'trending':
+                # NORMAL: Standard criteria for trending markets
+                filter_threshold = 0.70 if reversal_prob < 0.70 else 0.65
+                min_volume_ratio = 1.2
+                min_volatility = 0.015
+                confidence_penalty = 0.50
+            else:  # volatile
+                # STRICT: In volatile markets, require stronger confirmation
+                filter_threshold = 0.75 if reversal_prob < 0.70 else 0.70
+                min_volume_ratio = 1.5   # Require higher volume
+                min_volatility = 0.020   # Require higher volatility
+                confidence_penalty = 0.40  # More aggressive penalty
+            
             # Determine if signal passes filter
             is_real_reversal = False
-            filter_threshold = 0.70 if reversal_prob < 0.70 else 0.65  # Lower threshold for already strong signals
             
             if filtered_prob >= filter_threshold:
-                # Additional checks for very high confidence
-                if volume_ratio >= 1.2 and volatility >= 0.015 and (rsi > 70 or rsi < 30 or trend_strength > 0.03):
+                # Regime-adapted confirmation checks
+                if volume_ratio >= min_volume_ratio and volatility >= min_volatility and (rsi > 70 or rsi < 30 or trend_strength > 0.03):
                     is_real_reversal = True
+                    logger.info(f"✅ FILTER PASSED ({market_regime.upper()}): filtered_prob={filtered_prob:.1%} ≥ threshold={filter_threshold:.1%}, "
+                              f"vol_ratio={volume_ratio:.2f} ≥ {min_volume_ratio:.2f}, volatility={volatility:.4f} ≥ {min_volatility:.4f}")
+                else:
+                    logger.warning(f"⚠️ FILTER FAILED ({market_regime.upper()}): Probability passed ({filtered_prob:.1%}) but "
+                                 f"confirmation failed: vol_ratio={volume_ratio:.2f} (need {min_volume_ratio:.2f}), "
+                                 f"volatility={volatility:.4f} (need {min_volatility:.4f})")
+            else:
+                logger.warning(f"⚠️ FILTER FAILED ({market_regime.upper()}): filtered_prob={filtered_prob:.1%} < threshold={filter_threshold:.1%}")
+            
+            # Build reasoning string with regime info
+            regime_info = f"Market: {market_regime.upper()} (threshold={filter_threshold:.2f})"
+            all_adjustments = [regime_info] + confidence_adjustments
             
             return {
                 'filtered_reversal_prob': filtered_prob,
@@ -1089,7 +1170,9 @@ class EnterpriseTradingEngine:
                 'is_real_reversal': is_real_reversal,
                 'confidence_adjustments': confidence_adjustments,
                 'filter_passed': is_real_reversal,
-                'reasoning': ' | '.join(confidence_adjustments) if confidence_adjustments else 'No adjustments needed'
+                'market_regime': market_regime,
+                'filter_threshold': filter_threshold,
+                'reasoning': ' | '.join(all_adjustments) if all_adjustments else f'Market: {market_regime.upper()}'
             }
             
         except Exception as e:
@@ -1153,10 +1236,13 @@ class EnterpriseTradingEngine:
             # ✅ FIX: Store filter result for use in confidence calculation
             self._last_filter_passed = filter_result['filter_passed']
             
+            # Enhanced logging with market regime
+            regime = filter_result.get('market_regime', 'unknown').upper()
+            
             if filter_result['filter_passed']:
-                logger.info(f"✅ REAL REVERSAL: {final_prob:.1%} (original: {raw_prob:.1%}) | {filter_result['reasoning']}")
+                logger.info(f"✅ REAL REVERSAL [{regime}]: {final_prob:.1%} (original: {raw_prob:.1%}) | {filter_result['reasoning']}")
             else:
-                logger.warning(f"⚠️ FILTERED: {final_prob:.1%} (from {adjusted_prob:.1%}) | {filter_result['reasoning']}")
+                logger.warning(f"⚠️ FILTERED [{regime}]: {final_prob:.1%} (from {adjusted_prob:.1%}) | {filter_result['reasoning']}")
             
             # 🎯 DAY TRADING: Keep between 15%-95% (was 15%-85%, expanded for strong signals)
             return max(0.15, min(final_prob, 0.95))
@@ -1690,11 +1776,18 @@ class EnterpriseTradingEngine:
             volume_ratio = float(features.get("volume_ratio", 1.0))
             
             # 🔧 FIX (Oct 2025): Dynamic timing cap based on volatility (CRYPTO DAY TRADING)
-            # Low-vol: slightly looser cap (0.15), high-vol: looser cap (0.35)
-            # Crypto needs more room for timing signals than stocks
+            # Low-vol: MORE GENEROUS cap (0.10-0.20), high-vol: wider cap (0.35)
+            # Formula: cap = max(0.10, min(timing_raw, k1 * sqrt(vol) + k2))
             volatility = float(features.get('volatility', 0.02))
+            
+            # Volatility-aware minimum cap: lower floor for ultra-low vol
+            # If vol < 0.0005 (0.05%), use 0.10; otherwise scale up to 0.15
+            min_cap = 0.10 if volatility < 0.0005 else 0.15
             base_cap = 0.12
-            dynamic_cap = min(0.35, max(0.15, base_cap + 2.0 * volatility))
+            
+            # Dynamic cap with sqrt scaling for smooth progression
+            import math
+            dynamic_cap = min(0.35, max(min_cap, base_cap + 2.0 * math.sqrt(volatility)))
             capped_timing_score = max(-dynamic_cap, min(dynamic_cap, timing_score))
             
             filter_check = filter_score > 0.08  # SCALPING: Lower filter threshold (was 0.15)
@@ -1702,7 +1795,7 @@ class EnterpriseTradingEngine:
             timing_sell_check = capped_timing_score < -0.003 # SCALPING: RELAXED for day trading (was -0.008) - allows SELL in neutral/slightly bullish markets
             
             if timing_score != capped_timing_score:
-                logger.debug(f"⚖️ TIMING CAPPED: {timing_score:.3f} → {capped_timing_score:.3f} (cap=±{dynamic_cap:.2f}, vol={volatility:.4f})")
+                logger.info(f"⚖️ TIMING CAPPED: {timing_score:.3f} → {capped_timing_score:.3f} (cap=±{dynamic_cap:.3f}, min_cap={min_cap:.2f}, vol={volatility:.4f}, sqrt_factor={math.sqrt(volatility):.4f})")
             
             # 🔥 CRITICAL FIX: Alternative SELL signals for mean reversion (day trading needs SHORT positions!)
             # Even in bullish markets, overbought conditions present SHORT opportunities
@@ -2092,8 +2185,9 @@ class EnterpriseTradingEngine:
             # 🔧 FIX (Oct 2025): Dynamic exploratory threshold in low-vol regimes
             # Top-band: volatility ≤ 0.05% & BB_pos ≥ 0.90 & RSI ∈ [55,70] → relax to 0.52
             # Bottom-band: volatility ≤ 0.06% & BB_pos ≤ 0.05 & RSI ∈ [28,36] → relax to 0.52
-            # This allows tiny, time-boxed exploratory positions near band touches
-            base_exploratory_threshold = self.thresholds.confidence.EXPLORATORY_BUY  # 0.55 default
+            # GENERAL LOW-VOL: vol_ratio < 0.8 & BB_pos < 0.70 & RSI ∈ [40,55] → relax to 0.55
+            # This allows tiny, time-boxed exploratory positions near band touches + general low-vol
+            base_exploratory_threshold = self.thresholds.confidence.EXPLORATORY_BUY  # 0.65 default
             
             # Use epsilon for boundary checks
             is_top_band = (bb_pos >= 0.90 - EPS)
@@ -2103,6 +2197,17 @@ class EnterpriseTradingEngine:
             
             is_top_band_regime = (is_low_vol_top and is_top_band and 55 <= rsi <= 70)
             is_bottom_band_regime = (is_low_vol_bottom and is_bottom_band and 28 <= rsi <= 36)
+            
+            # 🔧 FIX (Oct 2025): GENERAL low-vol regime adaptation
+            # If vol_ratio < 0.8 AND BB_pos < 0.70 AND RSI in neutral [40,55], drop to 0.55-0.58
+            # This catches sideways/calm markets that aren't at band extremes
+            vol_ratio_val = float(features.get('volume_ratio', 1.0))
+            is_general_low_vol = (
+                vol_ratio_val < 0.8 and 
+                bb_pos < 0.70 and 
+                40 <= rsi <= 55 and
+                filter_score > 0.12  # Still require decent filter to avoid noise
+            )
             
             # 🔧 FIX (Oct 2025): Oversold bounce with structure confirmation
             # In micro tape, require structure instead of volume
@@ -2122,13 +2227,17 @@ class EnterpriseTradingEngine:
                     logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED (OVERSOLD+STRUCTURE) to 0.52 | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}, bull_reentry={bull_reentry_inside_band}, macd_contract={macd_hist_contracting}")
                 else:
                     logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED (BOTTOM-BAND) to 0.52 (from {base_exploratory_threshold:.2f}) | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
+            elif is_general_low_vol:
+                # GENERAL low-vol regime: relax to 0.55 (less aggressive than band touches)
+                exploratory_threshold = 0.55
+                logger.info(f"📊 EXPLORATORY THRESHOLD: RELAXED (GENERAL LOW-VOL) to 0.55 (from {base_exploratory_threshold:.2f}) | vol_ratio={vol_ratio_val:.2f}, BB={bb_pos:.2f}, RSI={rsi:.1f}, filter={filter_score:.2f}")
             else:
                 exploratory_threshold = base_exploratory_threshold
                 # 🔧 FIX (Oct 2025): Debug logging to see why relax didn't trigger
                 if is_bottom_band or (28 <= rsi <= 36):
-                    logger.debug(f"📊 EXPLORATORY THRESHOLD: STANDARD {exploratory_threshold:.2f} | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}, bull_reentry={bull_reentry_inside_band}, macd_contract={macd_hist_contracting}, vol_ratio={volume_ratio:.2f}")
+                    logger.info(f"📊 EXPLORATORY THRESHOLD: STANDARD {exploratory_threshold:.2f} | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}, vol_ratio={vol_ratio_val:.2f}, filter={filter_score:.2f}, bull_reentry={bull_reentry_inside_band}, macd_contract={macd_hist_contracting}")
                 else:
-                    logger.debug(f"📊 EXPLORATORY THRESHOLD: STANDARD {exploratory_threshold:.2f} | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}")
+                    logger.info(f"📊 EXPLORATORY THRESHOLD: STANDARD {exploratory_threshold:.2f} | vol={volatility:.4f}, BB={bb_pos:.2f}, RSI={rsi:.1f}, vol_ratio={vol_ratio_val:.2f}")
             
             # Use dynamic exploratory threshold
             conf_check = confidence >= exploratory_threshold

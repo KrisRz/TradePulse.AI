@@ -916,7 +916,11 @@ class ProfessionalPortfolio:
             logger.error(f"Failed to save portfolio state: {e}")
     
     async def _save_closed_position_to_history(self, position: ProfessionalPosition, realized_pnl: Decimal):
-        """Save closed position to dedicated history table for better tracking"""
+        """Save closed position to dedicated history table for better tracking
+        
+        ENTERPRISE ENHANCEMENT: Now captures comprehensive market data at exit time
+        for ML model training (RSI, MACD, Bollinger Bands, volatility, trend_strength).
+        """
         if not self.db_client:
             logger.warning("Cannot save closed position history - no database client")
             return
@@ -925,6 +929,49 @@ class ProfessionalPortfolio:
             # Calculate additional metrics
             duration_minutes = (position.exit_time - position.entry_time).total_seconds() / 60 if position.exit_time else 0
             pnl_percentage = float((realized_pnl / (position.entry_price * position.size)) * 100) if position.entry_price and position.size else 0.0
+            
+            # ===== ENTERPRISE ENHANCEMENT: Capture Market Data at Exit Time =====
+            # This enables real ML training for exit models (no approximations!)
+            exit_market_data = {}
+            try:
+                from app.backend.services.live_market_data import get_live_market_data
+                
+                # Fetch comprehensive market data (RSI, MACD, BB, volatility, etc.)
+                market_data = await get_live_market_data()
+                
+                # Extract and save exit market conditions for ML training
+                exit_market_data = {
+                    'exit_rsi': str(market_data.get('rsi', 50.0)),
+                    'exit_macd': str(market_data.get('macd', 0.0)),
+                    'exit_bb_position': str(market_data.get('bollinger_position', market_data.get('bb_position', 0.5))),
+                    'exit_volatility': str(market_data.get('volatility', 0.02)),
+                    'exit_trend_strength': str(market_data.get('trend_strength', 0.0)),
+                    'exit_volume': str(market_data.get('volume', 1000000.0)),
+                    'exit_volume_ratio': str(market_data.get('volume_ratio', 1.0)),
+                    'exit_ema_20': str(market_data.get('ema_20', 0.0)),
+                    'exit_ema_50': str(market_data.get('ema_50', 0.0)),
+                }
+                
+                logger.debug(f"✅ Captured exit market data: RSI={exit_market_data['exit_rsi']}, "
+                           f"MACD={exit_market_data['exit_macd']}, "
+                           f"BB={exit_market_data['exit_bb_position']}, "
+                           f"Volatility={exit_market_data['exit_volatility']}")
+                
+            except Exception as market_err:
+                logger.warning(f"Failed to fetch exit market data (non-critical): {market_err}")
+                # Continue with defaults (better to save position even without market data)
+                exit_market_data = {
+                    'exit_rsi': '50.0',
+                    'exit_macd': '0.0',
+                    'exit_bb_position': '0.5',
+                    'exit_volatility': '0.02',
+                    'exit_trend_strength': '0.0',
+                    'exit_volume': '1000000.0',
+                    'exit_volume_ratio': '1.0',
+                    'exit_ema_20': '0.0',
+                    'exit_ema_50': '0.0',
+                }
+            # ===== END ENTERPRISE ENHANCEMENT =====
             
             history_data = {
                 'position_id': position.position_id,
@@ -952,9 +999,13 @@ class ProfessionalPortfolio:
             if position.take_profit:
                 history_data['take_profit'] = str(position.take_profit)
             
+            # Merge exit market data into history record
+            history_data.update(exit_market_data)
+            
             # Save to dedicated closed positions history table
             self.db_client.put_item('portfolio_closed_positions', history_data)
-            logger.debug(f"📊 Closed position saved to history: {position.position_id} PnL=${float(realized_pnl):.2f}")
+            logger.info(f"💾 Closed position saved with market data: {position.position_id} "
+                       f"PnL=${float(realized_pnl):.2f} ({pnl_percentage:+.2f}%)")
             
         except Exception as e:
             logger.error(f"Failed to save closed position to history: {e}")

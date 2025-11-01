@@ -551,7 +551,7 @@ class TableSchemas:
             ],
             'AttributeDefinitions': [
                 {'AttributeName': 'PK', 'AttributeType': 'S'},
-                {'AttributeName': 'SK', 'AttributeType': 'S'},
+                {'AttributeName': 'SK', 'AttributeType': 'N'},  # 🔧 FIX: SK is timestamp (NUMBER, not STRING)
                 {'AttributeName': 'date', 'AttributeType': 'S'},
                 {'AttributeName': 'hour', 'AttributeType': 'S'},
                 {'AttributeName': 'timestamp', 'AttributeType': 'N'}

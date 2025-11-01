@@ -1,0 +1,63 @@
+{
+  "model_type": "XGBRegressor",
+  "version": "v2.0_enhanced",
+  "trained_date": "2025-10-31T23:43:19.070852",
+  "n_features": 15,
+  "features": [
+    "close",
+    "volume",
+    "rsi",
+    "macd",
+    "bb_position",
+    "volatility",
+    "trend_strength",
+    "volume_ratio",
+    "price_change_24h",
+    "session_asian",
+    "session_european",
+    "session_us",
+    "session_overlap",
+    "hour_of_day",
+    "volatility_regime"
+  ],
+  "core_features": [
+    "close",
+    "volume",
+    "rsi",
+    "macd",
+    "bb_position",
+    "volatility",
+    "trend_strength",
+    "volume_ratio",
+    "price_change_24h"
+  ],
+  "session_features": [
+    "session_asian",
+    "session_european",
+    "session_us",
+    "session_overlap",
+    "hour_of_day",
+    "volatility_regime"
+  ],
+  "feature_importances": {
+    "close": 0.11057889461517334,
+    "volume": 0.055638380348682404,
+    "rsi": 0.049660783261060715,
+    "macd": 0.05548195168375969,
+    "bb_position": 0.05023645982146263,
+    "volatility": 0.06900127232074738,
+    "trend_strength": 0.04819042608141899,
+    "volume_ratio": 0.05036607384681702,
+    "price_change_24h": 0.08789429068565369,
+    "session_asian": 0.06027362123131752,
+    "session_european": 0.0793631374835968,
+    "session_us": 0.08507290482521057,
+    "session_overlap": 0.05675199627876282,
+    "hour_of_day": 0.07545185834169388,
+    "volatility_regime": 0.06603796780109406
+  },
+  "data_source": "binance_3months_1m",
+  "data_period": "2025-08-03 to 2025-10-31",
+  "trading_mode": "day_trading",
+  "scaling": "StandardScaler"
+}
