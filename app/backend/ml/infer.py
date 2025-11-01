@@ -167,14 +167,14 @@ def build_l5_vector_from_snapshot(snapshot: Any) -> np.ndarray:
         volume = getattr(obj, "volume", None)
         inds = getattr(obj, "indicators", None)
         
-        # Core features
+        # Core features - FIXED: read from Indicators dataclass (v2.0 with 7 fields)
         rsi = getattr(inds, "rsi", None) if inds is not None else None
         macd = getattr(inds, "macd", None) if inds is not None else None
-        bb_position = getattr(inds, "bb_position", None) or getattr(inds, "bollinger_position", None) if inds is not None else None
+        bb_position = getattr(inds, "bb_pos", None) if inds is not None else None  # FIXED: bb_pos is the field name
         volatility = getattr(inds, "volatility", None) if inds is not None else None
         trend_strength = getattr(inds, "trend_strength", None) if inds is not None else None
-        volume_ratio = getattr(inds, "volume_ratio", None) if inds is not None else None
-        price_change_24h = getattr(inds, "price_change_24h", None) if inds is not None else None
+        volume_ratio = getattr(inds, "volume_ratio", None) if inds is not None else None  # NEW in v2.0
+        price_change_24h = getattr(inds, "price_change_24h", None) if inds is not None else None  # NEW in v2.0
         
         # Session context (new in v2.0)
         from datetime import datetime, timezone

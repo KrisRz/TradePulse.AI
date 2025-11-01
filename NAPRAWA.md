@@ -1,30 +1,32 @@
 # 🔧 NAPRAWA TradePulse.AI - Plan Działania
 
 **Data analizy**: 2025-10-31 22:11 UTC  
-**Ostatnia aktualizacja**: 2025-11-01 00:15 UTC  
+**Ostatnia aktualizacja**: 2025-11-01 01:00 UTC (FINAL DEPLOYMENT)  
 **Środowisko**: AWS Production (eu-west-2)  
 **Status infrastruktury**: ✅ 100% Operacyjna  
 **Status trading**: ⚠️ 38.5% Win Rate (Target: 49%) - IMPROVED from 22.2%!
 
 ## 📊 STATUS FIXÓW
 
-**COMPLETED** ✅:
-1. Exit Engine Progressive Loss Cutting
-2. Layer 4 Regime Adaptation (Sideways/Trending/Volatile)
-3. Layer 5 Model v2.0 Retrained (15 features, fresh data)
-4. WebSocket Keepalive (AWS App Runner optimized) + **Syntax Fix Deployed**
-5. Low-Vol Optimizations (timing cap, exploratory threshold)
-6. **DEPLOYED TO AWS** ✅ (2025-11-01 00:35 UTC)
+**✅ COMPLETED & DEPLOYED** (2025-11-01 00:56 UTC):
+1. Exit Engine Progressive Loss Cutting ✅
+2. Layer 4 Regime Adaptation (Sideways/Trending/Volatile) ✅
+3. **Layer 3 Reversal v3.0** (LightGBM num_leaves=64, trained on 3-month Binance data) ✅
+4. Layer 5 Model v2.0 Retrained (15 features, fresh data) ✅
+5. WebSocket Keepalive (AWS App Runner optimized: ping=120s, timeout=30s) ✅
+6. Low-Vol Optimizations (dynamic timing cap, adaptive exploratory threshold) ✅
+7. **FINAL DEPLOYMENT**: 2025-11-01 00:56 → 01:01 UTC ✅
 
-**ACTIVE ISSUES** ⚠️:
-1. Missing Features on AWS: bb_position, volume_ratio, price_change_24h still using defaults
+**⚠️ ACTIVE ISSUES**:
+1. **Missing Features on AWS**: bb_position, volume_ratio, price_change_24h still using defaults (INVESTIGATING)
 2. Layer 5 underfitting (R²=0.2262, needs PnL-based retraining)
+3. **Layer 6 Timing**: num_leaves=31 (old model) - causing LightGBM warnings (needs retrain)
 
-**PENDING** ⏳:
-1. Emergency Mode Verification (AWS)
-2. Learning Engine Status Check (AWS)
-3. Session Analysis (requires recent data)
-4. Fix missing features issue on AWS
+**⏳ PENDING VERIFICATION** (requires open positions):
+1. Layer 3 Reversal predictions (verify >0.000 with new model)
+2. Emergency Mode Verification (AWS)
+3. Learning Engine Status Check (AWS)
+4. Session Analysis (requires recent data)
 
 ---
 

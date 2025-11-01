@@ -30,6 +30,8 @@ class Indicators:
 	 bb_pos: float
 	 volatility: float
 	 trend_strength: float
+	 volume_ratio: float  # CRITICAL: Required for Layer 5 v2.0
+	 price_change_24h: float  # CRITICAL: Required for Layer 5 v2.0
 
 
 @dataclass(frozen=True)
@@ -59,8 +61,11 @@ class MarketSnapshot:
 			 "rsi": self.indicators.rsi,
 			 "macd": self.indicators.macd,
 			 "bollinger_position": self.indicators.bb_pos,
+			 "bb_position": self.indicators.bb_pos,  # Alias for consistency
 			 "volatility": self.indicators.volatility,
 			 "trend_strength": self.indicators.trend_strength,
+			 "volume_ratio": self.indicators.volume_ratio,  # CRITICAL: Layer 5 v2.0
+			 "price_change_24h": self.indicators.price_change_24h,  # CRITICAL: Layer 5 v2.0
 		 }
 
 
@@ -81,6 +86,8 @@ def build_snapshot_from_market_data(market_data: Dict[str, Any], symbol: str = "
 		 bb_pos=float(market_data.get("bollinger_position", market_data.get("bb_position", 0.5))),
 		 volatility=float(market_data.get("volatility", 0.02)),
 		 trend_strength=float(market_data.get("trend_strength", 0.0)),
+		 volume_ratio=float(market_data.get("volume_ratio", 1.0)),  # CRITICAL: Layer 5 v2.0
+		 price_change_24h=float(market_data.get("price_change_24h", market_data.get("price_change_percent_24h", 0.0))),  # CRITICAL: Layer 5 v2.0
 	 )
 	 base = {
 		 "symbol": symbol,
@@ -96,6 +103,8 @@ def build_snapshot_from_market_data(market_data: Dict[str, Any], symbol: str = "
 		 "bb_pos": indicators.bb_pos,
 		 "volatility": indicators.volatility,
 		 "trend_strength": indicators.trend_strength,
+		 "volume_ratio": indicators.volume_ratio,  # CRITICAL: Include in hash
+		 "price_change_24h": indicators.price_change_24h,  # CRITICAL: Include in hash
 	 }
 	 h = _stable_hash(base)
 	 return MarketSnapshot(
