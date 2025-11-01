@@ -13,7 +13,7 @@ from time import time
 # Lightweight in-process SSOT cache (TTL + versioned)
 _SSOT_CACHE: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 SSOT_TTL_S = 5
-SSOT_VER = "v3"
+SSOT_VER = "v4"  # BUMPED: 2025-11-01 - Added volume_ratio + price_change_24h to Indicators (Layer 5 v2.0 fix)
 
 
 def _ok(a: float, b: float, eps: float) -> bool:
