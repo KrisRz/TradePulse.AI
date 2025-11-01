@@ -356,13 +356,13 @@ class LiveMarketDataService:
 			try:
 				logger.info(f"📡 Connecting to ticker stream: {stream_name} (attempt {reconnect_count + 1})")
 				
-			# 🔧 FIX (Oct 2025): AWS App Runner compatibility - longer intervals for network latency
-			# ping_interval=120s (2min), ping_timeout=30s, max_queue=1000, read/write limits=1MB
-			# Compression disabled to reduce backpressure
-			websocket = await websockets.connect(
-				url,
-				ping_interval=120,     # Ping every 2min (AWS App Runner optimized)
-				ping_timeout=30,       # Wait 30s for pong (tolerates latency)
+				# 🔧 FIX (Oct 2025): AWS App Runner compatibility - longer intervals for network latency
+				# ping_interval=120s (2min), ping_timeout=30s, max_queue=1000, read/write limits=1MB
+				# Compression disabled to reduce backpressure
+				websocket = await websockets.connect(
+					url,
+					ping_interval=120,     # Ping every 2min (AWS App Runner optimized)
+					ping_timeout=30,       # Wait 30s for pong (tolerates latency)
 					close_timeout=10,
 					max_queue=1000,        # Limit queue size
 					max_size=2**20,        # 1MB max message size
@@ -497,13 +497,13 @@ class LiveMarketDataService:
 			try:
 				logger.info(f"📡 Connecting to candle stream: {stream_name} (attempt {reconnect_count + 1})")
 				
-			# 🔧 FIX (Oct 2025): AWS App Runner compatibility - longer intervals for network latency
-			# ping_interval=120s (2min), ping_timeout=30s, max_queue=1000, read/write limits=1MB
-			# Compression disabled to reduce backpressure
-			websocket = await websockets.connect(
-				url,
-				ping_interval=120,     # Ping every 2min (AWS App Runner optimized)
-				ping_timeout=30,       # Wait 30s for pong (tolerates latency)
+				# 🔧 FIX (Oct 2025): AWS App Runner compatibility - longer intervals for network latency
+				# ping_interval=120s (2min), ping_timeout=30s, max_queue=1000, read/write limits=1MB
+				# Compression disabled to reduce backpressure
+				websocket = await websockets.connect(
+					url,
+					ping_interval=120,     # Ping every 2min (AWS App Runner optimized)
+					ping_timeout=30,       # Wait 30s for pong (tolerates latency)
 					close_timeout=10,
 					max_queue=1000,        # Limit queue size
 					max_size=2**20,        # 1MB max message size
