@@ -176,6 +176,12 @@ def build_l5_vector_from_snapshot(snapshot: Any) -> np.ndarray:
         volume_ratio = getattr(inds, "volume_ratio", None) if inds is not None else None  # NEW in v2.0
         price_change_24h = getattr(inds, "price_change_24h", None) if inds is not None else None  # NEW in v2.0
         
+        # DEBUG: Log indicators object to diagnose missing fields
+        if inds is not None:
+            ind_fields = [f for f in dir(inds) if not f.startswith('_')]
+            logger.debug(f"🔍 DEBUG Indicators fields: {ind_fields}")
+            logger.debug(f"🔍 DEBUG volume_ratio={volume_ratio}, price_change_24h={price_change_24h}")
+        
         # Session context (new in v2.0)
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
