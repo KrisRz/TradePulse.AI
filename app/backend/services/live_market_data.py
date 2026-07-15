@@ -1052,18 +1052,42 @@ def _calculate_rsi(prices: np.ndarray, period: int = 14) -> float:
 	return float(np.clip(rsi, 0, 100))
 
 def _calculate_macd(prices: np.ndarray) -> Tuple[float, float]:
-	"""Calculate MACD (Moving Average Convergence Divergence)"""
-	if len(prices) < 26:
-		return 0.0, 0.0
-	
-	ema_12 = _calculate_ema(prices, 12)
-	ema_26 = _calculate_ema(prices, 26)
-	macd_line = ema_12 - ema_26
-	
-	# Simple signal line (9-period EMA of MACD would require more data)
-	macd_signal = macd_line * 0.9  # Simplified signal
-	
-	return float(macd_line), float(macd_signal)
+    """Calculate MACD with consistent ATR-based normalization.
+
+    The ML models (L5 retraining, 596d277) were trained on normalized MACD —
+    feeding raw price-unit MACD (~hundreds for BTC) shifts the feature
+    distribution and poisons predictions. Returns
+    (macd_hist_norm, macd_signal_norm) in consistent units.
+    """
+    if prices is None or len(prices) < 26:
+        return 0.0, 0.0
+
+    ema_12 = _calculate_ema(prices, 12)
+    ema_26 = _calculate_ema(prices, 26)
+    macd_line = float(ema_12 - ema_26)
+
+    # Signal line (9-period EMA of MACD line), approximated
+    signal_line = macd_line * 0.9
+    macd_hist = macd_line - signal_line
+
+    # Normalize by ATR (last 14 periods) for consistent scale
+    if len(prices) >= 14:
+        recent_prices = prices[-14:]
+        atr = float(np.std(np.diff(recent_prices)) * np.sqrt(14))
+        # relative epsilon: float noise on perfectly linear prices gives ~1e-12
+        if atr > abs(float(prices[-1])) * 1e-9:
+            macd_hist_norm = macd_hist / atr
+            macd_signal_norm = signal_line / atr
+        else:
+            macd_hist_norm = macd_hist / max(abs(prices[-1]), 1e-9)
+            macd_signal_norm = signal_line / max(abs(prices[-1]), 1e-9)
+    else:
+        macd_hist_norm = macd_hist / max(abs(prices[-1]), 1e-9)
+        macd_signal_norm = signal_line / max(abs(prices[-1]), 1e-9)
+
+    logger.debug(f"MACD: raw={macd_hist:.2f} norm={macd_hist_norm:.6f}")
+
+    return float(macd_hist_norm), float(macd_signal_norm)
 
 def _calculate_ema(prices: np.ndarray, period: int) -> float:
 	"""Calculate Exponential Moving Average"""

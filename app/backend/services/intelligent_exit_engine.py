@@ -85,6 +85,7 @@ from app.backend.services.live_market_data import (
     get_live_market_data_service,
 )
 from app.backend.services.binance_hybrid_client import get_hybrid_client
+from app.backend.services.emergency_controls import get_emergency_system
 
 # Import professional configs
 from app.backend.config.exit_engine_config import (
@@ -882,24 +883,40 @@ class IntelligentExitEngine:
         volatility = market_data.get("volatility", 0.02)
         trend_strength = market_data.get("trend_strength", 0.5)
         
-        # Determine market regime
+        # Determine base market regime
         if volatility > 0.05 and volume_ratio > 1.5:
-            regime = "volatile"
+            base_regime = "volatile"
             exit_recommendation = "hold"  # Wait for volatility to settle
             confidence = 0.7
         elif trend_strength > 0.8:
-            regime = "trending"
+            base_regime = "trending"
             exit_recommendation = "hold"  # Trend continuation likely
             confidence = 0.8
         elif volatility < 0.02 and volume_ratio < 0.8:
-            regime = "consolidating"
+            base_regime = "consolidating"
             exit_recommendation = "exit"  # Low momentum, consider exit
             confidence = 0.6
         else:
-            regime = "balanced"
+            base_regime = "balanced"
             exit_recommendation = "hold"
             confidence = 0.5
-        
+
+        # Override regime when circuit breaker active or volatility metrics spike
+        circuit_breaker_active = False
+        try:
+            emergency = await get_emergency_system()
+            circuit_breaker_active = await emergency.is_trading_halted()
+        except Exception:
+            pass
+
+        regime = base_regime
+        if circuit_breaker_active or volume_ratio >= 8.0:
+            regime = "high_volatility"
+            logger.info(
+                f"Regime override → high_volatility (base={base_regime}, "
+                f"vol_ratio={volume_ratio:.2f}, CB={circuit_breaker_active})"
+            )
+
         return {
             "recommendation": exit_recommendation,
             "confidence": confidence,
