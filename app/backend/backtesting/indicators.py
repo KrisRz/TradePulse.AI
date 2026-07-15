@@ -62,6 +62,28 @@ def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> 
     return tr.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
 
 
+def adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.DataFrame:
+    """Average Directional Index (Wilder). Returns columns: plus_di, minus_di, adx.
+
+    ADX measures trend *strength* regardless of direction: values above ~25
+    indicate a trending market, below ~20 a ranging one. Fully backward-looking.
+    """
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
+
+    tr = true_range(high, low, close)
+    atr_ = tr.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+    plus_di = 100.0 * plus_dm.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean() / atr_
+    minus_di = 100.0 * minus_dm.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean() / atr_
+
+    di_sum = (plus_di + minus_di).replace(0.0, np.nan)
+    dx = 100.0 * (plus_di - minus_di).abs() / di_sum
+    adx_line = dx.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+    return pd.DataFrame({"plus_di": plus_di, "minus_di": minus_di, "adx": adx_line})
+
+
 def macd(
     close: pd.Series,
     fast: int = 12,
