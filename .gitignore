@@ -316,6 +316,8 @@ infra/*.tf.bak*
 # --- Rescued SOURCE wrongly ignored by generic rules above (keep tracked) ---
 # Frontend src/lib is real app code, not a Python build artifact (generic `lib/`).
 !app/frontend/src/lib/
+# Master plan is our durable cross-session memory — keep it tracked (backup for future-you).
+!plan.md
 # Model TRAINING code is source and belongs in git; only its data/outputs are excluded.
 !app/backend/scripts/ml/
 app/backend/scripts/ml/*.pkl
