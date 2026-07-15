@@ -19,6 +19,7 @@ import json
 from app.backend.core.database import get_database_client
 from app.backend.core.config import get_settings
 from app.backend.services.live_market_data import get_live_bitcoin_price
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -140,4 +141,4 @@ def get_portfolio_manager():
     return _portfolio_manager
 
 # Export for backward compatibility
-portfolio_manager = get_portfolio_manager()
+portfolio_manager = LazyProxy(get_portfolio_manager)

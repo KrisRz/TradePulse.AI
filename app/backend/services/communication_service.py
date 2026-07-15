@@ -19,6 +19,7 @@ import json
 
 from app.backend.core.database import get_database_client
 from app.backend.core.config import get_settings
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -129,4 +130,4 @@ def get_communication_service():
     return _communication_service
 
 # Export for backward compatibility
-communication_service = get_communication_service()
+communication_service = LazyProxy(get_communication_service)

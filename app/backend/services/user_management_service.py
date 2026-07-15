@@ -20,6 +20,7 @@ import uuid
 
 from app.backend.core.database import get_database_client
 from app.backend.core.config import get_settings
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -130,4 +131,4 @@ def get_user_management_service():
     return _user_management_service
 
 # Export for backward compatibility
-user_management_service = get_user_management_service()
+user_management_service = LazyProxy(get_user_management_service)

@@ -22,6 +22,7 @@ from collections import defaultdict
 from app.backend.core.database import get_database_client
 from app.backend.core.config import get_settings
 from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_candlestick_data
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -488,4 +489,4 @@ def get_pattern_learning_engine() -> PatternLearningEngine:
     return _pattern_learning_engine
 
 # Export for backward compatibility
-pattern_learning_engine = get_pattern_learning_engine()
+pattern_learning_engine = LazyProxy(get_pattern_learning_engine)
