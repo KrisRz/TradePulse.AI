@@ -29,6 +29,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from .costs import apply_fee, entry_fill_price, exit_fill_price
+
 
 @dataclass
 class BacktestConfig:
@@ -115,17 +117,17 @@ def run_backtest(
     def open_position(new_side: int, fill_price: float, i: int) -> None:
         nonlocal side, entry_fill, entry_equity, entry_i, equity_before_entry, realized
         equity_before_entry = realized
-        realized *= (1.0 - fee)            # entry fee
+        realized = apply_fee(realized, fee)   # entry fee
         side = new_side
-        entry_fill = fill_price * (1.0 + new_side * slip)  # adverse slippage
+        entry_fill = entry_fill_price(fill_price, new_side, slip)  # adverse slippage
         entry_equity = realized
         entry_i = i
 
     def close_position(exit_price_raw: float, i: int, reason: str) -> None:
         nonlocal side, realized, blocked_side
-        exit_fill = exit_price_raw * (1.0 - side * slip)   # adverse slippage
+        exit_fill = exit_fill_price(exit_price_raw, side, slip)   # adverse slippage
         gross = side * (exit_fill / entry_fill - 1.0)
-        realized = entry_equity * (1.0 + gross) * (1.0 - fee)  # exit fee
+        realized = apply_fee(entry_equity * (1.0 + gross), fee)  # exit fee
         net = realized / equity_before_entry - 1.0
         trades.append(
             Trade(

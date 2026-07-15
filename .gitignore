@@ -300,3 +300,6 @@ data/ml/historical/processed/BTCUSDT_1m_complete.csv
 data/ml/historical/processed/BTCUSDT_1m_complete.parquet
 data/ml/historical/processed/BTCUSDT_1m_sample.parquet
 infra/terraform.tfvars
+
+# Paper-trading runtime state (local)
+paper_state/
