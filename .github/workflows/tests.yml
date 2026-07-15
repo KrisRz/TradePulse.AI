@@ -1,0 +1,40 @@
+name: Tests (backtesting + paper trading)
+
+on:
+  push:
+    branches: [main, "improvements/**"]
+    paths:
+      - "app/backend/backtesting/**"
+      - "app/backend/paper_trading/**"
+      - "app/backend/tests/test_backtesting.py"
+      - "app/backend/tests/test_paper_trading.py"
+      - ".github/workflows/tests.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal test deps
+        # The backtesting/paper_trading packages are deliberately decoupled from
+        # TensorFlow/boto3/FastAPI, so tests need only these lightweight libs.
+        run: pip install "numpy>=1.23,<2.0" "pandas>=2.2.3" requests pytest
+
+      - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        # Scoped to the verified suites; the legacy test_fast_diagnostics.py has
+        # pre-existing failures unrelated to this work (tracked for Phase 2).
+        run: pytest app/backend/tests/test_backtesting.py app/backend/tests/test_paper_trading.py -q
