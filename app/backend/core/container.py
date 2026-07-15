@@ -5,7 +5,7 @@ Industry standard IoC container managing all service dependencies
 
 from typing import Dict, Any, Optional, Type, TypeVar, Generic
 import inspect
-from functools import lru_cache
+from functools import lru_cache, partial
 
 from app.backend.core.config import get_settings
 from app.backend.core.logging import get_logger
@@ -18,10 +18,23 @@ logger = get_logger(__name__)
 
 T = TypeVar('T')
 
+def _is_factory(obj) -> bool:
+    """A factory is something we must CALL to obtain the service: functions,
+    lambdas, (bound) methods, classes, builtins, partials. Plain object
+    instances (even ones defining __call__) are services themselves."""
+    return (
+        inspect.isfunction(obj)
+        or inspect.ismethod(obj)
+        or inspect.isclass(obj)
+        or inspect.isbuiltin(obj)
+        or isinstance(obj, partial)
+    )
+
+
 def require_instance(name: str, obj):
     """PRODUCTION SAFE: Assert that DI returned an instance, not a callable"""
-    if callable(obj) and not hasattr(obj, "__dict__"):
-        raise TypeError(f"DI misuse: '{name}' is callable. Use container.get('{name}') WITHOUT '()'.")
+    if _is_factory(obj):
+        raise TypeError(f"DI misuse: '{name}' is a factory/callable. Use container.get('{name}') WITHOUT '()'.")
     return obj
 
 
@@ -62,20 +75,62 @@ class ServiceContainer:
         logger.info("✅ Core services registered")
     
     def register_singleton(self, name: str, instance_or_factory) -> None:
-        """Register a singleton service - PRODUCTION SAFE"""
+        """Register a singleton service - PRODUCTION SAFE.
+
+        Accepts either a ready instance or a factory (function/lambda/method/
+        class) that produces the instance. Re-registration REPLACES the
+        previous entry — initialization code relies on swapping a factory for
+        the real instance once async setup completes."""
         if self._sealed:
             raise RuntimeError(f"DI sealed — registration after seal: {name}")
-        
+
         if name in self._instances or name in self._factories:
-            logger.debug(f"🔄 PIPELINE DEBUG: Service {name} already registered, skipping")
-            return
-        
-        if callable(instance_or_factory) and not hasattr(instance_or_factory, "__dict__"):
-            self._factories[name] = instance_or_factory
+            logger.debug(f"🔄 Service {name} re-registered, replacing previous entry")
+            self._instances.pop(name, None)
+            self._factories.pop(name, None)
+
+        if _is_factory(instance_or_factory):
+            self.register_factory(name, instance_or_factory)
         else:
-            self._instances[name] = instance_or_factory
-        
-        logger.debug(f"Registered singleton service: {name}")
+            self.register_instance(name, instance_or_factory)
+
+    def register_factory(self, name: str, factory) -> None:
+        """Register a singleton factory — called lazily on first get()."""
+        if self._sealed:
+            raise RuntimeError(f"DI sealed — registration after seal: {name}")
+        if not callable(factory):
+            raise TypeError(f"register_factory('{name}'): factory must be callable, got {type(factory).__name__}")
+        self._instances.pop(name, None)
+        self._factories[name] = factory
+        logger.debug(f"Registered singleton factory: {name}")
+
+    def register_instance(self, name: str, instance) -> None:
+        """Register a ready singleton instance."""
+        if self._sealed:
+            raise RuntimeError(f"DI sealed — registration after seal: {name}")
+        self._factories.pop(name, None)
+        self._instances[name] = instance
+        logger.debug(f"Registered singleton instance: {name}")
+
+    def _call_factory(self, name: str, factory):
+        """Invoke a factory, passing the container iff it declares a parameter."""
+        try:
+            sig = inspect.signature(factory)
+            wants_container = any(
+                p.default is inspect.Parameter.empty
+                and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                for p in sig.parameters.values()
+            )
+        except (TypeError, ValueError):
+            wants_container = False
+        result = factory(self) if wants_container else factory()
+        if inspect.iscoroutine(result):
+            result.close()
+            raise TypeError(
+                f"Service '{name}' has an async factory — use 'await container.get_async(\"{name}\")' "
+                f"or register the initialized instance during startup."
+            )
+        return result
     
     def register_transient(self, name: str, factory: callable) -> None:
         """Register a transient service (new instance each time)"""
@@ -94,14 +149,40 @@ class ServiceContainer:
         
         # Check if it's a singleton factory
         if name in self._factories:
-            instance = self._factories[name](self)
+            instance = self._call_factory(name, self._factories[name])
             self._instances[name] = instance
             return instance
-        
+
         # Check transient services
         if name in self._services:
             return self._services[name]()
-        
+
+        raise KeyError(f"Service not registered: {name}")
+
+    async def get_async(self, name: str):
+        """Get service by name, awaiting async factories if needed."""
+        if name in self._instances:
+            return self._instances[name]
+        if name in self._singletons:
+            return self._singletons[name]
+        if name in self._factories:
+            factory = self._factories[name]
+            try:
+                sig = inspect.signature(factory)
+                wants_container = any(
+                    p.default is inspect.Parameter.empty
+                    and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                    for p in sig.parameters.values()
+                )
+            except (TypeError, ValueError):
+                wants_container = False
+            result = factory(self) if wants_container else factory()
+            if inspect.iscoroutine(result):
+                result = await result
+            self._instances[name] = result
+            return result
+        if name in self._services:
+            return self._services[name]()
         raise KeyError(f"Service not registered: {name}")
     
     def seal(self):
