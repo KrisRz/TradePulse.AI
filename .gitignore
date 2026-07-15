@@ -303,3 +303,12 @@ infra/terraform.tfvars
 
 # Paper-trading runtime state (local)
 paper_state/
+
+# Historical/training ML data — NOT committed (regenerate on demand with
+# `python -m app.backend.backtesting.download ...`). Kept ~556MB out of git.
+app/data/ml/
+data/ml/
+
+# Terraform local artifacts (plans and editor backups)
+infra/*.tfplan
+infra/*.tf.bak*

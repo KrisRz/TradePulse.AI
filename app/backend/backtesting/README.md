@@ -19,6 +19,18 @@ wiring it (or the ML ensemble) into the live loop.
 | `metrics.py` | Return, CAGR, Sharpe, max drawdown, win rate, profit factor, fee drag |
 | `strategies/` | `EmaCrossover` (trend), `RsiMeanReversion` (range) |
 | `run.py` | CLI report runner |
+| `download.py` | Re-download historical OHLCV from Binance (data is not in git) |
+
+## Getting the data
+
+Historical price CSVs are **not committed** (they were ~556 MB and are freely
+re-downloadable). Regenerate what you need from Binance's public API:
+
+```bash
+python -m app.backend.backtesting.download \
+    --symbol BTCUSDT --interval 1h --start 2020-01-01 --end 2024-12-31 \
+    --out data/ml/historical/BTCUSDT_1h_2020_2024.csv
+```
 
 ## Correctness guarantees (see `tests/test_backtesting.py`)
 
