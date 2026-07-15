@@ -195,11 +195,35 @@ class Settings(BaseSettings):
 _settings: Optional[Settings] = None
 
 
+INSECURE_SECRET_KEYS = {
+    "dev-secret-key-change-in-production",
+    "dev-secret-key-change-in-production-must-be-at-least-32-characters-long",
+    "changeme",
+    "",
+}
+
+
+def _validate_security(settings: "Settings") -> None:
+    """Fail fast if production is misconfigured with insecure defaults.
+
+    A publicly-known SECRET_KEY lets anyone forge admin JWTs, so production
+    must never boot with one. Runs on every settings construction so it
+    cannot be bypassed via reload_settings().
+    """
+    if settings.is_production and settings.SECRET_KEY in INSECURE_SECRET_KEYS:
+        raise RuntimeError(
+            "SECRET_KEY is set to an insecure default in a production "
+            "environment. Provide a strong SECRET_KEY via environment "
+            "variable or SSM before deploying."
+        )
+
+
 def get_settings() -> Settings:
     """Get application settings (singleton pattern)"""
     global _settings
     if _settings is None:
         _settings = Settings()
+        _validate_security(_settings)
     return _settings
 
 
@@ -207,4 +231,5 @@ def reload_settings() -> Settings:
     """Reload settings from environment (useful for testing)"""
     global _settings
     _settings = Settings()
-    return _settings 
+    _validate_security(_settings)
+    return _settings

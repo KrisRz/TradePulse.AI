@@ -65,9 +65,10 @@ async def get_current_user(
             )
     
     token = credentials.credentials
-    
-    # Enterprise admin token (literal string for dev)
-    if token == "enterprise_admin_token":
+
+    # Enterprise admin token (literal string) — DEV ONLY. Never honoured in
+    # production so a leaked literal cannot grant admin on the live system.
+    if token == "enterprise_admin_token" and settings.is_development:
         return User(
             id="enterprise_admin",
             email="admin@tradepulse.ai",

@@ -43,17 +43,24 @@ description = "Private Key"
 regex = '''-----BEGIN [A-Z]+ PRIVATE KEY-----'''
 tags = ["key", "private"]
 
-# Allowlist for false positives
+# Allowlist for false positives.
+# NOTE: do NOT blanket-allowlist *.md or *test* — that is exactly how live
+# keys slipped past this scanner before. Allowlist specific benign values only.
 [[allowlist]]
-description = "Test files and examples"
+description = "Example/template env files (contain placeholders only)"
 paths = [
-    '''.*test.*''',
-    '''.*example.*''',
-    '''.*sample.*''',
-    '''.*mock.*''',
-    '''.*fixture.*''',
-    '''README.*''',
-    '''.*\.md$''',
+    '''.*\.example$''',
+    '''.*\.example\.[a-zA-Z]+$''',
+]
+
+[[allowlist]]
+description = "Known benign fixtures / documented example secrets"
+regexes = [
+    '''AKIAIOSFODNN7EXAMPLE''',          # AWS-documented example access key
+    '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',  # AWS-documented example secret
+    '''super_secret_password_123''',     # log-redaction test fixture
+    '''local-dev-secret''',              # DynamoDB Local dev placeholder
+    '''change-me-generate-a-random''',   # example.env placeholder
 ]
 
 [[allowlist]]

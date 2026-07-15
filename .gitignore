@@ -46,6 +46,11 @@ lerna-debug.log*
 .env.test
 .env.production
 
+# Real backend env files with secrets (only *.example is tracked)
+app/backend/config/development.env
+app/backend/config/production.env
+app/backend/config/*.local.env
+
 # Data files (too large for git)
 data/historical/raw_files/*.csv
 data/historical/raw_files/*.zip

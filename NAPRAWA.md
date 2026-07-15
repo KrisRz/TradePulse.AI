@@ -421,8 +421,10 @@ EOF
 
 # Run analysis
 cd /Applications/Projects/TradePulse.AI
-export AWS_ACCESS_KEY_ID="AKIAYS2NQFN2UDYJX5PC"
-export AWS_SECRET_ACCESS_KEY="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"
+# Provide AWS credentials via env vars, `aws configure`, or an IAM role.
+# Do NOT paste real access keys into this file.
+export AWS_ACCESS_KEY_ID="<your-access-key-id>"
+export AWS_SECRET_ACCESS_KEY="<your-secret-access-key>"
 python scripts/analyze_losing_trades.py
 ```
 
