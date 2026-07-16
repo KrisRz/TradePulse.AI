@@ -7,23 +7,15 @@ title = "TradePulse.AI Secret Detection"
 # Use default rules as base
 useDefault = true
 
-[[rules]]
-id = "aws-access-key-id"
-description = "AWS Access Key ID"
-regex = '''AKIA[0-9A-Z]{16}'''
-tags = ["key", "AWS"]
-
-[[rules]]
-id = "aws-secret-access-key"
-description = "AWS Secret Access Key"
-regex = '''[0-9a-zA-Z/+]{40}'''
-tags = ["key", "AWS"]
-
-[[rules]]
-id = "binance-api-key"
-description = "Binance API Key"
-regex = '''[0-9a-zA-Z]{64}'''
-tags = ["key", "Binance", "Trading"]
+# NOTE (2026-07-16): removed three custom rules that made the scan useless:
+# - aws-access-key-id: duplicate of the default ruleset's aws-access-key-id
+# - aws-secret-access-key ([0-9a-zA-Z/+]{40}): matched EVERY 40-char string
+#   (git SHAs, checksums) — 317 false positives
+# - binance-api-key ([0-9a-zA-Z]{64}): matched every sha256 — 108 false
+#   positives. A bare 64-alnum regex cannot distinguish a key from a hash;
+#   real Binance keys are caught by the default generic-api-key rule when
+#   they appear in key=value context.
+# Historical findings are baselined in .gitleaksignore (fingerprints only).
 
 [[rules]]
 id = "jwt-secret"
@@ -46,55 +38,37 @@ tags = ["key", "private"]
 # Allowlist for false positives.
 # NOTE: do NOT blanket-allowlist *.md or *test* — that is exactly how live
 # keys slipped past this scanner before. Allowlist specific benign values only.
-[[allowlist]]
-description = "Example/template env files (contain placeholders only)"
+# NOTE: gitleaks expects a SINGLE [allowlist] table ('Allowlist expected a
+# map, got slice' when using [[allowlist]]), so all entries live here.
+[allowlist]
+description = "Consolidated allowlist: example files, workflow/TF references, documented fixtures"
 paths = [
+    # Example/template env files (contain placeholders only)
     '''.*\.example$''',
     '''.*\.example\.[a-zA-Z]+$''',
+    # GitHub Actions workflow files (reference secrets by name only)
+    '''\.github/workflows/.*''',
+    # Terraform variable references
+    '''infra/terraform/.*''',
 ]
-
-[[allowlist]]
-description = "Known benign fixtures / documented example secrets"
 regexes = [
+    # Known benign fixtures / documented example secrets
     '''AKIAIOSFODNN7EXAMPLE''',          # AWS-documented example access key
     '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',  # AWS-documented example secret
     '''super_secret_password_123''',     # log-redaction test fixture
     '''local-dev-secret''',              # DynamoDB Local dev placeholder
     '''change-me-generate-a-random''',   # example.env placeholder
-]
-
-[[allowlist]]
-description = "GitHub Actions workflow files"
-paths = [
-    '''\.github/workflows/.*'''
-]
-regexes = [
-    '''secrets\.[A-Z_]+''',  # GitHub Secrets references
-    '''\$\{\{ secrets\.[A-Z_]+ \}\}''',  # GitHub Actions syntax
-]
-
-[[allowlist]]
-description = "Terraform variable references"
-paths = [
-    '''infra/terraform/.*'''
-]
-regexes = [
-    '''var\.[a-zA-Z_]+''',  # Terraform variables
-    '''\$\{var\.[a-zA-Z_]+\}''',  # Terraform interpolation
-]
-
-[[allowlist]]
-description = "Environment variable placeholders"
-regexes = [
-    '''<[A-Z_]+>''',  # Placeholder format: <SECRET_NAME>
-    '''\$\{[A-Z_]+\}''',  # Environment variable format: ${SECRET_NAME}
-    '''process\.env\.[A-Z_]+''',  # Node.js env vars
-]
-
-[[allowlist]]
-description = "Common false positives"
-regexes = [
-    '''AKIA[A-Z0-9]{16}.*example''',  # Example AWS keys
-    '''sk-[a-zA-Z0-9]{48}.*test''',  # Test OpenAI keys
-    '''xoxb-[0-9]{12}-[0-9]{12}-[a-zA-Z0-9]{24}.*sample''',  # Sample Slack tokens
+    # GitHub Actions / Terraform references (names, not values)
+    '''secrets\.[A-Z_]+''',
+    '''\$\{\{ secrets\.[A-Z_]+ \}\}''',
+    '''var\.[a-zA-Z_]+''',
+    '''\$\{var\.[a-zA-Z_]+\}''',
+    # Environment variable placeholders
+    '''<[A-Z_]+>''',
+    '''\$\{[A-Z_]+\}''',
+    '''process\.env\.[A-Z_]+''',
+    # Common false positives
+    '''AKIA[A-Z0-9]{16}.*example''',
+    '''sk-[a-zA-Z0-9]{48}.*test''',
+    '''xoxb-[0-9]{12}-[0-9]{12}-[a-zA-Z0-9]{24}.*sample''',
 ]

@@ -1,0 +1,32 @@
+# Baseline of HISTORICAL gitleaks findings, approved by user 2026-07-16.
+# Fingerprints only (commit:file:rule:line) - no secret material.
+# The leaked AWS key was ROTATED (old key Inactive) on 2026-07-16;
+# remaining historical credentials scheduled for rotation (plan M6/F5).
+# Any NEW leak (not fingerprinted here) fails CI.
+245c62291b36bef4cb6f628e06a9c582b6eef71c:SECURITY.md:aws-access-token:9
+9665f5997d7e4febe28a4b80ab8d93d8bd5b18a4:app/backend/scripts/analyze_closed_positions.py:generic-api-key:44
+9665f5997d7e4febe28a4b80ab8d93d8bd5b18a4:app/backend/scripts/analyze_closed_positions.py:aws-access-token:43
+9665f5997d7e4febe28a4b80ab8d93d8bd5b18a4:NAPRAWA.md:generic-api-key:418
+9665f5997d7e4febe28a4b80ab8d93d8bd5b18a4:NAPRAWA.md:aws-access-token:417
+388cb0e12d7568f05832a52a7f5d7d84b57b7b6d:CLOSED_POSITIONS_FIX_SUMMARY.md:generic-api-key:106
+388cb0e12d7568f05832a52a7f5d7d84b57b7b6d:CLOSED_POSITIONS_FIX_SUMMARY.md:aws-access-token:105
+388cb0e12d7568f05832a52a7f5d7d84b57b7b6d:CLOSED_POSITIONS_FIX_SUMMARY.md:aws-access-token:169
+e538b4dbc4c3845b09cf2bfecda28bdb0abf4043:check_tier2_in_2h.sh:generic-api-key:16
+e538b4dbc4c3845b09cf2bfecda28bdb0abf4043:check_tier2_in_2h.sh:aws-access-token:15
+951da9315b0e04d5d7a325f9d114e16b2e368c29:app/frontend/src/lib/api-client.ts:jwt:200
+cf118390e89822ad808469e355a73a6c051cff01:app/frontend/src/lib/api-client.ts:jwt:199
+bb9bb0babc6a8b1d084f8877eef072def2e882b5:deploy-frontend-fix.sh:aws-access-token:12
+bb9bb0babc6a8b1d084f8877eef072def2e882b5:deploy-frontend-fix.sh:generic-api-key:13
+71d6fe29fb9d70c581e40dc41ad45d222d0b9aee:app/backend/config/development.env:generic-api-key:41
+71d6fe29fb9d70c581e40dc41ad45d222d0b9aee:app/backend/config/development.env:generic-api-key:42
+34177f25a897877a3e007905e9010dce159215e3:app/backend/config/development.env:generic-api-key:38
+34177f25a897877a3e007905e9010dce159215e3:app/backend/config/development.env:generic-api-key:39
+34177f25a897877a3e007905e9010dce159215e3:app/backend/scripts/setup_env.sh:generic-api-key:12
+34177f25a897877a3e007905e9010dce159215e3:app/backend/scripts/setup_env.sh:generic-api-key:13
+34177f25a897877a3e007905e9010dce159215e3:app/backend/utils/log_filters.py:generic-api-key:200
+496ef4012114d25e5f808f193403a317683e7ca8:app/backend/startup_logs.txt:generic-api-key:177
+496ef4012114d25e5f808f193403a317683e7ca8:app/backend/startup_logs.txt:generic-api-key:185
+496ef4012114d25e5f808f193403a317683e7ca8:app/backend/startup_logs.txt:generic-api-key:594
+496ef4012114d25e5f808f193403a317683e7ca8:app/backend/startup_logs.txt:generic-api-key:706
+c5eea4cbceb21dc4275c342524d7f425b2bb8170:APP100REAL_LIVE_UPGRADE_PLAN.md:telegram-bot-api-token:4572
+c5eea4cbceb21dc4275c342524d7f425b2bb8170:APP100REAL_LIVE_UPGRADE_PLAN.md:telegram-bot-api-token:4809
