@@ -18,9 +18,11 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 - **Milestone:** M0 ✅ + M1 ✅ + M2 ✅ (bot LATA w chmurze!) + M3 w toku.
-- **NASTĘPNA AKCJA:** M5 — bot zbiera ≥8 tyg. żywych decyzji (DynamoDB), potem
-  raport progów. Otwarte: ❓D7 (dashboard read-only). M4 ZAMKNIĘTE decyzjami
-  (docs/M4_EDGE_VALIDATION.md): czysta EMA, bez sizingu, tylko BTC 1d.
+- **NASTĘPNA AKCJA:** M5 — bot zbiera ≥8 tyg. żywych decyzji. Otwarta decyzja:
+  hosting frontendu na tradepulseai.co.uk (domena wykupiona do 2026-09-29,
+  strefa DNS skasowana — trzeba nową + NS; pełny front wymaga backendu w
+  chmurze ~$5-25/mo, alternatywa: tylko bot-status pod subdomeną ~$0).
+  Status bota LIVE: https://xwibtclmvzlqtz2xtgrnm7l3tm0hzqbs.lambda-url.eu-west-2.on.aws/
 - **Branch:** PR #2 ZMERGOWANY do main (2026-07-16 rano, CI zielone: pytest + gitleaks).
   Nową pracę zaczynaj z main (nowy feature branch).
 - **Ostatnio zrobione:** nocna sesja 2026-07-16 — cała SESJA A (A1–A7), M1, M2
@@ -316,7 +318,7 @@ i wtedy odpowiadamy**. To index, żeby żadna decyzja się nie zgubiła.
 | ❓D4 | M3/B7 | Martwa warstwa `lib/api/*.ts` (`/api/v1/*`): usunąć czy dorobić aliasy w backendzie? |
 | ❓D5 | M3/B8 | Niezarejestrowane routery (`showcase/performance/audit/communications`): zarejestrować czy usunąć? |
 | ❓D6 | M3/C6 | Martwe pliki `logger.ts`/`token-utils.ts`: podłączyć czy usunąć? |
-| ❓D7 | M2 | Opcjonalny always-on backend z live-dashboardem: budować (droższy) czy tylko statyczny read-only dashboard z DynamoDB? |
+| ✅D7 | M2 | ROZSTRZYGNIĘTE 2026-07-16: read-only status Lambda z publicznym function URL (HTML+JSON, ~$0). Always-on backend NIE — decyzja o pełnym froncie na domenie = osobno (hosting + koszt backendu). |
 | ❓D8 | M2/E5 | `api.` CNAME: dodać App Runner domain association czy usunąć rekord? |
 | ✅D9 | M4/F1 | ROZSTRZYGNIĘTE 2026-07-16: **czysta EMA**. Modele enterprise = intraday horizon (mismatch dla 1d); proste filtry reżimowe niestabilne między okresami. Szczegóły: docs/M4_EDGE_VALIDATION.md |
 | ✅D10 | M4/F3 | ROZSTRZYGNIĘTE 2026-07-16: **tylko BTC 1d** (ETH 1d marginalne 1.01 vs 0.96; 4h gorsze). Wrócić po bramce 8-tyg. paper. |
@@ -473,3 +475,13 @@ frontend się builduje. Problem = wykonanie, nie koncept.
   (zgoda usera); wyciekły AKTYWNY klucz AWS (user Kris) ZROTOWANY (nowy w
   ~/tradepulse_new_aws_key.json — podmień i skasuj plik; stary Inactive).
   PR #2 ZMERGOWANY do main.
+- 2026-07-16 (sesja dzienna) — M4 CAŁE zamknięte decyzjami na danych (PR #4,
+  docs/M4_EDGE_VALIDATION.md): EMA robust (Sharpe 1.11-1.18 każdy fold, edge
+  przeżywa 0.3% fee), sizing NIE, ETH/4h NIE, ML-filtr NIE (mismatch horyzontu).
+  E2E test brain+engine na modelach: 7 faz OK, L5 scaler aktywny, sygnał
+  6-warstwowy na żywo (HOLD 63.6%), metryka candles_parity=100%. Frontend
+  audyt + naprawa (PR #5): user_dashboard/portfolio na realnych danych,
+  landing z prawdziwymi metrykami, ~16 mocków usuniętych. Auth: użytkownicy
+  do DynamoDB (przeżywają restart), admin z env, kredki wyjęte ze źródeł.
+  ✅D7: status-Lambda z publicznym URL (fix podwójnej permisji AWS X/2025,
+  PR #6). Domena tradepulseai.co.uk wykupiona, strefa DNS do odtworzenia.
