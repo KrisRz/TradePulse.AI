@@ -860,6 +860,22 @@ class TableSchemas:
         }
 
     @staticmethod
+    def get_brain_portfolio_state_schema() -> Dict[str, Any]:
+        """BrainStateStore's table (single item id='brain_state_global') —
+        was never created anywhere, so every load logged
+        ResourceNotFoundException and fell back to DISABLED."""
+        return {
+            'TableName': 'brain_portfolio_state',
+            'BillingMode': 'PAY_PER_REQUEST',
+            'KeySchema': [
+                {'AttributeName': 'id', 'KeyType': 'HASH'}
+            ],
+            'AttributeDefinitions': [
+                {'AttributeName': 'id', 'AttributeType': 'S'}
+            ]
+        }
+
+    @staticmethod
     def get_market_data_schema() -> Dict[str, Any]:
         """Candle persistence table used by market_data_persistence_service.
 
@@ -1788,8 +1804,23 @@ def ensure_required_tables() -> bool:
             schemas.get_learning_engine_state_schema(),
             TableSchemas.get_trade_analyses_schema(),
             TableSchemas.get_market_context_cache_schema(),
-            TableSchemas.get_market_data_schema()
+            TableSchemas.get_market_data_schema(),
+            TableSchemas.get_brain_portfolio_state_schema()
         ]
+
+        # Also ensure the CORE_TABLES set (runtime, trading_decisions,
+        # portfolio_positions, emergency_state, ...) — the runtime writes to
+        # several of them, but they previously existed only in the manual
+        # create_core_tables.py script, so decision-audit and position writes
+        # failed with ResourceNotFoundException on any fresh database.
+        try:
+            from app.backend.scripts.create_core_tables import CORE_TABLES
+            known = {s['TableName'] for s in table_schemas}
+            table_schemas.extend(
+                s for s in CORE_TABLES if s['TableName'] not in known
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Could not extend schemas with CORE_TABLES: {e}")
         
         success_count = 0
         total_count = len(table_schemas)
