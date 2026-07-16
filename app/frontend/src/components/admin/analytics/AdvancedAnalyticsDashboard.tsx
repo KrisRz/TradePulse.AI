@@ -117,8 +117,8 @@ export default function AdvancedAnalyticsDashboard() {
       setError(null);
 
       const [dashboardResponse, realTimeResponse] = await Promise.all([
-        apiClient.get(`/api/user-analytics/dashboard?days=${selectedPeriod}`),
-        apiClient.get('/api/user-analytics/real-time-stats')
+        apiClient.get(`/api/analytics/admin/dashboard?days=${selectedPeriod}`),
+        apiClient.get('/api/analytics/admin/real-time-stats')
       ]);
 
       if (dashboardResponse.success && realTimeResponse.success) {

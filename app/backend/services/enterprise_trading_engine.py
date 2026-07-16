@@ -1451,7 +1451,8 @@ class EnterpriseTradingEngine:
                 
         except Exception as e:
             logger.error(f"Layer 4 error: {e}")
-            return {"filter_score": 0.5, "model_used": False}
+            # carry the error so consumers can tell "neutral" from "broken"
+            return {"filter_score": 0.5, "model_used": False, "error": str(e)}
     
     def _layer_5_confidence_scoring(self, features: Dict[str, float], snapshot_obj: Optional[Any] = None) -> Dict[str, Any]:
         """Layer 5: Confidence Scoring"""

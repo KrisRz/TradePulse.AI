@@ -17,10 +17,18 @@
 > Nie pytaj „od czego zacząć" — odpowiedź jest tu. Wykonaj protokół i ruszaj.
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
-- **Milestone:** M0 (Zaufanie do rdzenia) — **NIE zaczęty**, cała roadmapa `[ ]`.
-- **NASTĘPNA AKCJA:** `M0 / A1` — napraw DI container (`core/container.py:23,73`).
-- **Branch:** `improvements/security-and-strategies` (PR dopiero na końcu).
-- **Ostatnio zrobione:** deep-review całej apki + ten master plan (2026-07-15).
+- **Milestone:** M0 ✅ + M1 ✅ + M2 ✅ (bot LATA w chmurze!) + M3 w toku.
+- **NASTĘPNA AKCJA:** dokończ M3 (kontrakt API zielony, frontend deploy decyzja ❓D7),
+  potem M4 (walk-forward ML-filtr vs czysta EMA).
+- **Branch:** `improvements/security-and-strategies` (PR otwarty w nocy 2026-07-16).
+- **Ostatnio zrobione:** nocna sesja 2026-07-16 — cała SESJA A (A1–A7), M1, M2
+  (Lambda+DynamoDB+Scheduler na AWS, ~$0/mo, smoke-test OK), duża część M3.
+- **WAŻNE ODKRYCIA:** (1) konto AWS było CZYSTE — stary App Runner stack już
+  nie istniał; infra-serverless/ to jedyna żywa infra (stan TF lokalny!).
+  (2) Commit 9665f59 cofnął fixy z 596d277 (normalizacja MACD, regime override)
+  — przywrócone. (3) L5 dostawał cechy w złych jednostkach (wolumen 24h vs
+  per-bar, USD vs %) — naprawione przez ml/l5_features.py (training parity).
+  (4) Potwierdź subskrypcję SNS e-mail (alert Lambdy) — mail do krisgrzepka@gmail.com.
 
 ### Protokół wznowienia (5 kroków — rób po kolei)
 1. **Przeczytaj** ten plik: sekcja `0` (cel) → `📍 STATUS TERAZ` → pierwszy
@@ -319,52 +327,52 @@ i wtedy odpowiadamy**. To index, żeby żadna decyzja się nie zgubiła.
 
 ## ▶ M0 — Zaufanie do rdzenia (SESJA A)  🔴 ZACZNIJ TU
 Cel: silnik nie kłamie, sygnały wiarygodne, testy zielone.
-- [ ] **A1. DI container** — `core/container.py:23,73` wykrywa fabryki przez
+- [x] **A1. DI container** — `core/container.py:23,73` wykrywa fabryki przez
       `callable(x) and not hasattr(x,"__dict__")` → zawsze puste `_factories`,
       `get()` zwraca niewywołaną lambdę. Fix: `register_factory` vs
       `register_instance`, wołać fabrykę w `get()`.
-- [ ] **A2. Jeden startup** — `application.py:21` importuje lifespan, `:57-58`
+- [x] **A2. Jeden startup** — `application.py:21` importuje lifespan, `:57-58`
       tworzy `FastAPI()` BEZ `lifespan=`, `:87` `on_event("startup")`;
       `singleton_app.py:363` = DRUGI startup → modele 2×. Wybierz jeden, usuń
       martwy `lifespan.py`/`bootstrap.py`, zabij dubel (`singleton_app.py:220`).
-- [ ] **A3. L5 scaler + wektor** — `enterprise_trading_engine.py:~402` pomija
+- [x] **A3. L5 scaler + wektor** — `enterprise_trading_engine.py:~402` pomija
       scaler; wektor 15 cech (`ml/infer.py:147`) vs 6 (`:118`). Włącz scaler,
       jeden kształt, zweryfikuj `n_features_in_`.
-- [ ] **A4. Clamp 0.05** — `utils/model_io.py:89` podłoguje predykcje. Zdejmij /
+- [x] **A4. Clamp 0.05** — `utils/model_io.py:89` podłoguje predykcje. Zdejmij /
       zastąp kalibracją.
-- [ ] **A5. Emergency mode** — obiecany w NAPRAWA.md trigger win-rate nie
+- [x] **A5. Emergency mode** — obiecany w NAPRAWA.md trigger win-rate nie
       istnieje. Zaimplementuj realny performance-trigger ALBO skreśl z docs.
-- [ ] **A6. Brain vs Engine** — `brain_controller._generate_unified_signal`
+- [x] **A6. Brain vs Engine** — `brain_controller._generate_unified_signal`
       zwraca None (`:612`); realny sygnał w `day_trading_engine.py:972`.
       Nazwij świadomie (monitor vs exec) albo scal.
-- [ ] **A7. Test startu/DI** — test łapiący zepsute DI + dubel startup.
+- [x] **A7. Test startu/DI** — test łapiący zepsute DI + dubel startup.
 - **Done gdy:** backend startuje raz, DI zwraca instancje, L5 na scaled features,
   brak clamp 0.05, `pytest` zielony.
 
 ## ▶ M1 — Paper bot na żywo (część A/D już zrobiona)
 Cel: zwalidowana strategia EMA lata co dzień, zapisuje decyzje + P&L.
-- [ ] **M1.1** Uruchom `python -m app.backend.paper_trading.run step` na realnych
+- [x] **M1.1** Uruchom `python -m app.backend.paper_trading.run step` na realnych
       danych, potwierdź idempotencję (2× ten sam bar = brak dubla).
-- [ ] **M1.2** Potwierdź equivalence test zielony (paper==engine).
-- [ ] **M1.3** Cron lokalny (`scripts/run_paper_bot.sh`) jako tymczasowy most do
+- [x] **M1.2** Potwierdź equivalence test zielony (paper==engine).
+- [x] **M1.3** Cron lokalny (`scripts/run_paper_bot.sh`) jako tymczasowy most do
       czasu M2 (serverless).
-- [ ] **M1.4** Zdefiniuj co dokładnie logujemy (decyzja, cena, size, P&L, koszty)
+- [x] **M1.4** Zdefiniuj co dokładnie logujemy (decyzja, cena, size, P&L, koszty)
       — to będą dane do PROGÓW z sekcji 3.
 
 ## ▶ M2 — Serverless deploy (SESJA E)  🟢 near-zero cost
-- [ ] **E1. DynamoDB naming** — `production.env` prefix `tradepulse_` vs tabele
+- [x] **E1. DynamoDB naming** — `production.env` prefix `tradepulse_` vs tabele
       bez prefiksu w TF (`runtime`, `live_candles`...). Zsynchronizuj
       env↔kod↔`infra/dynamodb*.tf`.
-- [ ] **E2. DynamoDB Local TTL fix** — `core/database.py` wysyła
+- [x] **E2. DynamoDB Local TTL fix** — `core/database.py` wysyła
       `TimeToLiveSpecification` w `CreateTable` (DynamoDB Local nie zna) → osobny
       `UpdateTimeToLive`. Działa lokalnie i na AWS.
-- [ ] **E3. Adaptuj modularny TF** z archiwum do `infra/` (Lambda+EventBridge+
+- [x] **E3. Adaptuj modularny TF** z archiwum do `infra/` (Lambda+EventBridge+
       DynamoDB on-demand + S3/CloudFront). Porzuć App Runner na ścieżce bota.
-- [ ] **E4. Lambda handler** — `paper_trading/run step`, EventBridge cron 1×/dzień,
+- [x] **E4. Lambda handler** — `paper_trading/run step`, EventBridge cron 1×/dzień,
       stan w DynamoDB (nie plik JSON).
-- [ ] **E5. `api.` CNAME/TLS** — `main.tf backend_alias` bez domain association →
+- [x] **E5. `api.` CNAME/TLS** — `main.tf backend_alias` bez domain association →
       TLS mismatch. Dodaj association albo usuń rekord.
-- [ ] **E6. Smoke-test tabel** po deployu + CloudWatch alarm na błąd Lambdy.
+- [x] **E6. Smoke-test tabel** po deployu + CloudWatch alarm na błąd Lambdy.
 - **Done gdy:** bot lata w chmurze bez laptopa, koszt < $2/mo, alarm działa.
 
 ## ▶ M3 — Aplikacja spójna E2E (SESJA B + C)  🟠

@@ -14,17 +14,42 @@ import SystemControlAdmin from '../../components/admin/system/SystemControlAdmin
 // import UserManagementAdmin from '../../components/admin/users/UserManagementAdmin.tsx';
 // import RealTradingAdmin from '../../components/admin/portfolio/trading/RealTradingAdmin.tsx';
 // import NotificationSystemAdmin from '../../components/admin/notifications/NotificationSystemAdmin.tsx';
-
-
-// Check if user is admin
-const isAdmin = true; // In real app, check auth from cookies/session
-
-if (!isAdmin) {
-  return Astro.redirect('/auth/login');
-}
 ---
 
 <BaseLayout title="Admin Dashboard - TradePulse.AI" description="Professional trading platform admin dashboard">
+  <!--
+    Client-side admin guard. The site is built with output: 'static', so there is
+    no server to enforce auth - the check must run in the browser before the admin
+    UI is shown. The page is hidden until the JWT check passes to avoid flashing
+    admin content. The backend JWT (app/backend/api/v1/routes/auth.py) carries an
+    `is_admin` boolean claim, which is what we check here.
+  -->
+  <script is:inline>
+    (function () {
+      document.documentElement.style.visibility = 'hidden';
+      try {
+        var token = localStorage.getItem('token');
+        if (!token) {
+          location.replace('/auth/login');
+          return;
+        }
+        var payloadPart = (token.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/');
+        var payload = JSON.parse(atob(payloadPart));
+        if (payload.exp && payload.exp <= Date.now() / 1000) {
+          location.replace('/auth/login');
+          return;
+        }
+        if (!payload.is_admin) {
+          location.replace('/user_dashboard');
+          return;
+        }
+        // Check passed - reveal the page
+        document.documentElement.style.visibility = '';
+      } catch (e) {
+        location.replace('/auth/login');
+      }
+    })();
+  </script>
   <!-- Custom Admin Dashboard Styles -->
   <style>
     /* Custom scrollbar */

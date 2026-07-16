@@ -4,19 +4,6 @@ import { TradingViewChart } from '../../components/shared/charts';
 
 export const prerender = true;
 
-// Check if user is authenticated and NOT admin
-const isUser = true; // In real app, check auth from cookies/session
-const isAdmin = false; // In real app, check if user has admin role
-
-if (!isUser) {
-  return Astro.redirect('/auth/login');
-}
-
-// Redirect admin users to admin dashboard
-if (isAdmin) {
-  return Astro.redirect('/admin/dashboard');
-}
-
 // Skip SSR fetch - data will be loaded client-side by React components
 // SSR fetch with relative URLs fails during build time
 let userDashboardData = null;
@@ -40,6 +27,34 @@ function formatPercentage(value: number | undefined | null): string {
 ---
 
 <BaseLayout title="User Dashboard - TradePulse.AI">
+  <!--
+    Client-side auth guard. The site is built with output: 'static', so auth must
+    be enforced in the browser: any logged-in user (valid, unexpired JWT) may view
+    this page; otherwise redirect to login. The page stays hidden until the check
+    passes to avoid flashing content.
+  -->
+  <script is:inline>
+    (function () {
+      document.documentElement.style.visibility = 'hidden';
+      try {
+        var token = localStorage.getItem('token');
+        if (!token) {
+          location.replace('/auth/login');
+          return;
+        }
+        var payloadPart = (token.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/');
+        var payload = JSON.parse(atob(payloadPart));
+        if (payload.exp && payload.exp <= Date.now() / 1000) {
+          location.replace('/auth/login');
+          return;
+        }
+        // Check passed - reveal the page
+        document.documentElement.style.visibility = '';
+      } catch (e) {
+        location.replace('/auth/login');
+      }
+    })();
+  </script>
   <!-- Navigation Header -->
   <nav class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

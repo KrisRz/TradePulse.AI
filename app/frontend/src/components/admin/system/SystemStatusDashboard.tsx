@@ -296,7 +296,7 @@ export default function SystemStatusDashboard() {
       if (!apiClient.portfolio || typeof apiClient.portfolio.getOverview !== 'function') {
         // Fallback to direct API call
         const response = await apiClient.get('/api/admin/virtual-portfolio', {
-          headers: { Authorization: `Bearer ${apiClient.getAuthToken() || 'enterprise_admin_token'}` }
+          headers: { Authorization: `Bearer ${apiClient.getAuthToken() || localStorage.getItem('token') || ''}` }
         });
         
         if (!response.success) throw new Error('Portfolio API unavailable');

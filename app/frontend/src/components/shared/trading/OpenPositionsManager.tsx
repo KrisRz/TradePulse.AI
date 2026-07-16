@@ -123,9 +123,9 @@ export default function OpenPositionsManager() {
       setLoading(true);
       
       // Load real open positions from backend
-      const response = await fetch('/api/real-trading/positions/open', {
+      const response = await fetch('/api/real_trading/positions/open', {
         headers: {
-          'Authorization': 'Bearer enterprise_admin_token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });

@@ -156,9 +156,9 @@ export default function WalletManagement() {
       setLoading(true);
 
       // Load real wallet balances from backend
-      const balanceResponse = await fetch('/api/real-trading/wallet/balances', {
+      const balanceResponse = await fetch('/api/real_trading/wallet/balances', {
         headers: {
-          'Authorization': 'Bearer enterprise_admin_token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });
@@ -177,9 +177,9 @@ export default function WalletManagement() {
       await fetchWithdrawalLimits();
       
       // Load real transaction history from backend
-      const transactionResponse = await fetch('/api/real-trading/wallet/transactions', {
+      const transactionResponse = await fetch('/api/real_trading/wallet/transactions', {
         headers: {
-          'Authorization': 'Bearer enterprise_admin_token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });

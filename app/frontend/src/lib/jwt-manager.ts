@@ -1,20 +1,25 @@
+import { getSecurityConfig } from '@/config/environments';
+
+// Unified token storage key ('token') - single source of truth in config/environments.ts
+const getTokenKey = () => getSecurityConfig().tokenStorageKey;
+
 export const jwtManager = {
   getToken: () => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('auth_token');
+      return localStorage.getItem(getTokenKey());
     }
     return null;
   },
-  
+
   setToken: (token: string) => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('auth_token', token);
+      localStorage.setItem(getTokenKey(), token);
     }
   },
-  
+
   removeToken: () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
+      localStorage.removeItem(getTokenKey());
     }
   },
   
