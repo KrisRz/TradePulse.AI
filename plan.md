@@ -423,7 +423,12 @@ Cel: zwalidowana strategia EMA lata co dzień, zapisuje decyzje + P&L.
   decyzję że zostajemy przy EMA.
 
 ## ▶ M5 — 8+ tygodni paper (bramka do realnych pieniędzy)
-- [ ] **M5.1** Zbieraj żywe metryki ≥8 tygodni.
+> **🕐 ZEGAR M5 WYSTARTOWAŁ: 2026-07-16** (pierwszy bar przetworzony w chmurze:
+> 2026-07-15, zapis w DynamoDB `tradepulse_paper_bot`). Minimum 8 tygodni →
+> **ocena progów NIE WCZEŚNIEJ niż 2026-09-10**. Do tego czasu: NIE zmieniać
+> strategii/parametrów (unieważnia pomiar!), bot działa sam (cron 00:10 UTC).
+> Po drodze: ~2026-09-29 wygasa domena tradepulseai.co.uk (decyzja o odnowieniu).
+- [ ] **M5.1** Zbieraj żywe metryki ≥8 tygodni (start 2026-07-16, koniec ≥2026-09-10).
 - [ ] **M5.2** Sprawdź wszystkie PROGI (sekcja 3). Raport.
 - [ ] **M5.3** Live tracking: paper == to co byłoby realnie (< 10% odchylenia).
 
