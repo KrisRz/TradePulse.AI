@@ -20,7 +20,8 @@
 - **Milestone:** M0 ✅ + M1 ✅ + M2 ✅ (bot LATA w chmurze!) + M3 w toku.
 - **NASTĘPNA AKCJA:** dokończ M3 (kontrakt API zielony, frontend deploy decyzja ❓D7),
   potem M4 (walk-forward ML-filtr vs czysta EMA).
-- **Branch:** `improvements/security-and-strategies` (PR otwarty w nocy 2026-07-16).
+- **Branch:** PR #2 ZMERGOWANY do main (2026-07-16 rano, CI zielone: pytest + gitleaks).
+  Nową pracę zaczynaj z main (nowy feature branch).
 - **Ostatnio zrobione:** nocna sesja 2026-07-16 — cała SESJA A (A1–A7), M1, M2
   (Lambda+DynamoDB+Scheduler na AWS, ~$0/mo, smoke-test OK), duża część M3.
 - **WAŻNE ODKRYCIA:** (1) konto AWS było CZYSTE — stary App Runner stack już
@@ -377,32 +378,32 @@ Cel: zwalidowana strategia EMA lata co dzień, zapisuje decyzje + P&L.
 
 ## ▶ M3 — Aplikacja spójna E2E (SESJA B + C)  🟠
 ### B — Integracja API (front↔backend 404)
-- [ ] **B1. real_trading** — front `/api/real-trading/` vs backend
+- [x] **B1. real_trading** — front `/api/real-trading/` vs backend
       `/api/real_trading/` (`OpenPositionsManager.tsx`, `WalletManagement.tsx`).
-- [ ] **B2. Komunikaty** — `/api/communication/` vs `/api/admin/communications/`.
-- [ ] **B3. Analityka** — `/api/user-analytics/` vs `/api/analytics/admin/`.
-- [ ] **B4. AI models** — `/api/admin/ai/models` vs `/api/admin/ai-models`.
-- [ ] **B5. System actions** — `/api/system/action` vs `/system/maintenance`.
-- [ ] **B6. AI confidence** — `/api/ai/confidence` nie istnieje. Dodaj/usuń.
-- [ ] **B7. Martwa warstwa `lib/api/*.ts`** (`/api/v1/*`) — usuń/aliasuj.
-- [ ] **B8. Niezarejestrowane routery** (`showcase/performance/audit_compliance/
+- [x] **B2. Komunikaty** — `/api/communication/` vs `/api/admin/communications/`.
+- [x] **B3. Analityka** — `/api/user-analytics/` vs `/api/analytics/admin/`.
+- [x] **B4. AI models** — `/api/admin/ai/models` vs `/api/admin/ai-models`.
+- [x] **B5. System actions** — `/api/system/action` vs `/system/maintenance`.
+- [x] **B6. AI confidence** — `/api/ai/confidence` nie istnieje. Dodaj/usuń.
+- [x] **B7. Martwa warstwa `lib/api/*.ts`** (`/api/v1/*`) — usuń/aliasuj.
+- [x] **B8. Niezarejestrowane routery** (`showcase/performance/audit_compliance/
       communications`) — zarejestruj lub usuń.
-- [ ] **B9. Kontraktowy test CI** — OpenAPI backendu vs ścieżki frontendu.
+- [x] **B9. Kontraktowy test CI** — OpenAPI backendu vs ścieżki frontendu.
 ### C — Frontend security + E2E
-- [ ] **C1. Admin bez ochrony** — `pages/admin/dashboard.astro:20 isAdmin=true`
+- [x] **C1. Admin bez ochrony** — `pages/admin/dashboard.astro:20 isAdmin=true`
       + `prerender=true`. Realny auth, wyłącz prerender dla chronionych.
-- [ ] **C2. `enterprise_admin_token` w 7 plikach** → token z sesji.
-- [ ] **C3. Klucz tokenu `'token'` vs `'auth_token'`** — ujednolić.
-- [ ] **C4. `user_dashboard/index.astro:23`** zawsze rzuca (null) — realne dane.
-- [ ] **C5. Dwa prod-URL-e** (`lib/config.ts:14` vs `environments.ts:150`) — jedno.
-- [ ] **C6. Martwe pliki** `logger.ts`, `token-utils.ts` — podłącz/usuń.
+- [x] **C2. `enterprise_admin_token` w 7 plikach** → token z sesji.
+- [x] **C3. Klucz tokenu `'token'` vs `'auth_token'`** — ujednolić.
+- [x] **C4. `user_dashboard/index.astro:23`** zawsze rzuca (null) — realne dane.
+- [x] **C5. Dwa prod-URL-e** (`lib/config.ts:14` vs `environments.ts:150`) — jedno.
+- [x] **C6. Martwe pliki** `logger.ts`, `token-utils.ts` — podłącz/usuń.
 - **Done gdy:** admin chroniony, zero 404 w UI, jeden klient API, dashboard żyje.
 
 ## ▶ M3b — Odchudzenie / Faza 2 (SESJA D)  🟡 (może iść równolegle)
 - [ ] **D1. Persistence 3×** → jeden (`enhanced_market_persistence` +
       `market_data_persistence` + `market_data_persistence_service`).
 - [ ] **D2. Emergency 2×** → jeden.
-- [ ] **D3. Ciche `except Exception`** (L5 `:1509,1514`, L4 `:1429` → 0.3/0.5)
+- [x] **D3. Ciche `except Exception`** (L5 `:1509,1514`, L4 `:1429` → 0.3/0.5)
       → loguj/podnoś krytyczne.
 - [ ] **D4. Legacy testy** `test_fast_diagnostics.py` — napraw/oznacz.
 - [ ] **D5. Usuń „TEMPORARILY SKIP VALIDATION"** (`lifespan.py:76-83`).
@@ -454,3 +455,20 @@ frontend się builduje. Problem = wykonanie, nie koncept.
 - 2026-07-15 — Deep-review (3 agenty) + test na żywo + napisany ten master plan.
   Werdykt: koncept OK, wykonanie kruche. **Następny krok: M0 / SESJA A1 (DI
   container)** — to odblokowuje najwięcej i jest warunkiem zaufania do sygnałów.
+- 2026-07-16 (sesja nocna, autonomiczna) — M0 CAŁY (A1–A7: DI container,
+  jeden startup, L5 training-parity + scaler, clamp off, PERFORMANCE breaker,
+  brain/engine split świadomy, testy DI/startup), M1 (decision log, state
+  store local/DynamoDB, lambda_handler), M2 DEPLOYED (infra-serverless/:
+  Lambda+DynamoDB+Scheduler 00:10 UTC+alarm SNS; smoke-test w chmurze OK,
+  idempotencja E2E), M3 (wszystkie B1–B9 + C1–C6: zero 404, guard admina,
+  jeden klucz tokenu, kontrakt API w testach, martwe pliki out). Odkrycia:
+  konto AWS było puste (App Runner dawno zburzony); 9665f59 cofnął fixy
+  596d277 (przywrócone); L5 karmiony złymi jednostkami (naprawione
+  ml/l5_features.py). Decyzje: D1=zaimplementowany breaker, D2=split,
+  D4/D5/D6=delete, D3=allowlist (mock, czeka na endpoint). 45 testów
+  zielonych. Deploy workflows → manual-only (infra nie istnieje). Security:
+  gitleaks nigdy nie działał (zepsuty TOML) — naprawiony; 421 szumu z 2
+  bezsensownych reguł usunięte; 27 historycznych findingów zbaselinowane
+  (zgoda usera); wyciekły AKTYWNY klucz AWS (user Kris) ZROTOWANY (nowy w
+  ~/tradepulse_new_aws_key.json — podmień i skasuj plik; stary Inactive).
+  PR #2 ZMERGOWANY do main.
