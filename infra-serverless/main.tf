@@ -259,7 +259,9 @@ resource "aws_lambda_function_url" "status" {
   authorization_type = "NONE"
 }
 
-# auth NONE still requires an explicit public-invoke resource policy
+# auth NONE still requires an explicit public-invoke resource policy.
+# Since Oct 2025 AWS requires BOTH InvokeFunctionUrl AND InvokeFunction
+# in the policy for public URLs — with only the former the URL 403s.
 resource "aws_lambda_permission" "status_public" {
   statement_id           = "AllowPublicFunctionUrl"
   action                 = "lambda:InvokeFunctionUrl"
@@ -267,6 +269,16 @@ resource "aws_lambda_permission" "status_public" {
   principal              = "*"
   function_url_auth_type = "NONE"
 }
+
+# NOTE (2026-07-16): since Oct 2025 public function URLs ALSO require a
+# lambda:InvokeFunction statement with the InvokedViaFunctionUrl condition
+# (docs/lambda/urls-auth). AWS provider 5.x cannot express that condition
+# (invoked_via_function_url lands in provider 6.x), so the statement was
+# added OUT OF BAND via the API:
+#   add_permission(StatementId="AllowPublicFunctionUrlInvoke",
+#                  Action="lambda:InvokeFunction", Principal="*",
+#                  InvokedViaFunctionUrl=True)
+# TODO: fold into Terraform when upgrading to provider ~> 6.0.
 
 resource "aws_cloudwatch_log_group" "status" {
   name              = "/aws/lambda/${local.function_name}-status"
