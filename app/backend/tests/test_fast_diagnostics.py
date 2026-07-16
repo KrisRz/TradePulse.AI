@@ -71,3 +71,14 @@ def test_pnl_percentage_long_short():
     assert pnl_short_down > 0 and pnl_short_up < 0
 
 
+
+
+def test_clamp_confidence_no_artificial_floor():
+    """M0/A4: low confidence must stay low (old code floored at 0.05,
+    inflating dead-model outputs into tradeable-looking signals)."""
+    from app.backend.utils.model_io import clamp_confidence
+
+    assert clamp_confidence(0.001) == 0.001
+    assert clamp_confidence(0.0) == 0.0
+    assert clamp_confidence(-0.2) == 0.0   # validity clamp only
+    assert clamp_confidence(0.99) == 0.95  # overconfidence ceiling stays
