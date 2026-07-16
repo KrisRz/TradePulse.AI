@@ -1,100 +1,97 @@
 """
-Simple Signals API - NO DEPENDENCIES VERSION
-For 6-Layer AI Signal Intelligence dashboard
+Latest-signal API for the 6-Layer AI Signal Intelligence dashboard.
+
+Serves the REAL enterprise engine's latest signal (the previous version
+fabricated everything, including a $110,000 BTC price). A short in-module
+cache keeps dashboard polling from re-running the full 6-layer analysis
+on every request.
 """
 
+import time
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any, Dict, Optional
+
 from fastapi import APIRouter
 
 router = APIRouter()
 
-@router.get("/latest")
-async def get_latest_signals_simple() -> Dict[str, Any]:
-    """Get the latest trading signals - ULTRA SIMPLE VERSION"""
-    # Mock current BTC price
-    current_price = 110000.0
+_CACHE_TTL_SECONDS = 30
+_cache: Dict[str, Any] = {"at": 0.0, "data": None}
 
-    # Mock 6-layer analysis for dashboard display
-    mock_layer_analysis = {
-        "layer_1_regime": {
-            "regime": "BULLISH",
-            "confidence": 0.72,
-            "trend_strength": 0.68,
-            "description": "Market showing strong upward momentum"
-        },
-        "layer_2_lstm": {
-            "prediction": "BUY",
-            "confidence": 0.65,
-            "timeframe": "1h",
-            "description": "LSTM models predict upward movement"
-        },
-        "layer_3_reversal": {
-            "reversal_probability": 0.15,
-            "signal": "HOLD",
-            "support_resistance": "NEUTRAL",
-            "description": "Low reversal risk detected"
-        },
-        "layer_4_filters": {
-            "filter_score": 0.78,
-            "technical_signal": "BUY",
-            "volume_trend": "INCREASING",
-            "description": "Technical indicators align for bullish move"
-        },
-        "layer_5_confidence": {
-            "confidence": 0.68,
-            "risk_assessment": "MEDIUM",
-            "market_condition": "OPTIMAL",
-            "description": "Good confidence with acceptable risk"
-        },
-        "layer_6_timing": {
-            "timing_score": 0.75,
-            "optimal_entry": True,
-            "market_phase": "ACCUMULATION",
-            "description": "Timing is optimal for entry"
-        }
+
+def _to_native(obj: Any) -> Any:
+    """Recursively convert numpy scalars/arrays to JSON-safe Python types."""
+    import numpy as np
+
+    if isinstance(obj, dict):
+        return {k: _to_native(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_native(v) for v in obj]
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
+
+
+def _unavailable(reason: str) -> Dict[str, Any]:
+    """Honest degraded response — no fabricated numbers."""
+    return {
+        "status": "unavailable",
+        "reason": reason,
+        "signal": None,
+        "layer_analysis": None,
+        "engine_status": {"initialized": False, "status": "unavailable"},
+        "last_updated": datetime.utcnow().isoformat(),
     }
 
-    # Determine overall signal based on layer consensus
-    layer_signals = [
-        mock_layer_analysis["layer_1_regime"]["regime"],
-        mock_layer_analysis["layer_2_lstm"]["prediction"],
-        mock_layer_analysis["layer_4_filters"]["technical_signal"]
-    ]
 
-    buy_count = layer_signals.count("BUY") + layer_signals.count("BULLISH")
-    sell_count = layer_signals.count("SELL")
+@router.get("/latest")
+async def get_latest_signals() -> Dict[str, Any]:
+    """Latest real 6-layer signal (cached for a short interval)."""
+    now = time.monotonic()
+    if _cache["data"] is not None and now - _cache["at"] < _CACHE_TTL_SECONDS:
+        return _cache["data"]
 
-    if buy_count >= 2:
-        overall_action = "BUY"
-        overall_confidence = 0.68
-    elif sell_count >= 2:
-        overall_action = "SELL"
-        overall_confidence = 0.68
-    else:
-        overall_action = "HOLD"
-        overall_confidence = 0.50
+    try:
+        from app.backend.core.container import get_container
 
-    # Prepare the response
-    response_data = {
+        engine = get_container().get("enterprise_trading_engine")
+    except Exception as e:
+        return _unavailable(f"engine lookup failed: {e}")
+
+    if engine is None or not getattr(engine, "is_initialized", False):
+        return _unavailable("enterprise engine not initialized")
+
+    try:
+        signal = await engine.generate_signal("BTCUSDT")
+    except Exception as e:
+        return _unavailable(f"signal generation failed: {e}")
+
+    if signal is None:
+        return _unavailable("engine returned no signal (safety gate or missing data)")
+
+    models = getattr(engine, "models", {}) or {}
+    response: Dict[str, Any] = {
         "status": "success",
         "signal": {
-            "symbol": "BTCUSDT",
-            "action": overall_action,
-            "confidence": overall_confidence,
-            "price": current_price,
-            "timestamp": datetime.utcnow().isoformat(),
-            "signal_type": "primary",
-            "reasoning": f"6-layer consensus: {buy_count} buy, {sell_count} sell signals"
+            "symbol": signal.symbol,
+            "action": signal.action,
+            "confidence": float(signal.confidence),
+            "price": float(signal.price),
+            "timestamp": signal.timestamp.isoformat() if hasattr(signal.timestamp, "isoformat") else str(signal.timestamp),
+            "signal_type": signal.signal_type,
+            "reasoning": signal.reasoning,
         },
-        "layer_analysis": mock_layer_analysis,
+        "layer_analysis": _to_native(signal.layer_analysis),
         "engine_status": {
             "initialized": True,
-            "model_count": 6,
-            "available_models": ["regime", "lstm", "reversal", "filters", "confidence", "timing"],
-            "status": "operational"
+            "model_count": len(models),
+            "available_models": sorted(models.keys()),
+            "status": "operational",
         },
-        "last_updated": datetime.utcnow().isoformat()
+        "last_updated": datetime.utcnow().isoformat(),
     }
-
-    return response_data
+    _cache["data"] = response
+    _cache["at"] = now
+    return response
