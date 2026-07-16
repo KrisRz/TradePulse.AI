@@ -10,13 +10,23 @@ import sys
 ENDPOINT = "http://localhost:8000"
 REGION = "eu-west-2"
 
-dynamodb = boto3.client(
-    'dynamodb',
-    endpoint_url=ENDPOINT,
-    region_name=REGION,
-    aws_access_key_id='dummy',
-    aws_secret_access_key='dummy'
-)
+# NOTE: the client is created lazily in _client() — CORE_TABLES is imported
+# by core.database.ensure_required_tables, and importing this module must
+# have no side effects.
+_dynamodb = None
+
+
+def _client():
+    global _dynamodb
+    if _dynamodb is None:
+        _dynamodb = boto3.client(
+            'dynamodb',
+            endpoint_url=ENDPOINT,
+            region_name=REGION,
+            aws_access_key_id='dummy',
+            aws_secret_access_key='dummy',
+        )
+    return _dynamodb
 
 # Core tables from dynamodb.tf (with tradepulse_ prefix)
 CORE_TABLES = [
@@ -292,7 +302,8 @@ CORE_TABLES = [
 def create_table(table_schema):
     """Create a single table if it doesn't exist"""
     table_name = table_schema['TableName']
-    
+    dynamodb = _client()
+
     try:
         # Check if table exists
         dynamodb.describe_table(TableName=table_name)
@@ -300,7 +311,7 @@ def create_table(table_schema):
         return True
     except dynamodb.exceptions.ResourceNotFoundException:
         pass
-    
+
     try:
         print(f"🔨 Creating table {table_name}...")
         dynamodb.create_table(**table_schema)
