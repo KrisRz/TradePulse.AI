@@ -6,7 +6,6 @@ export { default as WinRateAnalysis } from './analytics/WinRateAnalysis.tsx';
 export { default as TradingHeatmap } from './analytics/TradingHeatmap.tsx';
 export { default as PerformanceComparison } from './analytics/PerformanceComparison.tsx';
 export { default as MetricsGrid } from './analytics/MetricsGrid.tsx';
-export { default as PnLChart } from './analytics/PnLChart.tsx';
 export { default as ClosedPositionsAnalytics } from './analytics/ClosedPositionsAnalytics.tsx';
 
 // Authentication
@@ -18,15 +17,7 @@ export { default as SessionManager } from './auth/SessionManager.tsx';
 
 // Charts - ALL REMOVED FOR CLEAN START
 
-// Real-time
-export { default as LivePriceDisplay } from './realtime/LivePriceDisplay.tsx';
-export { default as SignalFeed } from './realtime/SignalFeed.tsx';
-export { default as SignalCard } from './realtime/SignalCard.tsx';
-export { default as LiveSignalStatus } from './realtime/LiveSignalStatus.tsx';
-export { default as AIConfidenceIndicator } from './realtime/AIConfidenceIndicator.tsx';
-export { default as ConfidenceScore } from './realtime/ConfidenceScore.tsx';
-export { default as TradingStatusIndicator } from './realtime/TradingStatusIndicator.tsx';
-export { default as SignalFilters } from './realtime/SignalFilters.tsx';
+// Real-time - REMOVED (dead mock components, deleted)
 
 // Trading
 export { default as OrderForm } from './trading/OrderForm.tsx';

@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { Wallet, DollarSign, Download, ArrowUp, RefreshCw, ArrowUpRight, ArrowDownLeft, Clock, Shield, AlertTriangle, CheckCircle, EyeOff, Copy, ExternalLink, Filter, Search } from 'lucide-preact';
 
 interface WalletBalance {
@@ -82,63 +82,6 @@ export default function WalletManagement() {
       setLimitsLoading(false);
     }
   };
-
-  // Mock wallet data (will be replaced with real API calls)
-  const mockBalances: WalletBalance[] = [
-    {
-      currency: 'USD',
-      symbol: '$',
-      balance: 0,
-      usdValue: 0,
-      change24h: 0,
-      locked: 0,
-      available: 0,
-      icon: '💵'
-    },
-    {
-      currency: 'BTC',
-      symbol: '₿',
-      balance: 0,
-      usdValue: 0,
-      change24h: 0,
-      locked: 0,
-      available: 0,
-      icon: '₿'
-    },
-    {
-      currency: 'ETH',
-      symbol: 'Ξ',
-      balance: 0,
-      usdValue: 0,
-      change24h: 0,
-      locked: 0,
-      available: 0,
-      icon: 'Ξ'
-    },
-    {
-      currency: 'USDT',
-      symbol: '₮',
-      balance: 0,
-      usdValue: 0,
-      change24h: 0,
-      locked: 0,
-      available: 0,
-      icon: '₮'
-    }
-  ];
-
-  const mockTransactions: Transaction[] = [
-    {
-      id: 'tx_001',
-      type: 'deposit',
-      currency: 'USD',
-      amount: 0,
-      usdValue: 0,
-      status: 'completed',
-      timestamp: '2024-01-15T10:30:00Z',
-      fee: 0
-    }
-  ];
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: Wallet },

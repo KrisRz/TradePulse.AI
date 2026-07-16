@@ -1,65 +1,67 @@
 ---
-// Stats section component - AI vs Random performance
+// Stats section component - walk-forward validated strategy metrics.
+// All numbers come from the out-of-sample study in docs/M4_EDGE_VALIDATION.md.
 ---
 
 <section class="py-16 bg-white dark:bg-dark-900">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="text-center mb-12">
       <h2 class="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-        AI vs Random Trading
+        Backtest-Validated Edge
       </h2>
       <p class="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-        See the difference our AI makes. All data is transparent and verifiable.
+        Our strategy is validated walk-forward: parameters fitted in-sample per fold,
+        metrics reported out-of-sample only, fees and slippage included.
       </p>
     </div>
-    
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-      <!-- AI Performance -->
+      <!-- Strategy Performance (out-of-sample) -->
       <div class="bg-gradient-to-r from-profit-50 to-primary-50 dark:from-profit-900/20 dark:to-primary-900/20 p-8 rounded-xl">
         <div class="flex items-center mb-6">
           <div class="w-12 h-12 bg-profit-500 rounded-lg flex items-center justify-center mr-4">
             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
           </div>
           <div>
-            <h3 class="text-2xl font-bold text-gray-900 dark:text-white">TradePulse AI</h3>
-            <p class="text-profit-600 dark:text-profit-400 font-medium">Advanced ML System</p>
+            <h3 class="text-2xl font-bold text-gray-900 dark:text-white">TradePulse Strategy</h3>
+            <p class="text-profit-600 dark:text-profit-400 font-medium">EMA 20/100, BTC 1d, long-only</p>
           </div>
         </div>
-        
+
         <div class="grid grid-cols-2 gap-6">
           <div>
-            <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">68.3%</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Win Rate</div>
+            <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">1.11</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">Out-of-Sample Sharpe</div>
           </div>
           <div>
-            <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">+24.7%</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Monthly ROI</div>
-          </div>
-          <div>
-            <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">1.84</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Sharpe Ratio</div>
-          </div>
-          <div>
-            <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">-4.2%</div>
+            <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">&minus;49%</div>
             <div class="text-sm text-gray-600 dark:text-gray-400">Max Drawdown</div>
           </div>
+          <div>
+            <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">4/4</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">Fold Layouts Beat Buy &amp; Hold</div>
+          </div>
+          <div>
+            <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">36</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">OOS Trades (~6.5 years)</div>
+          </div>
         </div>
-        
+
         <div class="mt-6 p-4 bg-profit-100 dark:bg-profit-900/30 rounded-lg">
           <div class="flex items-center">
             <svg class="w-5 h-5 text-profit-600 dark:text-profit-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
             <span class="text-sm text-profit-700 dark:text-profit-300 font-medium">
-              67 consecutive profitable days
+              Paper trading live since 2026-07-16
             </span>
           </div>
         </div>
       </div>
-      
-      <!-- Random Trading Performance -->
+
+      <!-- Buy & Hold benchmark (same data, same costs) -->
       <div class="bg-gradient-to-r from-loss-50 to-gray-50 dark:from-loss-900/20 dark:to-gray-900/20 p-8 rounded-xl">
         <div class="flex items-center mb-6">
           <div class="w-12 h-12 bg-loss-500 rounded-lg flex items-center justify-center mr-4">
@@ -68,70 +70,99 @@
             </svg>
           </div>
           <div>
-            <h3 class="text-2xl font-bold text-gray-900 dark:text-white">Random Trading</h3>
-            <p class="text-loss-600 dark:text-loss-400 font-medium">No Strategy</p>
+            <h3 class="text-2xl font-bold text-gray-900 dark:text-white">Buy &amp; Hold BTC</h3>
+            <p class="text-loss-600 dark:text-loss-400 font-medium">Benchmark, same test windows</p>
           </div>
         </div>
-        
+
         <div class="grid grid-cols-2 gap-6">
           <div>
-            <div class="text-3xl font-bold text-loss-600 dark:text-loss-400">45.7%</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Win Rate</div>
+            <div class="text-3xl font-bold text-loss-600 dark:text-loss-400">0.87</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">Out-of-Sample Sharpe</div>
           </div>
           <div>
-            <div class="text-3xl font-bold text-loss-600 dark:text-loss-400">-8.3%</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Monthly ROI</div>
-          </div>
-          <div>
-            <div class="text-3xl font-bold text-loss-600 dark:text-loss-400">-0.47</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Sharpe Ratio</div>
-          </div>
-          <div>
-            <div class="text-3xl font-bold text-loss-600 dark:text-loss-400">-18.9%</div>
+            <div class="text-3xl font-bold text-loss-600 dark:text-loss-400">&minus;77%</div>
             <div class="text-sm text-gray-600 dark:text-gray-400">Max Drawdown</div>
           </div>
+          <div>
+            <div class="text-3xl font-bold text-loss-600 dark:text-loss-400">0/4</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">Fold Layouts Won</div>
+          </div>
+          <div>
+            <div class="text-3xl font-bold text-loss-600 dark:text-loss-400">100%</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">Time in Market</div>
+          </div>
         </div>
-        
+
         <div class="mt-6 p-4 bg-loss-100 dark:bg-loss-900/30 rounded-lg">
           <div class="flex items-center">
             <svg class="w-5 h-5 text-loss-600 dark:text-loss-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
             </svg>
             <span class="text-sm text-loss-700 dark:text-loss-300 font-medium">
-              Consistent losses over time
+              Rides every bear market to the bottom
             </span>
           </div>
         </div>
       </div>
     </div>
-    
-    <!-- Comparison Highlights -->
-    <div class="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="text-center p-6 bg-gray-50 dark:bg-dark-800 rounded-lg">
-        <div class="text-4xl font-bold text-profit-600 dark:text-profit-400 mb-2">+22.6%</div>
-        <div class="text-sm text-gray-600 dark:text-gray-400">Better Win Rate</div>
-        <div class="text-xs text-gray-500 dark:text-gray-500 mt-1">68.3% vs 45.7%</div>
-      </div>
-      
-      <div class="text-center p-6 bg-gray-50 dark:bg-dark-800 rounded-lg">
-        <div class="text-4xl font-bold text-profit-600 dark:text-profit-400 mb-2">+33%</div>
-        <div class="text-sm text-gray-600 dark:text-gray-400">Monthly ROI Advantage</div>
-        <div class="text-xs text-gray-500 dark:text-gray-500 mt-1">+24.7% vs -8.3%</div>
-      </div>
-      
-      <div class="text-center p-6 bg-gray-50 dark:bg-dark-800 rounded-lg">
-        <div class="text-4xl font-bold text-profit-600 dark:text-profit-400 mb-2">78%</div>
-        <div class="text-sm text-gray-600 dark:text-gray-400">Less Risk</div>
-        <div class="text-xs text-gray-500 dark:text-gray-500 mt-1">-4.2% vs -18.9% drawdown</div>
-      </div>
+
+    <!-- Walk-forward results by fold layout (full table from the study) -->
+    <div class="mt-12 bg-gray-50 dark:bg-dark-800 rounded-lg p-6 overflow-x-auto">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 text-center">
+        Walk-Forward Results by Fold Layout (BTC 1d, out-of-sample)
+      </h3>
+      <table class="w-full min-w-[560px] text-sm">
+        <thead>
+          <tr class="border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
+            <th class="text-left py-2 px-3">Fold layout (train/test bars)</th>
+            <th class="text-right py-2 px-3">Strategy Sharpe</th>
+            <th class="text-right py-2 px-3">Buy &amp; Hold Sharpe</th>
+            <th class="text-right py-2 px-3">Strategy MaxDD</th>
+            <th class="text-right py-2 px-3">Buy &amp; Hold MaxDD</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-900 dark:text-white">
+          <tr class="border-b border-gray-200 dark:border-gray-700">
+            <td class="py-2 px-3">730 / 180</td>
+            <td class="py-2 px-3 text-right font-semibold text-profit-600 dark:text-profit-400">1.11</td>
+            <td class="py-2 px-3 text-right">0.87</td>
+            <td class="py-2 px-3 text-right">&minus;49%</td>
+            <td class="py-2 px-3 text-right">&minus;77%</td>
+          </tr>
+          <tr class="border-b border-gray-200 dark:border-gray-700">
+            <td class="py-2 px-3">500 / 125</td>
+            <td class="py-2 px-3 text-right font-semibold text-profit-600 dark:text-profit-400">1.14</td>
+            <td class="py-2 px-3 text-right">0.97</td>
+            <td class="py-2 px-3 text-right">&minus;50%</td>
+            <td class="py-2 px-3 text-right">&minus;77%</td>
+          </tr>
+          <tr class="border-b border-gray-200 dark:border-gray-700">
+            <td class="py-2 px-3">1000 / 250</td>
+            <td class="py-2 px-3 text-right font-semibold text-profit-600 dark:text-profit-400">1.12</td>
+            <td class="py-2 px-3 text-right">1.00</td>
+            <td class="py-2 px-3 text-right">&minus;50%</td>
+            <td class="py-2 px-3 text-right">&minus;77%</td>
+          </tr>
+          <tr>
+            <td class="py-2 px-3">365 / 90</td>
+            <td class="py-2 px-3 text-right font-semibold text-profit-600 dark:text-profit-400">1.18</td>
+            <td class="py-2 px-3 text-right">0.81</td>
+            <td class="py-2 px-3 text-right">&minus;43%</td>
+            <td class="py-2 px-3 text-right">&minus;77%</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-    
+
     <!-- Disclaimer -->
     <div class="mt-8 text-center">
       <p class="text-sm text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
-        * Performance data based on 12-month backtesting and 90-day live virtual trading. Past performance does not guarantee future results. 
-        All trading involves risk and users should start with virtual portfolios.
+        * Walk-forward, out-of-sample backtest on Binance BTCUSDT daily data through 2026
+        (next-bar-open execution, 0.1% fees + 0.02% slippage per side). Paper trading live since
+        2026-07-16. Past performance does not guarantee future results. All trading involves risk;
+        the platform currently trades virtual portfolios only.
       </p>
     </div>
   </div>
-</section> 
+</section>

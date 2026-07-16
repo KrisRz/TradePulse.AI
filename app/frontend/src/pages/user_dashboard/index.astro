@@ -1,29 +1,9 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { TradingViewChart } from '../../components/shared/charts';
+import UserDashboardOverview from '../../components/user/dashboard/UserDashboardOverview.tsx';
 
 export const prerender = true;
-
-// Skip SSR fetch - data will be loaded client-side by React components
-// SSR fetch with relative URLs fails during build time
-let userDashboardData = null;
-let fetchError = null;
-
-// Helper function to format currency
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(amount);
-}
-
-// Helper function to format percentage
-function formatPercentage(value: number | undefined | null): string {
-  if (value === undefined || value === null || isNaN(value)) {
-    return '0.00%';
-  }
-  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-}
 ---
 
 <BaseLayout title="User Dashboard - TradePulse.AI">
@@ -48,8 +28,14 @@ function formatPercentage(value: number | undefined | null): string {
           location.replace('/auth/login');
           return;
         }
-        // Check passed - reveal the page
+        // Check passed - reveal the page and show the logged-in user's identity
         document.documentElement.style.visibility = '';
+        document.addEventListener('DOMContentLoaded', function () {
+          var el = document.getElementById('user-email');
+          if (el && (payload.email || payload.username)) {
+            el.textContent = payload.email || payload.username;
+          }
+        });
       } catch (e) {
         location.replace('/auth/login');
       }
@@ -68,9 +54,9 @@ function formatPercentage(value: number | undefined | null): string {
         </div>
         
         <div class="flex items-center space-x-4">
-          <!-- User Info -->
+          <!-- User Info (filled client-side from the JWT payload) -->
           <div class="text-sm text-gray-600 dark:text-gray-400">
-            👤 trader1@example.com
+            👤 <span id="user-email"></span>
           </div>
           
           <!-- Dark Mode Toggle -->
@@ -101,64 +87,8 @@ function formatPercentage(value: number | undefined | null): string {
             Access your portfolio, trading signals, and analytics with AI-powered insights.
           </p>
           
-          <!-- Quick Stats -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            {fetchError || !userDashboardData ? (
-              <div class="col-span-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
-                <div class="flex items-center">
-                  <div class="text-red-600 dark:text-red-400 text-sm font-medium">
-                    ❌ Unable to load real dashboard data
-                  </div>
-                </div>
-                {fetchError && (
-                  <div class="mt-2 text-red-600 dark:text-red-400 text-xs">
-                    Error: {fetchError}
-                  </div>
-                )}
-                <div class="mt-4">
-                  <button onclick="location.reload()" class="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors">
-                    Retry
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                  <div class="text-blue-600 dark:text-blue-400 text-sm font-medium">Portfolio Value</div>
-                  <div class="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                    {formatCurrency(userDashboardData?.portfolioValue || 0)}
-                  </div>
-                </div>
-                <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
-                  <div class="text-green-600 dark:text-green-400 text-sm font-medium">Today's P&L</div>
-                  <div class="text-2xl font-bold text-green-900 dark:text-green-100">
-                    {formatCurrency(userDashboardData?.dailyPnL || 0)}
-                  </div>
-                  <div class="text-green-600 dark:text-green-400 text-xs">
-                    {formatPercentage(userDashboardData?.dailyPnLPercentage)}
-                  </div>
-                </div>
-                <div class="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
-                  <div class="text-purple-600 dark:text-purple-400 text-sm font-medium">Active Signals</div>
-                  <div class="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                    {userDashboardData?.activeSignals || 0}
-                  </div>
-                  <div class="text-purple-600 dark:text-purple-400 text-xs">
-                    AI Generated
-                  </div>
-                </div>
-                <div class="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg">
-                  <div class="text-orange-600 dark:text-orange-400 text-sm font-medium">Win Rate</div>
-                  <div class="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                    {(userDashboardData?.winRate || 0).toFixed(1)}%
-                  </div>
-                  <div class="text-orange-600 dark:text-orange-400 text-xs">
-                    Last 30 days
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          <!-- Quick Stats + Trading Activity (live data fetched client-side) -->
+          <UserDashboardOverview client:load />
         </div>
       </div>
     </div>
@@ -285,74 +215,6 @@ function formatPercentage(value: number | undefined | null): string {
       </div>
     </div>
 
-    <!-- Recent Activity -->
-    <div class="px-4 py-6 sm:px-0">
-      <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-        <div class="px-4 py-5 sm:p-6">
-          <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Recent Activity</h3>
-          <div class="space-y-3">
-            {userDashboardData?.recentActivity && userDashboardData.recentActivity.length > 0 ? (
-              userDashboardData.recentActivity.slice(0, 5).map((activity: any) => {
-                const getActivityColor = (type: string) => {
-                  switch (type) {
-                    case 'signal': return 'bg-green-500';
-                    case 'portfolio': return 'bg-blue-500';
-                    case 'ai': return 'bg-purple-500';
-                    case 'trade': return 'bg-orange-500';
-                    default: return 'bg-gray-500';
-                  }
-                };
-
-                const getActivityIcon = (type: string) => {
-                  switch (type) {
-                    case 'signal': return '📈';
-                    case 'portfolio': return '💰';
-                    case 'ai': return '🤖';
-                    case 'trade': return '⚡';
-                    default: return '📝';
-                  }
-                };
-
-                const formatTime = (timestamp: string) => {
-                  const date = new Date(timestamp);
-                  const now = new Date();
-                  const diffMs = now.getTime() - date.getTime();
-                  const diffMins = Math.floor(diffMs / (1000 * 60));
-
-                  if (diffMins < 60) {
-                    return `${diffMins} min ago`;
-                  } else if (diffMins < 1440) {
-                    return `${Math.floor(diffMins / 60)}h ago`;
-                  } else {
-                    return `${Math.floor(diffMins / 1440)}d ago`;
-                  }
-                };
-
-                return (
-                  <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-700 last:border-b-0">
-                    <div class="flex items-center">
-                      <div class={`w-2 h-2 rounded-full mr-3 ${getActivityColor(activity.type)}`}></div>
-                      <span class="text-sm text-gray-900 dark:text-white">
-                        {getActivityIcon(activity.type)} {activity.message}
-                      </span>
-                    </div>
-                    <span class="text-xs text-gray-500 dark:text-gray-400">
-                      {formatTime(activity.timestamp)}
-                    </span>
-                  </div>
-                );
-              })
-            ) : (
-              <div class="text-center py-4">
-                <div class="text-gray-500 dark:text-gray-400 text-sm">
-                  {fetchError ? 'Unable to load recent activity' : 'No recent activity available'}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- Dark mode toggle script -->

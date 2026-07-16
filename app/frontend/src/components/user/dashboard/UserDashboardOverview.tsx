@@ -1,30 +1,56 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { DollarSign, TrendingUp, Activity, Award } from 'lucide-preact';
 
-interface UserStats {
-  portfolioValue: number;
-  dailyPnL: number;
-  dailyPnLPercentage: number;
-  activeSignals: number;
-  winRate: number;
+// Shape of GET /api/user/dashboard/overview (app/backend/api/v1/routes/user_portfolio.py)
+interface UserDashboardData {
+  user_profile: {
+    user_id: string;
+    email: string;
+    account_type: string;
+    member_since: string;
+  };
+  portfolio_snapshot: {
+    total_value: number;
+    cash_balance: number;
+    invested_amount: number;
+    daily_pnl: number;
+    daily_pnl_percentage: number;
+    total_pnl: number;
+    total_pnl_percentage: number;
+  };
+  trading_activity: {
+    active_positions: number;
+    closed_positions: number;
+    total_trades: number;
+    win_rate: number;
+    trades_today: number;
+    pnl_today: number;
+  };
+  market_context: {
+    btc_price: number;
+    market_status: string;
+    last_signal: string;
+  };
+  last_updated: string;
 }
 
-interface UserDashboardData {
-  portfolioValue: number;
-  dailyPnL: number;
-  dailyPnLPercentage: number;
-  activeSignals: number;
-  winRate: number;
-  recentActivity: Array<{
-    type: 'signal' | 'portfolio' | 'ai' | 'trade';
-    message: string;
-    timestamp: string;
-  }>;
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD'
+  }).format(amount);
+}
+
+function formatSigned(amount: number): string {
+  return `${amount >= 0 ? '+' : ''}${formatCurrency(amount)}`;
+}
+
+function formatSignedPercent(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
 export default function UserDashboardOverview() {
-  const [stats, setStats] = useState<UserStats | null>(null);
-  const [recentActivity, setRecentActivity] = useState<UserDashboardData['recentActivity']>([]);
+  const [data, setData] = useState<UserDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +65,6 @@ export default function UserDashboardOverview() {
         throw new Error('No authentication token available');
       }
 
-      // Fetch real user dashboard overview
       const response = await fetch('/api/user/dashboard/overview', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -51,25 +76,13 @@ export default function UserDashboardOverview() {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const data: UserDashboardData = await response.json();
-
-      // Update state with real data
-      setStats({
-        portfolioValue: data.portfolioValue,
-        dailyPnL: data.dailyPnL,
-        dailyPnLPercentage: data.dailyPnLPercentage,
-        activeSignals: data.activeSignals,
-        winRate: data.winRate
-      });
-
-      setRecentActivity(data.recentActivity || []);
-      console.log('✅ Loaded real user dashboard data:', data);
-
+      const payload: UserDashboardData = await response.json();
+      setData(payload);
     } catch (err) {
-      console.error('❌ Error fetching user dashboard data:', err);
+      console.error('Error fetching user dashboard data:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
       setError(errorMessage);
-      // NO FALLBACKS - keep stats as null to show error state
+      // NO FALLBACKS - keep data as null to show error state
     } finally {
       setLoading(false);
     }
@@ -91,12 +104,12 @@ export default function UserDashboardOverview() {
     );
   }
 
-  if (error || !stats) {
+  if (error || !data) {
     return (
       <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
         <div class="flex items-center">
           <div class="text-red-600 dark:text-red-400 text-sm font-medium">
-            ❌ Unable to load user dashboard data
+            Unable to load user dashboard data
           </div>
         </div>
         {error && (
@@ -114,6 +127,10 @@ export default function UserDashboardOverview() {
     );
   }
 
+  const snapshot = data.portfolio_snapshot;
+  const activity = data.trading_activity;
+  const dailyPositive = snapshot.daily_pnl >= 0;
+
   return (
     <div class="space-y-6">
       {/* Quick Stats */}
@@ -124,22 +141,25 @@ export default function UserDashboardOverview() {
             <div class="ml-4">
               <div class="text-blue-600 dark:text-blue-400 text-sm font-medium">Portfolio Value</div>
               <div class="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                ${stats.portfolioValue.toLocaleString()}
+                {formatCurrency(snapshot.total_value)}
+              </div>
+              <div class="text-blue-600 dark:text-blue-400 text-xs">
+                Cash: {formatCurrency(snapshot.cash_balance)}
               </div>
             </div>
           </div>
         </div>
 
-        <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+        <div class={`${dailyPositive ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'} p-4 rounded-lg`}>
           <div class="flex items-center">
-            <TrendingUp class="h-8 w-8 text-green-600 dark:text-green-400" />
+            <TrendingUp class={`h-8 w-8 ${dailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
             <div class="ml-4">
-              <div class="text-green-600 dark:text-green-400 text-sm font-medium">Today's P&L</div>
-              <div class="text-2xl font-bold text-green-900 dark:text-green-100">
-                +${stats.dailyPnL.toFixed(2)}
+              <div class={`text-sm font-medium ${dailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>Today's P&L</div>
+              <div class={`text-2xl font-bold ${dailyPositive ? 'text-green-900 dark:text-green-100' : 'text-red-900 dark:text-red-100'}`}>
+                {formatSigned(snapshot.daily_pnl)}
               </div>
-              <div class="text-green-600 dark:text-green-400 text-xs">
-                +{stats.dailyPnLPercentage.toFixed(2)}%
+              <div class={`text-xs ${dailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {formatSignedPercent(snapshot.daily_pnl_percentage)}
               </div>
             </div>
           </div>
@@ -149,12 +169,12 @@ export default function UserDashboardOverview() {
           <div class="flex items-center">
             <Activity class="h-8 w-8 text-purple-600 dark:text-purple-400" />
             <div class="ml-4">
-              <div class="text-purple-600 dark:text-purple-400 text-sm font-medium">Active Signals</div>
+              <div class="text-purple-600 dark:text-purple-400 text-sm font-medium">Active Positions</div>
               <div class="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                {stats.activeSignals}
+                {activity.active_positions}
               </div>
               <div class="text-purple-600 dark:text-purple-400 text-xs">
-                AI Generated
+                Open trades
               </div>
             </div>
           </div>
@@ -166,63 +186,52 @@ export default function UserDashboardOverview() {
             <div class="ml-4">
               <div class="text-orange-600 dark:text-orange-400 text-sm font-medium">Win Rate</div>
               <div class="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                {stats.winRate.toFixed(1)}%
+                {activity.win_rate.toFixed(1)}%
               </div>
               <div class="text-orange-600 dark:text-orange-400 text-xs">
-                Last 30 days
+                {activity.closed_positions} closed trades
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Recent Activity */}
+      {/* Trading Activity */}
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Activity</h3>
-        <div class="space-y-3">
-          {recentActivity.length > 0 ? (
-            recentActivity.slice(0, 5).map((activity, index) => {
-              const getActivityColor = (type: string) => {
-                switch (type) {
-                  case 'signal': return 'bg-green-500';
-                  case 'portfolio': return 'bg-blue-500';
-                  case 'ai': return 'bg-purple-500';
-                  case 'trade': return 'bg-orange-500';
-                  default: return 'bg-gray-500';
-                }
-              };
-
-              const getActivityIcon = (type: string) => {
-                switch (type) {
-                  case 'signal': return '📈';
-                  case 'portfolio': return '💰';
-                  case 'ai': return '🤖';
-                  case 'trade': return '⚡';
-                  default: return '📝';
-                }
-              };
-
-              return (
-                <div key={index} class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-700 last:border-b-0">
-                  <div class="flex items-center">
-                    <div class={`w-2 h-2 rounded-full mr-3 ${getActivityColor(activity.type)}`}></div>
-                    <span class="text-sm text-gray-900 dark:text-white">
-                      {getActivityIcon(activity.type)} {activity.message}
-                    </span>
-                  </div>
-                  <span class="text-xs text-gray-500 dark:text-gray-400">
-                    {new Date(activity.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
-              );
-            })
-          ) : (
-            <div class="text-center py-4">
-              <div class="text-gray-500 dark:text-gray-400 text-sm">
-                No recent activity available
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Trading Activity</h3>
+        {activity.total_trades === 0 ? (
+          <div class="text-center py-4">
+            <div class="text-gray-500 dark:text-gray-400 text-sm">
+              No trades yet — the paper bot opens positions when its strategy signals an entry.
+            </div>
+          </div>
+        ) : (
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">Trades today</div>
+              <div class="text-xl font-bold text-gray-900 dark:text-white">{activity.trades_today}</div>
+            </div>
+            <div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">P&L today</div>
+              <div class={`text-xl font-bold ${activity.pnl_today >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {formatSigned(activity.pnl_today)}
               </div>
             </div>
-          )}
+            <div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">Total trades</div>
+              <div class="text-xl font-bold text-gray-900 dark:text-white">{activity.total_trades}</div>
+            </div>
+            <div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">Total P&L</div>
+              <div class={`text-xl font-bold ${snapshot.total_pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {formatSigned(snapshot.total_pnl)} ({formatSignedPercent(snapshot.total_pnl_percentage)})
+              </div>
+            </div>
+          </div>
+        )}
+        <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+          <span>BTC price: {formatCurrency(data.market_context.btc_price)}</span>
+          <span>Updated: {new Date(data.last_updated).toLocaleTimeString()}</span>
         </div>
       </div>
     </div>

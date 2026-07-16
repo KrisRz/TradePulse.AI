@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { 
   Eye, TrendingUp, X, Edit, Plus, Minus, Wallet, RefreshCw, Check, Filter, Download, Clock
 } from 'lucide-preact';
@@ -43,50 +43,6 @@ export default function OpenPositionsManager() {
   const [filterBy, setFilterBy] = useState<string>('all');
   const [showBatchActions, setShowBatchActions] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
-
-  // Mock data for development - replace with real API calls
-  // const mockPositions: RealPosition[] = [
-  //   {
-  //     id: 'pos_001',
-  //     symbol: 'BTCUSDT',
-  //     side: 'long',
-  //     size: 0.1,
-  //     entryPrice: 95000,
-  //     currentPrice: 96500,
-  //     unrealizedPnL: 150,
-  //     unrealizedPnLPercent: 1.58,
-  //     stopLoss: 92000,
-  //     takeProfit: 98000,
-  //     marginUsed: 4750,
-  //     openTime: '2024-01-15T10:30:00Z',
-  //     duration: '2h 15m',
-  //     aiConfidence: 85,
-  //     strategy: 'AI_REVERSAL_V2',
-  //     riskLevel: 'medium',
-  //     exchange: 'binance',
-  //     leverage: 20
-  //   },
-  //   {
-  //     id: 'pos_002',
-  //     symbol: 'BTCUSDT',
-  //     side: 'short',
-  //     size: 0.05,
-  //     entryPrice: 96000,
-  //     currentPrice: 96500,
-  //     unrealizedPnL: -25,
-  //     unrealizedPnLPercent: -0.52,
-  //     stopLoss: 97500,
-  //     takeProfit: 94000,
-  //     marginUsed: 2400,
-  //     openTime: '2024-01-15T09:45:00Z',
-  //     duration: '3h 0m',
-  //     aiConfidence: 72,
-  //     strategy: 'AI_MOMENTUM_V1',
-  //     riskLevel: 'high',
-  //     exchange: 'binance',
-  //     leverage: 20
-  //   }
-  // ];
 
   // Calculate summary statistics
   const calculateSummary = (positions: RealPosition[]): PositionSummary => {

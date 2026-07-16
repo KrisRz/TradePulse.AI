@@ -20,33 +20,34 @@
       <!-- Badge -->
       <div class="inline-flex items-center px-4 py-2 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full text-sm font-medium mb-6">
         <span class="w-2 h-2 bg-profit-500 rounded-full mr-2 animate-pulse"></span>
-        AI Trading System Live • 68% Win Rate
+        Paper Trading Live Since July 2026 • Walk-Forward Validated
       </div>
       
       <!-- Main headline -->
       <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6">
-        <span class="block">AI-Powered Crypto Trading</span>
-        <span class="block text-gradient-animate">That Actually Works</span>
+        <span class="block">Algorithmic Crypto Trading</span>
+        <span class="block text-gradient-animate">With a Validated Edge</span>
       </h1>
       
       <!-- Subheadline -->
       <p class="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">
-        Start with $10,000 virtual portfolio. Prove your profits. Graduate to real money trading.
-        <span class="text-primary-600 dark:text-primary-400 font-semibold">No risk, all reward.</span>
+        Start with a $50,000 virtual portfolio and follow a strategy validated walk-forward,
+        out-of-sample on 2017&ndash;2026 BTC data.
+        <span class="text-primary-600 dark:text-primary-400 font-semibold">Paper trading &mdash; no real money at risk.</span>
       </p>
       
       <!-- Stats -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 max-w-2xl mx-auto">
         <div class="text-center">
-          <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">68%</div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">AI Win Rate</div>
+          <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">1.11</div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">OOS Sharpe (vs 0.87 buy &amp; hold)</div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-primary-600 dark:text-primary-400">24/7</div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">Autonomous Trading</div>
+          <div class="text-3xl font-bold text-primary-600 dark:text-primary-400">&minus;49%</div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">Max Drawdown (vs &minus;77% buy &amp; hold)</div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-warning-600 dark:text-warning-400">$10k</div>
+          <div class="text-3xl font-bold text-warning-600 dark:text-warning-400">$50k</div>
           <div class="text-sm text-gray-600 dark:text-gray-400">Virtual Start</div>
         </div>
       </div>
@@ -60,34 +61,19 @@
           Start Virtual Trading
         </a>
         <a 
-          href="/demo" 
+          href="/auth/register" 
           class="bg-white dark:bg-dark-800 text-primary-600 dark:text-primary-400 px-8 py-4 rounded-lg font-semibold text-lg border border-primary-200 dark:border-primary-700 hover:bg-primary-50 dark:hover:bg-primary-900 transition-colors focus-ring"
         >
-          View Live Demo
+          Create Free Account
         </a>
       </div>
       
-      <!-- Social Proof -->
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-8 text-sm text-gray-600 dark:text-gray-400">
-        <div class="flex items-center">
-          <div class="flex -space-x-2">
-            <div class="w-8 h-8 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full border-2 border-white dark:border-dark-900 flex items-center justify-center text-white text-xs font-medium">J</div>
-            <div class="w-8 h-8 bg-gradient-to-r from-profit-500 to-profit-600 rounded-full border-2 border-white dark:border-dark-900 flex items-center justify-center text-white text-xs font-medium">S</div>
-            <div class="w-8 h-8 bg-gradient-to-r from-warning-500 to-warning-600 rounded-full border-2 border-white dark:border-dark-900 flex items-center justify-center text-white text-xs font-medium">M</div>
-            <div class="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full border-2 border-white dark:border-dark-900 flex items-center justify-center text-white text-xs font-medium">+</div>
-          </div>
-          <span class="ml-3">2,847 active traders</span>
-        </div>
-        <div class="flex items-center">
-          <div class="flex text-yellow-400 mr-2">
-            {Array.from({length: 5}, (_, i) => (
-              <svg key={i} class="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-              </svg>
-            ))}
-          </div>
-          <span>4.9/5 from 847 reviews</span>
-        </div>
+      <!-- Methodology note (real, verifiable claims only) -->
+      <div class="flex items-center justify-center text-sm text-gray-600 dark:text-gray-400">
+        <span>
+          Strategy: EMA20/100 crossover, BTC 1d, long-only &middot; validated on a walk-forward,
+          out-of-sample harness (fees + slippage included) &middot; paper trading live since 2026-07-16
+        </span>
       </div>
     </div>
   </div>
@@ -97,42 +83,42 @@
     <div class="gradient-border rounded-xl overflow-hidden shadow-2xl">
       <div class="bg-white dark:bg-dark-800 p-1">
         <div class="bg-gray-50 dark:bg-dark-900 rounded-lg p-6">
-          <!-- Mock dashboard preview -->
+          <!-- Validated strategy metrics (walk-forward, out-of-sample; docs/M4_EDGE_VALIDATION.md) -->
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Virtual Portfolio Dashboard</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Validated Strategy Metrics</h3>
             <div class="flex items-center space-x-2">
               <div class="w-2 h-2 bg-profit-500 rounded-full"></div>
-              <span class="text-sm text-gray-600 dark:text-gray-400">Live Trading</span>
+              <span class="text-sm text-gray-600 dark:text-gray-400">Paper Trading Live</span>
             </div>
           </div>
           
           <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <!-- Portfolio Value -->
+            <!-- OOS Sharpe -->
             <div class="bg-white dark:bg-dark-800 p-4 rounded-lg">
-              <div class="text-sm text-gray-600 dark:text-gray-400">Portfolio Value</div>
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">$14,750</div>
-              <div class="text-sm text-profit-600 dark:text-profit-400">+47.5% ↗</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">Out-of-Sample Sharpe</div>
+              <div class="text-2xl font-bold text-profit-600 dark:text-profit-400">1.11</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">vs 0.87 buy &amp; hold</div>
             </div>
             
-            <!-- Today's P&L -->
+            <!-- Max Drawdown -->
             <div class="bg-white dark:bg-dark-800 p-4 rounded-lg">
-              <div class="text-sm text-gray-600 dark:text-gray-400">Today's P&L</div>
-              <div class="text-2xl font-bold text-profit-600 dark:text-profit-400">+$342</div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">+2.38%</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">Max Drawdown</div>
+              <div class="text-2xl font-bold text-gray-900 dark:text-white">&minus;49%</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">vs &minus;77% buy &amp; hold</div>
             </div>
             
-            <!-- AI Confidence -->
+            <!-- Strategy -->
             <div class="bg-white dark:bg-dark-800 p-4 rounded-lg">
-              <div class="text-sm text-gray-600 dark:text-gray-400">AI Confidence</div>
-              <div class="text-2xl font-bold text-primary-600 dark:text-primary-400">87%</div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">High</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">Strategy</div>
+              <div class="text-2xl font-bold text-primary-600 dark:text-primary-400">EMA 20/100</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">BTC 1d, long-only</div>
             </div>
             
-            <!-- Active Trades -->
+            <!-- Validation window -->
             <div class="bg-white dark:bg-dark-800 p-4 rounded-lg">
-              <div class="text-sm text-gray-600 dark:text-gray-400">Active Trades</div>
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">3</div>
-              <div class="text-sm text-warning-600 dark:text-warning-400">BTC/USDT</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">Validated Out-of-Sample</div>
+              <div class="text-2xl font-bold text-gray-900 dark:text-white">2017&ndash;2026</div>
+              <div class="text-sm text-warning-600 dark:text-warning-400">walk-forward folds</div>
             </div>
           </div>
           
@@ -140,7 +126,7 @@
           <div class="mt-6 bg-white dark:bg-dark-800 p-4 rounded-lg">
             <div class="h-32 bg-gradient-to-r from-primary-100 to-profit-100 dark:from-primary-900 dark:to-profit-900 rounded-lg flex items-center justify-center">
               <div class="text-center">
-                <div class="text-sm text-gray-600 dark:text-gray-400 mb-2">Live Performance Chart</div>
+                <div class="text-sm text-gray-600 dark:text-gray-400 mb-2">Backtest window: 2017&ndash;2026 &middot; 36 out-of-sample trades &middot; fees &amp; slippage included</div>
                 <div class="flex items-center justify-center space-x-2">
                   <div class="w-1 h-8 bg-primary-500 rounded animate-pulse"></div>
                   <div class="w-1 h-12 bg-profit-500 rounded animate-pulse" style="animation-delay: 0.2s"></div>
