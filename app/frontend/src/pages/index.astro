@@ -2,75 +2,119 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/astro/Header.astro';
 import Hero from '../components/astro/Hero.astro';
-import Features from '../components/astro/Features.astro';
 import Stats from '../components/astro/Stats.astro';
 import Footer from '../components/astro/Footer.astro';
 ---
 
-<BaseLayout title="TradePulse.AI - AI-Powered Crypto Day Trading Platform">
+<BaseLayout title="TradePulse — systematic Bitcoin trading, proven on paper first" description="A walk-forward validated Bitcoin strategy running live paper trading. Every decision recorded. Evidence before money.">
   <Header />
-  
+
   <main class="overflow-hidden">
     <Hero />
     <Stats />
-    <Features />
-    
-    <!-- CTA Section -->
-    <section class="py-20 bg-gradient-to-r from-primary-600 to-primary-700">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <h2 class="text-3xl md:text-4xl font-bold text-white mb-6">
-          Ready to Start AI-Powered Trading?
-        </h2>
-        <p class="text-xl text-primary-100 mb-8 max-w-2xl mx-auto">
-          Follow a walk-forward validated strategy on a virtual portfolio.
-          No real money at risk while the system proves itself in live paper trading.
+
+    <!-- Quiet CTA -->
+    <section class="closing-cta">
+      <div class="cta-wrap">
+        <h2>Follow the experiment</h2>
+        <p>
+          Create an account to watch the strategy trade a virtual portfolio in real time —
+          or inspect the bot's public ledger without one.
         </p>
-        <div class="flex flex-col sm:flex-row gap-4 justify-center">
-          <a 
-            href="/auth/login" 
-            class="bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors focus-ring"
-          >
-            Start Trading Now
-          </a>
-          <a 
-            href="/auth/register" 
-            class="border border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white/10 transition-colors focus-ring"
-          >
-            Create Free Account
-          </a>
+        <div class="cta-buttons">
+          <a href="/auth/register" class="btn-solid">Create a free account</a>
+          <a href="/auth/login" class="btn-line">Sign in</a>
         </div>
       </div>
     </section>
-    
+
+    <!-- UK risk disclosure -->
+    <section class="risk-band" aria-label="Risk disclosure">
+      <div class="risk-wrap">
+        <p class="risk-title mono">RISK DISCLOSURE</p>
+        <p>
+          TradePulse is a personal research project, not a financial service. Nothing on this
+          site is investment advice or a financial promotion, and TradePulse is not authorised
+          or regulated by the Financial Conduct Authority. The system trades a virtual
+          portfolio only. Cryptoassets are high-risk and largely unregulated in the UK — if you
+          choose to trade them yourself, you should be prepared to lose all the money you invest,
+          and you are unlikely to be protected by the FSCS or the Financial Ombudsman Service.
+        </p>
+      </div>
+    </section>
   </main>
-  
+
   <Footer />
 </BaseLayout>
 
 <style>
-  /* Custom animations for landing page */
-  @keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
+  .closing-cta {
+    --paper: #f6f5f1;
+    --ink: #101d2c;
+    --sterling: #0e6e4c;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: "Public Sans", system-ui, sans-serif;
   }
-  
-  .animate-float {
-    animation: float 3s ease-in-out infinite;
+  .cta-wrap {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 4.5rem 1.5rem;
   }
-  
-  /* Gradient text animation */
-  .text-gradient-animate {
-    background: linear-gradient(-45deg, #3b82f6, #1d4ed8, #6366f1, #8b5cf6);
-    background-size: 400% 400%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: gradientShift 3s ease infinite;
+  .closing-cta h2 {
+    font-family: "Libre Caslon Text", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(1.9rem, 4vw, 2.7rem);
+    margin: 0 0 1rem;
   }
-  
-  @keyframes gradientShift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+  .closing-cta p {
+    color: #b9c2cc;
+    max-width: 34rem;
+    line-height: 1.65;
+    margin: 0 0 2rem;
   }
-</style> 
+  .cta-buttons { display: flex; flex-wrap: wrap; gap: 1rem; }
+  .btn-solid {
+    background: #0e6e4c;
+    color: #fff;
+    padding: 0.85rem 1.6rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    border-radius: 2px;
+  }
+  .btn-solid:hover { background: #0c5f42; }
+  .btn-line {
+    color: var(--paper);
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    padding: 0.85rem 1.6rem;
+    border: 1px solid #3a4a5c;
+    border-radius: 2px;
+  }
+  .btn-line:hover { border-color: var(--paper); }
+  .btn-solid:focus-visible, .btn-line:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+  .risk-band {
+    background: #eeede7;
+    border-top: 1px solid #d9dcd4;
+    font-family: "Public Sans", system-ui, sans-serif;
+  }
+  .risk-wrap { max-width: 72rem; margin: 0 auto; padding: 2rem 1.5rem 2.2rem; }
+  .risk-title {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    color: #a63a46;
+    margin: 0 0 0.6rem;
+    font-weight: 500;
+  }
+  .risk-band p:not(.risk-title) {
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: #5c6875;
+    max-width: 56rem;
+    margin: 0;
+  }
+</style>

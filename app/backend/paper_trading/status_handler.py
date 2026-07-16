@@ -109,7 +109,12 @@ def handler(event, context):
     if params.get("format") == "json":
         return {
             "statusCode": 200,
-            "headers": {"content-type": "application/json", "cache-control": "no-store"},
+            "headers": {
+                "content-type": "application/json",
+                "cache-control": "no-store",
+                # landing page reads the live ledger cross-origin
+                "access-control-allow-origin": "*",
+            },
             "body": json.dumps(data, default=str),
         }
     return {

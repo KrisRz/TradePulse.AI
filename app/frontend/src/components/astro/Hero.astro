@@ -1,173 +1,198 @@
 ---
-// Hero section component
+// Hero — "London ledger" direction. Opens with the live system itself:
+// a ledger strip fed by the real bot status endpoint, then the thesis.
+const STATUS_URL = "https://xwibtclmvzlqtz2xtgrnm7l3tm0hzqbs.lambda-url.eu-west-2.on.aws/?format=json";
+const BOT_URL = "https://xwibtclmvzlqtz2xtgrnm7l3tm0hzqbs.lambda-url.eu-west-2.on.aws/";
 ---
 
-<section class="relative bg-gradient-to-br from-primary-50 to-primary-100 dark:from-dark-900 dark:to-dark-800 py-20 lg:py-32 overflow-hidden">
-  <!-- Background pattern -->
-  <div class="absolute inset-0 opacity-10">
-    <div class="absolute inset-0 bg-[url('/grid.svg')] bg-repeat"></div>
+<section class="ledger-hero" data-status-url={STATUS_URL}>
+  <!-- Signature: live ledger strip -->
+  <div class="ledger-strip" id="ledger-strip" aria-live="polite">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="mono" id="ledger-text">PAPER TRADING · BTCUSDT 1d · EMA 20/100 · live since 16 Jul 2026</span>
   </div>
-  
-  <!-- Floating particles -->
-  <div class="absolute inset-0 overflow-hidden">
-    <div class="absolute top-1/4 left-1/4 w-32 h-32 bg-primary-400 rounded-full opacity-20 animate-pulse-slow"></div>
-    <div class="absolute top-1/3 right-1/3 w-24 h-24 bg-primary-500 rounded-full opacity-30 animate-bounce-slow"></div>
-    <div class="absolute bottom-1/4 right-1/4 w-20 h-20 bg-primary-600 rounded-full opacity-20 animate-ping-slow"></div>
-  </div>
-  
-  <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <div class="text-center">
-      <!-- Badge -->
-      <div class="inline-flex items-center px-4 py-2 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full text-sm font-medium mb-6">
-        <span class="w-2 h-2 bg-profit-500 rounded-full mr-2 animate-pulse"></span>
-        Paper Trading Live Since July 2026 • Walk-Forward Validated
-      </div>
-      
-      <!-- Main headline -->
-      <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6">
-        <span class="block">Algorithmic Crypto Trading</span>
-        <span class="block text-gradient-animate">With a Validated Edge</span>
-      </h1>
-      
-      <!-- Subheadline -->
-      <p class="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">
-        Start with a $50,000 virtual portfolio and follow a strategy validated walk-forward,
-        out-of-sample on 2017&ndash;2026 BTC data.
-        <span class="text-primary-600 dark:text-primary-400 font-semibold">Paper trading &mdash; no real money at risk.</span>
+
+  <div class="hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">A systematic Bitcoin strategy, run in public</p>
+      <h1>Evidence<br />before money.</h1>
+      <p class="lede">
+        TradePulse trades one validated strategy on daily Bitcoin bars —
+        backtest and live share the same code, every decision is recorded,
+        and not a pound is at risk while the system earns its proof.
       </p>
-      
-      <!-- Stats -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 max-w-2xl mx-auto">
-        <div class="text-center">
-          <div class="text-3xl font-bold text-profit-600 dark:text-profit-400">1.11</div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">OOS Sharpe (vs 0.87 buy &amp; hold)</div>
-        </div>
-        <div class="text-center">
-          <div class="text-3xl font-bold text-primary-600 dark:text-primary-400">&minus;49%</div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">Max Drawdown (vs &minus;77% buy &amp; hold)</div>
-        </div>
-        <div class="text-center">
-          <div class="text-3xl font-bold text-warning-600 dark:text-warning-400">$50k</div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">Virtual Start</div>
-        </div>
-      </div>
-      
-      <!-- CTA Buttons -->
-      <div class="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-        <a 
-          href="/auth/signup" 
-          class="bg-primary-600 hover:bg-primary-700 text-white px-8 py-4 rounded-lg font-semibold text-lg transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-1 focus-ring"
-        >
-          Start Virtual Trading
-        </a>
-        <a 
-          href="/auth/register" 
-          class="bg-white dark:bg-dark-800 text-primary-600 dark:text-primary-400 px-8 py-4 rounded-lg font-semibold text-lg border border-primary-200 dark:border-primary-700 hover:bg-primary-50 dark:hover:bg-primary-900 transition-colors focus-ring"
-        >
-          Create Free Account
-        </a>
-      </div>
-      
-      <!-- Methodology note (real, verifiable claims only) -->
-      <div class="flex items-center justify-center text-sm text-gray-600 dark:text-gray-400">
-        <span>
-          Strategy: EMA20/100 crossover, BTC 1d, long-only &middot; validated on a walk-forward,
-          out-of-sample harness (fees + slippage included) &middot; paper trading live since 2026-07-16
-        </span>
+      <div class="cta-row">
+        <a class="btn-primary" href="/auth/register">Create a free account</a>
+        <a class="btn-ghost" href={BOT_URL} rel="noopener">Watch the live bot →</a>
       </div>
     </div>
-  </div>
-  
-  <!-- Dashboard Preview -->
-  <div class="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-16">
-    <div class="gradient-border rounded-xl overflow-hidden shadow-2xl">
-      <div class="bg-white dark:bg-dark-800 p-1">
-        <div class="bg-gray-50 dark:bg-dark-900 rounded-lg p-6">
-          <!-- Validated strategy metrics (walk-forward, out-of-sample; docs/M4_EDGE_VALIDATION.md) -->
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Validated Strategy Metrics</h3>
-            <div class="flex items-center space-x-2">
-              <div class="w-2 h-2 bg-profit-500 rounded-full"></div>
-              <span class="text-sm text-gray-600 dark:text-gray-400">Paper Trading Live</span>
-            </div>
-          </div>
-          
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <!-- OOS Sharpe -->
-            <div class="bg-white dark:bg-dark-800 p-4 rounded-lg">
-              <div class="text-sm text-gray-600 dark:text-gray-400">Out-of-Sample Sharpe</div>
-              <div class="text-2xl font-bold text-profit-600 dark:text-profit-400">1.11</div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">vs 0.87 buy &amp; hold</div>
-            </div>
-            
-            <!-- Max Drawdown -->
-            <div class="bg-white dark:bg-dark-800 p-4 rounded-lg">
-              <div class="text-sm text-gray-600 dark:text-gray-400">Max Drawdown</div>
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">&minus;49%</div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">vs &minus;77% buy &amp; hold</div>
-            </div>
-            
-            <!-- Strategy -->
-            <div class="bg-white dark:bg-dark-800 p-4 rounded-lg">
-              <div class="text-sm text-gray-600 dark:text-gray-400">Strategy</div>
-              <div class="text-2xl font-bold text-primary-600 dark:text-primary-400">EMA 20/100</div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">BTC 1d, long-only</div>
-            </div>
-            
-            <!-- Validation window -->
-            <div class="bg-white dark:bg-dark-800 p-4 rounded-lg">
-              <div class="text-sm text-gray-600 dark:text-gray-400">Validated Out-of-Sample</div>
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">2017&ndash;2026</div>
-              <div class="text-sm text-warning-600 dark:text-warning-400">walk-forward folds</div>
-            </div>
-          </div>
-          
-          <!-- Chart placeholder -->
-          <div class="mt-6 bg-white dark:bg-dark-800 p-4 rounded-lg">
-            <div class="h-32 bg-gradient-to-r from-primary-100 to-profit-100 dark:from-primary-900 dark:to-profit-900 rounded-lg flex items-center justify-center">
-              <div class="text-center">
-                <div class="text-sm text-gray-600 dark:text-gray-400 mb-2">Backtest window: 2017&ndash;2026 &middot; 36 out-of-sample trades &middot; fees &amp; slippage included</div>
-                <div class="flex items-center justify-center space-x-2">
-                  <div class="w-1 h-8 bg-primary-500 rounded animate-pulse"></div>
-                  <div class="w-1 h-12 bg-profit-500 rounded animate-pulse" style="animation-delay: 0.2s"></div>
-                  <div class="w-1 h-6 bg-primary-400 rounded animate-pulse" style="animation-delay: 0.4s"></div>
-                  <div class="w-1 h-16 bg-profit-600 rounded animate-pulse" style="animation-delay: 0.6s"></div>
-                  <div class="w-1 h-10 bg-primary-500 rounded animate-pulse" style="animation-delay: 0.8s"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+
+    <aside class="factsheet" aria-label="Strategy factsheet">
+      <h2 class="fs-title mono">STRATEGY FACTSHEET</h2>
+      <dl>
+        <div><dt>Strategy</dt><dd>EMA 20/100 crossover, long only</dd></div>
+        <div><dt>Market</dt><dd>BTC/USDT, daily bars</dd></div>
+        <div><dt>Sharpe, out-of-sample</dt><dd><strong class="good">1.11</strong> vs 0.87 buy &amp; hold</dd></div>
+        <div><dt>Max drawdown</dt><dd><strong class="good">−49%</strong> vs −77% buy &amp; hold</dd></div>
+        <div><dt>Validation</dt><dd>Walk-forward, 2017–2026</dd></div>
+        <div><dt>Costs modelled</dt><dd>0.1% fee + slippage, per side</dd></div>
+        <div><dt>Status</dt><dd>Paper trading, live since 16 Jul 2026</dd></div>
+      </dl>
+      <p class="fs-note">Simulated and live results alike do not guarantee future performance.</p>
+    </aside>
   </div>
 </section>
 
+<script is:inline>
+  (function () {
+    var el = document.getElementById("ledger-text");
+    var section = document.querySelector(".ledger-hero");
+    if (!el || !section) return;
+    fetch(section.dataset.statusUrl)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var pos = { "1": "LONG", "0": "FLAT", "-1": "SHORT" }[String(Math.round(d.position))] || "—";
+        var bar = (d.last_bar || "").slice(0, 10);
+        el.textContent =
+          "LIVE · " + d.symbol + " 1d · " + (d.strategy || "EMA 20/100") +
+          " · position " + pos +
+          " · equity $" + Number(d.equity).toLocaleString("en-GB") +
+          " · last bar " + bar + " · next run 00:10 UTC";
+      })
+      .catch(function () { /* keep the static line */ });
+  })();
+</script>
+
 <style>
-  .text-gradient-animate {
-    background: linear-gradient(-45deg, #3b82f6, #1d4ed8, #6366f1, #8b5cf6);
-    background-size: 400% 400%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: gradientShift 3s ease infinite;
+  .ledger-hero {
+    --paper: #f6f5f1;
+    --ink: #101d2c;
+    --sterling: #0e6e4c;
+    --grey: #5c6875;
+    --rule: #d9dcd4;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Public Sans", system-ui, sans-serif;
   }
-  
-  @keyframes gradientShift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+
+  .ledger-strip {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 1.25rem;
+    border-bottom: 1px solid var(--rule);
+    background: #eeede7;
+    overflow-x: auto;
+    white-space: nowrap;
   }
-  
-  .animate-pulse-slow {
-    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+    color: var(--ink);
   }
-  
-  .animate-bounce-slow {
-    animation: bounce 2s infinite;
+  .dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--sterling);
+    animation: pulse 2.4s ease-in-out infinite;
   }
-  
-  .animate-ping-slow {
-    animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+
+  .hero-grid {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 5rem 1.5rem 4.5rem;
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: 4rem;
+    align-items: start;
   }
-</style> 
+  @media (max-width: 860px) {
+    .hero-grid { grid-template-columns: 1fr; padding-top: 3.5rem; gap: 3rem; }
+  }
+
+  .eyebrow {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sterling);
+    margin: 0 0 1.4rem;
+  }
+  h1 {
+    font-family: "Libre Caslon Text", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(2.8rem, 6.5vw, 4.6rem);
+    line-height: 1.04;
+    letter-spacing: -0.01em;
+    margin: 0 0 1.6rem;
+  }
+  .lede {
+    font-size: 1.13rem;
+    line-height: 1.65;
+    color: var(--grey);
+    max-width: 34rem;
+    margin: 0 0 2.2rem;
+  }
+
+  .cta-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+  .btn-primary {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 0.85rem 1.6rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    border-radius: 2px;
+    transition: background 0.15s ease;
+  }
+  .btn-primary:hover { background: #1d3049; }
+  .btn-primary:focus-visible,
+  .btn-ghost:focus-visible { outline: 2px solid var(--sterling); outline-offset: 3px; }
+  .btn-ghost {
+    color: var(--ink);
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    border-bottom: 2px solid var(--sterling);
+    padding-bottom: 2px;
+  }
+  .btn-ghost:hover { color: var(--sterling); }
+
+  .factsheet {
+    border: 1px solid var(--ink);
+    background: #fffef9;
+    padding: 1.6rem 1.5rem 1.2rem;
+    box-shadow: 6px 6px 0 0 var(--rule);
+  }
+  .fs-title {
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--sterling);
+    margin: 0 0 1rem;
+    font-weight: 500;
+  }
+  dl { margin: 0; }
+  dl > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 0.9rem;
+  }
+  dl > div:last-of-type { border-bottom: 1px solid var(--ink); }
+  dt { color: var(--grey); }
+  dd { margin: 0; text-align: right; font-weight: 500; }
+  .good { color: var(--sterling); }
+  .fs-note {
+    font-size: 0.75rem;
+    color: var(--grey);
+    margin: 0.9rem 0 0;
+    font-style: italic;
+  }
+</style>
