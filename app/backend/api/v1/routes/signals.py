@@ -158,25 +158,30 @@ async def generate_real_ai_signal(
     try:
         logger.info(f"🧠 Generating REAL AI signal for {request.symbol}")
         
-        # Use REAL enterprise trading engine
-        from app.backend.services import enterprise_trading_engine
-        
-        # Generate real AI signal
-        signal_data = await enterprise_trading_engine.generate_signal(request.symbol)
-        
-        # Convert to API response format
+        # Use the REAL engine INSTANCE from the DI container (the module has
+        # no generate_signal — importing the module here was a latent 500)
+        from app.backend.core.container import get_container
+        engine = get_container().get("enterprise_trading_engine")
+        if engine is None or not getattr(engine, "is_initialized", False):
+            raise RuntimeError("enterprise engine not initialized")
+
+        # Generate real AI signal (engine returns a TradingSignal dataclass)
+        signal = await engine.generate_signal(request.symbol)
+        if signal is None:
+            raise RuntimeError("engine returned no signal (safety gate or missing data)")
+
         response_data = {
             "signal_id": f"sig_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            "symbol": signal_data["symbol"],
-            "signal_type": SignalType.BUY if signal_data["action"] == "BUY" else SignalType.SELL if signal_data["action"] == "SELL" else SignalType.HOLD,
-            "strength": SignalStrength.STRONG if signal_data["confidence"] > 0.8 else SignalStrength.MODERATE if signal_data["confidence"] > 0.6 else SignalStrength.WEAK,
-            "confidence": signal_data["confidence"],
-            "price": signal_data["price"],
-            "timestamp": datetime.fromisoformat(signal_data["timestamp"].replace('Z', '+00:00')),
-            "reasoning": f"6-Layer AI Analysis: {signal_data['reasoning']}"
+            "symbol": signal.symbol,
+            "signal_type": SignalType.BUY if signal.action == "BUY" else SignalType.SELL if signal.action == "SELL" else SignalType.HOLD,
+            "strength": SignalStrength.STRONG if signal.confidence > 0.8 else SignalStrength.MODERATE if signal.confidence > 0.6 else SignalStrength.WEAK,
+            "confidence": signal.confidence,
+            "price": signal.price,
+            "timestamp": signal.timestamp,
+            "reasoning": f"6-Layer AI Analysis: {signal.reasoning}",
         }
-        
-        logger.info(f"✅ REAL AI signal generated: {signal_data['action']} with {signal_data['confidence']:.1%} confidence")
+
+        logger.info(f"✅ REAL AI signal generated: {signal.action} with {signal.confidence:.1%} confidence")
         
         return TradingSignalResponse(**response_data)
         
