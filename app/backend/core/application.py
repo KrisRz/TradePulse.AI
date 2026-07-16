@@ -18,7 +18,6 @@ from app.backend.core.logging import get_logger, configure_logging
 from app.backend.core.exceptions import TradePulseException
 from app.backend.core.middleware import create_rate_limit_middleware
 from app.backend.core.metrics import create_prometheus_middleware
-from app.backend.core.lifespan import create_lifespan_handler
 from app.backend.core.container import get_container
 from app.backend.presentation.api.router import create_api_router
 from app.backend.services.startup_initialization_service import initialize_application
@@ -107,6 +106,15 @@ class TradePulseApplication:
                     logger.error("❌ Some database tables could not be created")
             except Exception as e:
                 logger.error(f"❌ Database table migration failed: {e}")
+
+            # Load brain state once — sets the BrainStateStore readiness barrier
+            # every wait_ready() caller depends on (previously only the dead
+            # lifespan module did this, so waiters hung forever).
+            try:
+                from app.backend.core.brain_state_store import get_brain_state_store
+                await get_brain_state_store().load_once()
+            except Exception as e:
+                logger.error(f"❌ Brain state load failed: {e}")
             
             async def init_enterprise_engine():
                 try:
@@ -162,19 +170,21 @@ class TradePulseApplication:
                     logger.info("🚀 PHASE 4: Adding missing core services...")
                     
                     try:
-                        # Entry Engine - FIXED: Register instance directly to prevent callable errors
+                        # Entry Engine — is_registered, NOT get(): get() raises
+                        # KeyError before registration, which used to abort this
+                        # whole phase into the placeholder except-branch.
                         from app.backend.services.intelligent_entry_engine import IntelligentEntryEngine
-                        if not self.container.get("entry_engine"):  # Prevent duplicate initialization
+                        if not self.container.is_registered("entry_engine"):
                             entry_engine = IntelligentEntryEngine()
                             await entry_engine.initialize()
-                            self.container.register_singleton("entry_engine", entry_engine)  # FIXED: Direct instance
-                        
-                        # Exit Engine - FIXED: Register instance directly
+                            self.container.register_singleton("entry_engine", entry_engine)
+
+                        # Exit Engine
                         from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
-                        if not self.container.get("exit_engine"):  # Prevent duplicate initialization
+                        if not self.container.is_registered("exit_engine"):
                             exit_engine = IntelligentExitEngine()
                             await exit_engine.initialize()
-                            self.container.register_singleton("exit_engine", exit_engine)  # FIXED: Direct instance
+                            self.container.register_singleton("exit_engine", exit_engine)
                         
                         # Risk Manager
                         from app.backend.services.dynamic_risk_manager import DynamicRiskManager
@@ -189,11 +199,12 @@ class TradePulseApplication:
                         await emergency_system.initialize()
                         self.container.register_singleton("emergency_controls", lambda: emergency_system)
                         
-                        # Market Data Services
-                        from app.backend.services.live_market_data import LiveMarketDataService
-                        market_service = LiveMarketDataService()
-                        await market_service.initialize()
-                        self.container.register_singleton("live_market_data", lambda: market_service)
+                        # Market Data Services — use the module singleton so the
+                        # singleton_app startup (WebSocket streams) reuses the
+                        # SAME instance instead of streaming twice.
+                        from app.backend.services.live_market_data import get_live_market_data_service
+                        market_service = await get_live_market_data_service()
+                        self.container.register_singleton("live_market_data", market_service)
                         
                         logger.info("✅ PHASE 4 COMPLETE: All core services ready")
                     except Exception as core_error:
