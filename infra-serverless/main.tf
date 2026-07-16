@@ -198,6 +198,85 @@ resource "aws_scheduler_schedule" "daily_step" {
   }
 }
 
+# ------------------------------------------------- Status endpoint (❓D7) --
+# Read-only public status page/JSON — one user, paper data, no secrets.
+resource "aws_iam_role" "status_exec" {
+  name = "${local.function_name}-status-exec"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "status_logs" {
+  role       = aws_iam_role.status_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "status_dynamodb_read" {
+  name = "${local.function_name}-status-read"
+  role = aws_iam_role.status_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["dynamodb:GetItem", "dynamodb:Query"]
+      Resource = aws_dynamodb_table.paper_bot.arn
+    }]
+  })
+}
+
+resource "aws_lambda_function" "status" {
+  function_name    = "${local.function_name}-status"
+  role             = aws_iam_role.status_exec.arn
+  runtime          = "python3.11"
+  handler          = "app.backend.paper_trading.status_handler.handler"
+  filename         = var.lambda_zip_path
+  source_code_hash = filebase64sha256(var.lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  architectures    = ["x86_64"]
+
+  # the paper_trading package pulls pandas via its __init__ import chain
+  layers = [var.pandas_layer_arn]
+
+  environment {
+    variables = {
+      PAPER_STATE_TABLE = aws_dynamodb_table.paper_bot.name
+      PAPER_STATE_PK    = "BTCUSDT_1d"
+    }
+  }
+}
+
+resource "aws_lambda_function_url" "status" {
+  function_name      = aws_lambda_function.status.function_name
+  authorization_type = "NONE"
+}
+
+# auth NONE still requires an explicit public-invoke resource policy
+resource "aws_lambda_permission" "status_public" {
+  statement_id           = "AllowPublicFunctionUrl"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.status.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
+resource "aws_cloudwatch_log_group" "status" {
+  name              = "/aws/lambda/${local.function_name}-status"
+  retention_in_days = 14
+}
+
+output "status_url" {
+  value = aws_lambda_function_url.status.function_url
+}
+
 # ------------------------------------------------------------------ Alarm --
 resource "aws_sns_topic" "alerts" {
   name = "${local.function_name}-alerts"

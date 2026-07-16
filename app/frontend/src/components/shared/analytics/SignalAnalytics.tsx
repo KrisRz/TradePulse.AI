@@ -1,31 +1,25 @@
-import { useState } from 'preact/hooks';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
+import { useState, useEffect } from 'preact/hooks';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
   ResponsiveContainer,
-  BarChart3,
+  LineChart,
   Line,
-  BarChart3,
-  Pie,
-  Cell,
   AreaChart,
   Area
 } from 'recharts';
-import { 
-  TrendingUp, 
-  Clock, 
-  Brain, 
+import {
+  TrendingUp,
+  Target,
+  Brain,
   Award,
   AlertTriangle,
   RefreshCw,
-  BarChart3,
-  BarChart3 as PieChartIcon,
-  Activity,
   Download
 } from 'lucide-preact';
 
@@ -150,119 +144,20 @@ export default function SignalAnalytics({
         }));
       }
 
-      // Generate time analysis (simplified for now)
-      const realTimeAnalysis: TimeAnalysis[] = Array.from({length: 24}, (_, hour) => ({
-        hour,
-        signals: 0,
-        successRate: 0,
-        avgPnL: 0,
-        confidence: 0
-      }));
-
-      const mockConfidenceAnalysis: ConfidenceAnalysis[] = [
-        {
-          range: '90-100%',
-          signals: 45,
-          successRate: 91.1,
-          avgPnL: 45.67,
-          minConfidence: 90,
-          maxConfidence: 100
-        },
-        {
-          range: '80-89%',
-          signals: 78,
-          successRate: 83.3,
-          avgPnL: 32.45,
-          minConfidence: 80,
-          maxConfidence: 89
-        },
-        {
-          range: '70-79%',
-          signals: 124,
-          successRate: 71.8,
-          avgPnL: 25.89,
-          minConfidence: 70,
-          maxConfidence: 79
-        },
-        {
-          range: '60-69%',
-          signals: 89,
-          successRate: 62.9,
-          avgPnL: 18.23,
-          minConfidence: 60,
-          maxConfidence: 69
-        },
-        {
-          range: '50-59%',
-          signals: 11,
-          successRate: 45.5,
-          avgPnL: 8.67,
-          minConfidence: 50,
-          maxConfidence: 59
-        }
-      ];
-
-      // Generate time analysis (simplified for now)
-      const timeAnalysis: TimeAnalysis[] = Array.from({length: 24}, (_, hour) => ({
-        hour,
-        signals: Math.floor(Math.random() * 20) + 5,
-        successRate: 60 + Math.random() * 20,
-        avgPnL: 15 + Math.random() * 30,
-        volume: 10000 + Math.random() * 50000
-      }));
-
-      // Generate confidence analysis (simplified for now)
-      const confidenceAnalysis: ConfidenceAnalysis[] = [
-        {
-          range: '90-100%',
-          signals: 45,
-          successRate: 84.4,
-          avgPnL: 45.67,
-          minConfidence: 90,
-          maxConfidence: 100
-        },
-        {
-          range: '80-89%',
-          signals: 78,
-          successRate: 75.6,
-          avgPnL: 32.45,
-          minConfidence: 80,
-          maxConfidence: 89
-        },
-        {
-          range: '70-79%',
-          signals: 124,
-          successRate: 71.8,
-          avgPnL: 28.90,
-          minConfidence: 70,
-          maxConfidence: 79
-        },
-        {
-          range: '60-69%',
-          signals: 67,
-          successRate: 61.2,
-          avgPnL: 19.45,
-          minConfidence: 60,
-          maxConfidence: 69
-        },
-        {
-          range: '50-59%',
-          signals: 33,
-          successRate: 24.2,
-          avgPnL: 8.90,
-          minConfidence: 50,
-          maxConfidence: 59
-        }
-      ];
+      // No backend endpoints exist yet for time-of-day or confidence-bucket
+      // breakdowns. Render honest empty states instead of fabricated numbers.
+      const timeAnalysis: TimeAnalysis[] = [];
+      const confidenceAnalysis: ConfidenceAnalysis[] = [];
 
       // Set real data immediately
       setMetrics(realMetrics);
       setStrategyData(strategyData);
       setTimeAnalysis(timeAnalysis);
       setConfidenceAnalysis(confidenceAnalysis);
-      
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
+    } finally {
       setLoading(false);
     }
   };
@@ -314,7 +209,7 @@ export default function SignalAnalytics({
 
   const renderTimeChart = () => (
     <ResponsiveContainer width="100%" height={300}>
-      <BarChart3 data={timeAnalysis}>
+      <LineChart data={timeAnalysis}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
         <XAxis 
           dataKey="hour" 
@@ -339,7 +234,7 @@ export default function SignalAnalytics({
         <Legend />
         <Line type="monotone" dataKey="successRate" stroke="#3B82F6" strokeWidth={2} name="Success Rate %" />
         <Line type="monotone" dataKey="signals" stroke="#10B981" strokeWidth={2} name="Signal Count" />
-      </BarChart3>
+      </LineChart>
     </ResponsiveContainer>
   );
 
@@ -550,9 +445,21 @@ export default function SignalAnalytics({
             </div>
           </div>
 
-          {selectedChart === 'strategy' && renderStrategyChart()}
-          {selectedChart === 'time' && renderTimeChart()}
-          {selectedChart === 'confidence' && renderConfidenceChart()}
+          {selectedChart === 'strategy' && (strategyData.length > 0 ? renderStrategyChart() : (
+            <div className="flex items-center justify-center h-[300px] text-sm text-gray-500 dark:text-gray-400">
+              No strategy data available yet
+            </div>
+          ))}
+          {selectedChart === 'time' && (timeAnalysis.length > 0 ? renderTimeChart() : (
+            <div className="flex items-center justify-center h-[300px] text-sm text-gray-500 dark:text-gray-400">
+              No time-of-day data available yet
+            </div>
+          ))}
+          {selectedChart === 'confidence' && (confidenceAnalysis.length > 0 ? renderConfidenceChart() : (
+            <div className="flex items-center justify-center h-[300px] text-sm text-gray-500 dark:text-gray-400">
+              No confidence-level data available yet
+            </div>
+          ))}
         </div>
       )}
 
@@ -666,6 +573,13 @@ export default function SignalAnalytics({
               </tr>
             </thead>
             <tbody>
+              {confidenceAnalysis.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-6 px-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No confidence-level data available yet
+                  </td>
+                </tr>
+              )}
               {confidenceAnalysis.map((range, index) => (
                 <tr key={index} className="border-b border-gray-200 dark:border-gray-700">
                   <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">
@@ -689,23 +603,27 @@ export default function SignalAnalytics({
         </div>
       </div>
 
-      {/* Insights */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <div className="flex items-start">
-          <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 mr-3" />
-          <div>
-            <h4 className="text-sm font-medium text-blue-900 dark:text-blue-200 mb-1">
-              Signal Insights
-            </h4>
-            <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
-              <li>• Higher confidence signals ({'>'} 80%) show {formatPercent(confidenceAnalysis[1]?.successRate || 0)} success rate</li>
-              <li>• Best performing strategy: {strategyData.reduce((best, current) => current.successRate > best.successRate ? current : best, strategyData[0])?.strategy} with {formatPercent(strategyData.reduce((best, current) => current.successRate > best.successRate ? current : best, strategyData[0])?.successRate || 0)}</li>
-              <li>• Peak performance hours: 9 AM - 4 PM (market hours)</li>
-              <li>• Model precision: {formatPercent(metrics?.precision || 0)} with F1 score of {formatPercent(metrics?.f1Score || 0)}</li>
-            </ul>
+      {/* Insights (data-derived only; hidden when there is nothing to derive) */}
+      {(metrics || strategyData.length > 0) && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-start">
+            <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 mr-3" />
+            <div>
+              <h4 className="text-sm font-medium text-blue-900 dark:text-blue-200 mb-1">
+                Signal Insights
+              </h4>
+              <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
+                {strategyData.length > 0 && (
+                  <li>• Best performing strategy: {strategyData.reduce((best, current) => current.successRate > best.successRate ? current : best, strategyData[0])?.strategy} with {formatPercent(strategyData.reduce((best, current) => current.successRate > best.successRate ? current : best, strategyData[0])?.successRate || 0)}</li>
+                )}
+                {metrics && (
+                  <li>• Model precision: {formatPercent(metrics.precision)} with F1 score of {formatPercent(metrics.f1Score)}</li>
+                )}
+              </ul>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 } 

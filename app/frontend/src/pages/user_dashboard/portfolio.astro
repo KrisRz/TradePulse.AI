@@ -1,40 +1,10 @@
 ---
 import { TradingViewChart } from '../../components/shared/charts';
+import PortfolioOverview from '../../components/user/portfolio/PortfolioOverview.tsx';
 export const prerender = true;
 
-// Check if user is authenticated and NOT admin
-const isUser = true; // In real app, check auth from cookies/session
-const isAdmin = false; // In real app, check if user has admin role
-
-if (!isUser) {
-  return Astro.redirect('/auth/login');
-}
-
-// Redirect admin users to admin dashboard
-if (isAdmin) {
-  return Astro.redirect('/admin/dashboard');
-}
-
-// Skip SSR fetch - data will be loaded client-side by React components
-// SSR fetch with relative URLs fails during build time
-let portfolioData = null;
-let fetchError = null;
-
-// Helper functions for formatting
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(amount);
-}
-
-function formatPercentage(value: number): string {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-}
-
-function calculatePercentage(value: number, total: number): number {
-  return total > 0 ? (value / total) * 100 : 0;
-}
+// The site is built with output: 'static', so authentication is enforced
+// client-side (inline guard script below), exactly like user_dashboard/index.astro.
 ---
 
 <html lang="en">
@@ -43,7 +13,41 @@ function calculatePercentage(value: number, total: number): number {
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Portfolio View - TradePulse.AI</title>
-  
+
+  <!--
+    Client-side auth guard. Any logged-in user (valid, unexpired JWT) may view
+    this page; otherwise redirect to login. The page stays hidden until the
+    check passes to avoid flashing content.
+  -->
+  <script is:inline>
+    (function () {
+      document.documentElement.style.visibility = 'hidden';
+      try {
+        var token = localStorage.getItem('token');
+        if (!token) {
+          location.replace('/auth/login');
+          return;
+        }
+        var payloadPart = (token.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/');
+        var payload = JSON.parse(atob(payloadPart));
+        if (payload.exp && payload.exp <= Date.now() / 1000) {
+          location.replace('/auth/login');
+          return;
+        }
+        // Check passed - reveal the page and show the logged-in user's identity
+        document.documentElement.style.visibility = '';
+        document.addEventListener('DOMContentLoaded', function () {
+          var el = document.getElementById('user-email');
+          if (el && (payload.email || payload.username)) {
+            el.textContent = payload.email || payload.username;
+          }
+        });
+      } catch (e) {
+        location.replace('/auth/login');
+      }
+    })();
+  </script>
+
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -63,7 +67,7 @@ function calculatePercentage(value: number, total: number): number {
       }
     }
   </script>
-  
+
   <!-- Dark mode script -->
   <script>
     if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -89,10 +93,11 @@ function calculatePercentage(value: number, total: number): number {
             </h1>
           </div>
         </div>
-        
+
         <div class="flex items-center space-x-4">
+          <!-- User Info (filled client-side from the JWT payload) -->
           <div class="text-sm text-gray-600 dark:text-gray-400">
-            👤 trader1@example.com
+            👤 <span id="user-email"></span>
           </div>
           <a href="/auth/login" class="text-sm text-red-600 hover:text-red-800 dark:text-red-400">
             Logout
@@ -104,7 +109,7 @@ function calculatePercentage(value: number, total: number): number {
 
   <!-- Main Content -->
   <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-    
+
     <!-- Portfolio Overview -->
     <div class="px-4 py-6 sm:px-0">
       <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
@@ -112,150 +117,16 @@ function calculatePercentage(value: number, total: number): number {
           <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">
             Your Portfolio Performance
           </h2>
-          
-          <!-- Portfolio Stats -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {fetchError || !portfolioData ? (
-              <div class="col-span-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
-                <div class="flex items-center">
-                  <div class="text-red-600 dark:text-red-400 text-sm font-medium">
-                    ❌ Unable to load real portfolio data
-                  </div>
-                </div>
-                {fetchError && (
-                  <div class="mt-2 text-red-600 dark:text-red-400 text-xs">
-                    Error: {fetchError}
-                  </div>
-                )}
-                <div class="mt-4">
-                  <button onclick="location.reload()" class="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors">
-                    Retry
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div class="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
-                  <div class="text-blue-100 text-sm font-medium">Total Portfolio Value</div>
-                  <div class="text-3xl font-bold">{formatCurrency(portfolioData.totalValue || 0)}</div>
-                  <div class="text-blue-100 text-sm mt-1">Virtual Trading Account</div>
-                </div>
 
-                <div class="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-lg text-white">
-                  <div class="text-green-100 text-sm font-medium">Total P&L</div>
-                  <div class="text-3xl font-bold">{formatCurrency(portfolioData.totalPnL || 0)}</div>
-                  <div class="text-green-100 text-sm mt-1">{formatPercentage(portfolioData.totalReturnPercentage || 0)} Return</div>
-                </div>
-
-                <div class="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-lg text-white">
-                  <div class="text-purple-100 text-sm font-medium">Win Rate</div>
-                  <div class="text-3xl font-bold">{(portfolioData.winRate || 0).toFixed(1)}%</div>
-                  <div class="text-purple-100 text-sm mt-1">AI-Assisted Trading</div>
-                </div>
-              </>
-            )}
-          </div>
-
-          <!-- Portfolio Breakdown -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            <!-- Asset Allocation -->
-            <div class="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Asset Allocation</h3>
-              <div class="space-y-4">
-                {portfolioData?.assetAllocation && portfolioData.assetAllocation.length > 0 ? (
-                  portfolioData.assetAllocation.map((asset: any) => {
-                    const colors = ['bg-orange-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-red-500'];
-                    const colorIndex = portfolioData.assetAllocation.indexOf(asset) % colors.length;
-
-                    return (
-                      <div class="flex items-center justify-between">
-                        <div class="flex items-center">
-                          <div class={`w-4 h-4 ${colors[colorIndex]} rounded mr-3`}></div>
-                          <span class="text-sm font-medium text-gray-900 dark:text-white">
-                            {asset.symbol} ({asset.name})
-                          </span>
-                        </div>
-                        <div class="text-right">
-                          <div class="text-sm font-semibold text-gray-900 dark:text-white">
-                            {formatCurrency(asset.value)}
-                          </div>
-                          <div class="text-xs text-gray-500 dark:text-gray-400">
-                            {asset.percentage.toFixed(1)}%
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div class="text-center py-4">
-                    <div class="text-gray-500 dark:text-gray-400 text-sm">
-                      No asset allocation data available
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <!-- Recent Trades -->
-            <div class="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Trades</h3>
-              <div class="space-y-3">
-                {portfolioData?.recentTrades && portfolioData.recentTrades.length > 0 ? (
-                  portfolioData.recentTrades.slice(0, 5).map((trade: any) => {
-                    const pnlColor = trade.pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
-                    const actionColor = trade.action === 'BUY' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400';
-
-                    const formatTime = (timestamp: string) => {
-                      const date = new Date(timestamp);
-                      const now = new Date();
-                      const diffMs = now.getTime() - date.getTime();
-                      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-                      const diffDays = Math.floor(diffHours / 24);
-
-                      if (diffHours < 24) {
-                        return `${diffHours}h ago`;
-                      } else {
-                        return `${diffDays}d ago`;
-                      }
-                    };
-
-                    return (
-                      <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-600 last:border-b-0">
-                        <div>
-                          <div class="text-sm font-medium text-gray-900 dark:text-white">{trade.symbol}</div>
-                          <div class={`text-xs ${actionColor}`}>
-                            {trade.action} • {trade.signalSource}
-                          </div>
-                        </div>
-                        <div class="text-right">
-                          <div class={`text-sm font-semibold ${pnlColor}`}>
-                            {formatCurrency(trade.pnl)}
-                          </div>
-                          <div class="text-xs text-gray-500 dark:text-gray-400">
-                            {formatTime(trade.timestamp)}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div class="text-center py-4">
-                    <div class="text-gray-500 dark:text-gray-400 text-sm">
-                      No recent trades available
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <!-- Portfolio stats + recent trades (live data fetched client-side) -->
+          <PortfolioOverview client:load />
 
           <!-- Live Market Chart -->
           <div class="mt-8">
-            <TradingViewChart 
-              symbol="BTCUSDT" 
-              defaultInterval="1h" 
-              height={400} 
+            <TradingViewChart
+              symbol="BTCUSDT"
+              defaultInterval="1h"
+              height={400}
               showToolbar={true}
               client:load
             />

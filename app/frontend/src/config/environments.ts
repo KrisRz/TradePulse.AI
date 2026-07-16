@@ -17,7 +17,6 @@ export enum Environment {
 
 export interface ApiEndpoints {
   base: string;
-  websocket: string;
   auth: string;
   trading: string;
   portfolio: string;
@@ -71,7 +70,6 @@ const configurations: Record<Environment, EnvironmentConfig> = {
     version: '1.0.0-dev',
     api: {
       base: 'http://localhost:9002',
-      websocket: 'ws://localhost:9002',
       auth: 'http://localhost:9002/api/auth',
       trading: 'http://localhost:9002/api/trading',
       portfolio: 'http://localhost:9002/api/portfolio',
@@ -111,7 +109,6 @@ const configurations: Record<Environment, EnvironmentConfig> = {
     version: '1.0.0-staging',
     api: {
       base: 'https://staging-api.tradepulse.ai',
-      websocket: 'wss://staging-api.tradepulse.ai',
       auth: 'https://staging-api.tradepulse.ai/api/auth',
       trading: 'https://staging-api.tradepulse.ai/api/trading',
       portfolio: 'https://staging-api.tradepulse.ai/api/portfolio',
@@ -151,7 +148,6 @@ const configurations: Record<Environment, EnvironmentConfig> = {
     version: '1.0.3', // Using custom domain via Route53
     api: {
       base: 'https://tradepulseai.co.uk',
-      websocket: 'wss://tradepulseai.co.uk',
       auth: 'https://tradepulseai.co.uk/api/auth',
       trading: 'https://tradepulseai.co.uk/api/trading',
       portfolio: 'https://tradepulseai.co.uk/api/portfolio',

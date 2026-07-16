@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { 
   Calendar, 
   Clock, 
@@ -100,32 +100,14 @@ export default function TradingHeatmap({
         }));
       }
 
-      // Fallback mock data if no real data available
+      // No fabricated fallback: if the backend has no heatmap data yet,
+      // show an honest empty state instead of generated numbers.
       if (heatmapData.length === 0) {
-        heatmapData = [];
-        // Create minimal fallback data
-        for (let day = 0; day < 7; day++) {
-          for (let hour = 0; hour < 24; hour++) {
-            const isMarketHours = hour >= 9 && hour <= 16;
-            const isWeekend = day === 0 || day === 6;
-            const baseActivity = (isMarketHours && !isWeekend) ? 0.8 : 0.3;
-
-            heatmapData.push({
-              hour,
-              day,
-              dayName: dayNames[day],
-              hourLabel: `${hour.toString().padStart(2, '0')}:00`,
-              trades: Math.floor(baseActivity * 20),
-              pnl: (Math.random() - 0.45) * 200 * baseActivity,
-              winRate: 45 + Math.random() * 30,
-              volume: baseActivity * 10000,
-              avgTradeDuration: 30 + Math.random() * 120,
-              intensity: baseActivity
-            });
-          }
-        }
+        setData([]);
+        setStats(null);
+        return;
       }
-      
+
       // Calculate intensity based on selected metric
       const metricValues = heatmapData.map(d => {
         switch (metric) {
@@ -184,7 +166,7 @@ export default function TradingHeatmap({
       const bestPerformance = heatmapData.reduce((max, curr) => curr.pnl > max.pnl ? curr : max);
       const worstPerformance = heatmapData.reduce((min, curr) => curr.pnl < min.pnl ? curr : min);
       
-      const mockStats: HeatmapStats = {
+      const computedStats: HeatmapStats = {
         bestHour,
         worstHour,
         bestDay,
@@ -213,10 +195,11 @@ export default function TradingHeatmap({
       
       // Set real data immediately
       setData(heatmapData);
-      setStats(mockStats);
+      setStats(computedStats);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch heatmap data');
+    } finally {
       setLoading(false);
     }
   };
@@ -422,6 +405,11 @@ export default function TradingHeatmap({
           )}
         </div>
 
+        {data.length === 0 && (
+          <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            No trading activity data available yet
+          </div>
+        )}
         <div className="overflow-x-auto">
           <div className="grid grid-cols-25 gap-1 min-w-[800px]">
             {/* Header row with hours */}

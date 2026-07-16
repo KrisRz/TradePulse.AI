@@ -22,8 +22,8 @@ import Footer from '../components/astro/Footer.astro';
           Ready to Start AI-Powered Trading?
         </h2>
         <p class="text-xl text-primary-100 mb-8 max-w-2xl mx-auto">
-          Join thousands of traders who are already using AI to maximize their crypto profits. 
-          Start with our virtual portfolio and prove your strategy works.
+          Follow a walk-forward validated strategy on a virtual portfolio.
+          No real money at risk while the system proves itself in live paper trading.
         </p>
         <div class="flex flex-col sm:flex-row gap-4 justify-center">
           <a 
@@ -33,108 +33,15 @@ import Footer from '../components/astro/Footer.astro';
             Start Trading Now
           </a>
           <a 
-            href="/demo" 
+            href="/auth/register" 
             class="border border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white/10 transition-colors focus-ring"
           >
-            View Live Demo
+            Create Free Account
           </a>
         </div>
       </div>
     </section>
     
-    <!-- Testimonials Section -->
-    <section class="py-20 bg-white dark:bg-dark-900">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="text-center mb-16">
-          <h2 class="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            What Our Users Are Saying
-          </h2>
-          <p class="text-xl text-gray-600 dark:text-gray-300">
-            Real results from real traders
-          </p>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          <!-- Testimonial 1 -->
-          <div class="bg-gray-50 dark:bg-dark-800 p-6 rounded-lg">
-            <div class="flex items-center mb-4">
-              <div class="flex text-yellow-400">
-                {Array.from({length: 5}, (_, i) => (
-                  <svg key={i} class="w-5 h-5 fill-current" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-              </div>
-            </div>
-            <p class="text-gray-700 dark:text-gray-300 mb-4">
-              "TradePulse.AI helped me achieve 47% ROI in my virtual portfolio over 3 months. 
-              The AI signals are incredibly accurate and the risk management is spot-on."
-            </p>
-            <div class="flex items-center">
-              <div class="w-10 h-10 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full flex items-center justify-center text-white font-bold">
-                J
-              </div>
-              <div class="ml-3">
-                <p class="text-sm font-medium text-gray-900 dark:text-white">Jake M.</p>
-                <p class="text-sm text-gray-500 dark:text-gray-400">Virtual Portfolio: $14,700</p>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Testimonial 2 -->
-          <div class="bg-gray-50 dark:bg-dark-800 p-6 rounded-lg">
-            <div class="flex items-center mb-4">
-              <div class="flex text-yellow-400">
-                {Array.from({length: 5}, (_, i) => (
-                  <svg key={i} class="w-5 h-5 fill-current" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-              </div>
-            </div>
-            <p class="text-gray-700 dark:text-gray-300 mb-4">
-              "The AI vs Random comparison convinced me. 68% win rate vs 45% random trading. 
-              I've been approved for real money trading and couldn't be happier."
-            </p>
-            <div class="flex items-center">
-              <div class="w-10 h-10 bg-gradient-to-r from-profit-500 to-profit-600 rounded-full flex items-center justify-center text-white font-bold">
-                S
-              </div>
-              <div class="ml-3">
-                <p class="text-sm font-medium text-gray-900 dark:text-white">Sarah K.</p>
-                <p class="text-sm text-gray-500 dark:text-gray-400">Real Money Approved</p>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Testimonial 3 -->
-          <div class="bg-gray-50 dark:bg-dark-800 p-6 rounded-lg">
-            <div class="flex items-center mb-4">
-              <div class="flex text-yellow-400">
-                {Array.from({length: 5}, (_, i) => (
-                  <svg key={i} class="w-5 h-5 fill-current" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-              </div>
-            </div>
-            <p class="text-gray-700 dark:text-gray-300 mb-4">
-              "I was skeptical about AI trading, but the transparent performance data and 
-              virtual portfolio system won me over. Best trading decision I've made."
-            </p>
-            <div class="flex items-center">
-              <div class="w-10 h-10 bg-gradient-to-r from-warning-500 to-warning-600 rounded-full flex items-center justify-center text-white font-bold">
-                M
-              </div>
-              <div class="ml-3">
-                <p class="text-sm font-medium text-gray-900 dark:text-white">Mike R.</p>
-                <p class="text-sm text-gray-500 dark:text-gray-400">Virtual Portfolio: $18,200</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
   </main>
   
   <Footer />
