@@ -50,6 +50,7 @@ class CircuitBreakerType(str, Enum):
     PRICE_GAP = "price_gap"           # Price gap protection
     API_ERRORS = "api_errors"         # API error protection
     DAILY_LOSS = "daily_loss"         # Daily loss limit protection
+    PERFORMANCE = "performance"       # Win-rate floor protection (real trigger for NAPRAWA.md promise)
 
 @dataclass
 class EmergencyEvent:
@@ -150,8 +151,19 @@ class EmergencyControlSystem:
                 cooldown_seconds=86400, # 24 hours
                 auto_recovery=False,  # Manual review required
                 enabled=True
+            ),
+            CircuitBreakerType.PERFORMANCE: CircuitBreakerConfig(
+                breaker_type=CircuitBreakerType.PERFORMANCE,
+                threshold=0.25,      # win-rate floor over the last 24h
+                cooldown_seconds=7200,  # re-evaluate at most every 2 hours
+                auto_recovery=False,  # losing streak needs a human decision
+                enabled=True
             )
         }
+
+        # PERFORMANCE breaker needs a minimum sample before the win rate is
+        # statistically meaningful — never halt on the first few trades.
+        self.performance_min_trades = 20
         
         logger.info("🛡️ Emergency Control System initialized")
     
@@ -390,6 +402,10 @@ class EmergencyControlSystem:
             
             # Check portfolio-based breakers
             await self._check_portfolio_breakers()
+
+            # Check win-rate performance breaker
+            if self.breaker_configs[CircuitBreakerType.PERFORMANCE].enabled:
+                await self._check_performance_breaker()
             
         except Exception as e:
             logger.error(f"Error checking circuit breakers: {e}")
@@ -475,7 +491,37 @@ class EmergencyControlSystem:
                 
         except Exception as e:
             logger.error(f"Error checking portfolio breakers: {e}")
-    
+
+    async def _check_performance_breaker(self):
+        """Check the win-rate floor over the last 24h of completed trades.
+
+        This is the real implementation of the NAPRAWA.md promise
+        ("emergency mode at 10% win rate"): if the bot keeps losing, halt
+        trading and require a human decision instead of grinding capital
+        away. Requires performance_min_trades completed trades before the
+        rate is considered meaningful.
+        """
+        try:
+            from app.backend.services.trading_performance_tracker import get_trading_performance_tracker
+            tracker = await get_trading_performance_tracker()
+            metrics = await tracker.calculate_real_time_metrics()
+
+            if metrics.total_trades < self.performance_min_trades:
+                return
+
+            config = self.breaker_configs[CircuitBreakerType.PERFORMANCE]
+            if metrics.win_rate < config.threshold:
+                await self._trigger_circuit_breaker(
+                    CircuitBreakerType.PERFORMANCE,
+                    f"Win rate below floor: {metrics.win_rate:.1%} < {config.threshold:.1%} "
+                    f"({metrics.winning_trades}W/{metrics.losing_trades}L over 24h, "
+                    f"{metrics.total_trades} trades)",
+                    metrics.win_rate,
+                    config.threshold
+                )
+        except Exception as e:
+            logger.error(f"Error checking performance breaker: {e}")
+
     async def _trigger_circuit_breaker(
         self, 
         breaker_type: CircuitBreakerType, 
