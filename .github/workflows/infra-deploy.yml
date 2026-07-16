@@ -8,17 +8,12 @@ concurrency:
   group: infra-deploy-${{ github.ref }}
   cancel-in-progress: true
 
+# DISABLED auto-trigger (2026-07-16): infra/ describes the RETIRED App Runner
+# stack; the AWS account is clean and the only live infra is infra-serverless/
+# (paper bot Lambda, applied manually with local state). Applying infra/ would
+# create ~60 dead resources and needs Binance secrets. Manual trigger only.
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'infra/**'
-      - '.github/workflows/infra-deploy.yml'
-  pull_request:
-    branches: [ "main" ]
-    paths:
-      - 'infra/**'
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:  # Manual only
 
 # OIDC permissions for AWS authentication
 permissions:
