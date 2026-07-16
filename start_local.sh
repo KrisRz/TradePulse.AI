@@ -5,11 +5,21 @@ ROOT="/Applications/TradePuls"
 cd "$ROOT"
 
 if ! docker ps --format '{{.Names}}' | grep -qx 'tradepulse-dynamodb'; then
-  docker rm -f tradepulse-dynamodb >/dev/null 2>&1 || true
-  docker run -d --name tradepulse-dynamodb -p 8000:8000 \
-    amazon/dynamodb-local:latest \
-    -jar DynamoDBLocal.jar -sharedDb -inMemory >/dev/null
-  echo "Started DynamoDB Local on :8000"
+  if docker ps -a --format '{{.Names}}' | grep -qx 'tradepulse-dynamodb'; then
+    # container exists but is stopped — START it (keeps the on-disk data);
+    # the old script removed it here, wiping every candle/decision.
+    docker start tradepulse-dynamodb >/dev/null
+    echo "Restarted existing DynamoDB Local on :8000 (data preserved)"
+  else
+    # Disk persistence INSIDE the container filesystem: survives docker
+    # restart / Mac reboot. (A named volume is NOT used deliberately —
+    # sqlite4java crash-loops on Docker volume mounts on ARM Macs.)
+    # Was -inMemory, which wiped all model-tuning data on every restart.
+    docker run -d --name tradepulse-dynamodb -p 8000:8000 \
+      amazon/dynamodb-local:latest \
+      -jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal >/dev/null
+    echo "Started DynamoDB Local on :8000 (disk-persistent inside container)"
+  fi
 fi
 
 export PYENV_VERSION=3.11.9
