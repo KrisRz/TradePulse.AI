@@ -860,6 +860,27 @@ class TableSchemas:
         }
 
     @staticmethod
+    def get_market_data_schema() -> Dict[str, Any]:
+        """Candle persistence table used by market_data_persistence_service.
+
+        Was never in the ensure list — every save_candle() call failed with
+        ResourceNotFoundException on a fresh (or in-memory local) database.
+        TTL ('ttl' attribute, 90 days) is enabled post-creation.
+        """
+        return {
+            'TableName': 'tradepulse_market_data',
+            'BillingMode': 'PAY_PER_REQUEST',
+            'KeySchema': [
+                {'AttributeName': 'symbol', 'KeyType': 'HASH'},
+                {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}
+            ],
+            'AttributeDefinitions': [
+                {'AttributeName': 'symbol', 'AttributeType': 'S'},
+                {'AttributeName': 'timestamp', 'AttributeType': 'N'}
+            ]
+        }
+
+    @staticmethod
     def get_virtual_portfolios_schema() -> Dict[str, Any]:
         """Virtual portfolios table schema"""
         return {
@@ -1766,7 +1787,8 @@ def ensure_required_tables() -> bool:
             TableSchemas.get_health_checks_schema(),
             schemas.get_learning_engine_state_schema(),
             TableSchemas.get_trade_analyses_schema(),
-            TableSchemas.get_market_context_cache_schema()
+            TableSchemas.get_market_context_cache_schema(),
+            TableSchemas.get_market_data_schema()
         ]
         
         success_count = 0
@@ -1796,7 +1818,7 @@ def ensure_required_tables() -> bool:
                         logger.info(f"✅ Successfully created table {table_name}")
                         
                         # Enable TTL for tables that need it (after table is ACTIVE)
-                        ttl_tables = ['trading_signals', 'exit_analysis_log', 'position_monitoring_log', 'trade_execution_metrics', 'market_context_cache']
+                        ttl_tables = ['trading_signals', 'exit_analysis_log', 'position_monitoring_log', 'trade_execution_metrics', 'market_context_cache', 'tradepulse_market_data']
                         if table_name in ttl_tables:
                             try:
                                 client.dynamodb.meta.client.update_time_to_live(
