@@ -212,6 +212,24 @@ class EnterpriseTradingEngine:
             else:
                 self.scalers = {}
                 logger.warning("⚠️ No feature scalers found - models may not work with live data")
+
+            # L5 v2.0 (XGB, 15 features) ships its OWN scaler — the layer_5
+            # entry in feature_scalers.pkl is the stale 6-feature RF scaler.
+            l5_scaler_path = self.model_path / "layer_5_confidence_scaler.pkl"
+            if l5_scaler_path.exists():
+                try:
+                    with open(l5_scaler_path, "rb") as f:
+                        l5_scaler = pickle.load(f)
+                    n_in = getattr(l5_scaler, "n_features_in_", None)
+                    if n_in == 15:
+                        self.scalers["layer_5"] = l5_scaler
+                        logger.info("✅ L5 confidence scaler loaded (15 features)")
+                    else:
+                        logger.error(f"❌ L5 scaler feature count mismatch: n_features_in_={n_in}, expected 15 — NOT using it")
+                except Exception as e:
+                    logger.error(f"❌ Failed to load L5 confidence scaler: {e}")
+            else:
+                logger.warning("⚠️ layer_5_confidence_scaler.pkl missing — L5 will see raw features")
             
             # Load each layer with precise error handling - EXPLICIT ORDERING
             layers_to_load = [
@@ -398,16 +416,23 @@ class EnterpriseTradingEngine:
         # Ensure correct shape
         arr = np.array(vector, dtype=float).reshape(1, -1)
         
-        # PROFESSIONAL SCALING: Apply training scalers if available (DISABLED for L5 - model works without)
-        if layer_name and layer_name in self.scalers and layer_name != "layer_5":
-            try:
-                scaler = self.scalers[layer_name]
-                arr = scaler.transform(arr)
-                logger.info(f"🔧 Applied {layer_name} scaler to features")
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to apply {layer_name} scaler: {e}")
-        elif layer_name == "layer_5":
-            logger.info(f"🔧 L5 scaler DISABLED - model works with raw features")
+        # PROFESSIONAL SCALING: Apply training scalers if available. Models
+        # were trained on fit_transform-scaled features — skipping the scaler
+        # shifts the input distribution and poisons predictions.
+        if layer_name and layer_name in self.scalers:
+            scaler = self.scalers[layer_name]
+            n_in = getattr(scaler, "n_features_in_", None)
+            if n_in is not None and n_in != arr.shape[1]:
+                logger.error(
+                    f"❌ {layer_name} scaler/vector shape mismatch: scaler expects {n_in}, "
+                    f"vector has {arr.shape[1]} — skipping scaler (predictions unreliable)"
+                )
+            else:
+                try:
+                    arr = scaler.transform(arr)
+                    logger.debug(f"🔧 Applied {layer_name} scaler to features")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to apply {layer_name} scaler: {e}")
         
         # Handle feature names properly to avoid sklearn/LightGBM warnings
         try:
@@ -1426,7 +1451,8 @@ class EnterpriseTradingEngine:
                 
         except Exception as e:
             logger.error(f"Layer 4 error: {e}")
-            return {"filter_score": 0.5, "model_used": False}
+            # carry the error so consumers can tell "neutral" from "broken"
+            return {"filter_score": 0.5, "model_used": False, "error": str(e)}
     
     def _layer_5_confidence_scoring(self, features: Dict[str, float], snapshot_obj: Optional[Any] = None) -> Dict[str, Any]:
         """Layer 5: Confidence Scoring"""
@@ -1438,11 +1464,34 @@ class EnterpriseTradingEngine:
                 try:
                     from app.backend.services.metrics import inc_l5_vector_source, inc_l5_builder_error, preinit_l5_vector_source_series
                     preinit_l5_vector_source_series()
-                    # Prefer real snapshot object if provided
-                    from app.backend.ml.infer import build_l5_vector_from_snapshot
-                    if snapshot_obj is None:
-                        raise NameError("snapshot_object_missing")
-                    X = build_l5_vector_from_snapshot(snapshot_obj)
+
+                    # TRAINING PARITY: compute features from 1m candles exactly
+                    # like retrain_layer5_enhanced.py did. The generic snapshot
+                    # carries different units (24h ticker volume, absolute USD
+                    # price change), which put inputs thousands of sigmas away
+                    # from the training distribution.
+                    from app.backend.ml.l5_features import compute_l5_features_from_candles
+                    candles = []
+                    if self.market_service is not None:
+                        candles = self.market_service.get_recent_candles("1m", 1500)
+                    pct_24h = None
+                    ticker = getattr(self.market_service, "current_ticker", None) if self.market_service else None
+                    if ticker:
+                        pct_24h = ticker.get("price_change_percent")
+                    X = compute_l5_features_from_candles(candles, price_change_24h_pct=pct_24h)
+
+                    # Apply the L5 training scaler — the model was trained on
+                    # StandardScaler-transformed features (retrain_layer5_enhanced.py)
+                    l5_scaler = self.scalers.get("layer_5")
+                    if l5_scaler is not None and getattr(l5_scaler, "n_features_in_", None) == X.shape[1]:
+                        X = l5_scaler.transform(X)
+                    else:
+                        logger.error(
+                            f"❌ L5 scaler unavailable or shape mismatch "
+                            f"(scaler={getattr(l5_scaler, 'n_features_in_', None)}, vector={X.shape[1]}) "
+                            f"— predicting on RAW features, results unreliable"
+                        )
+
                     # Suppress LightGBM warnings about num_leaves
                     import warnings
                     with warnings.catch_warnings():
@@ -1453,18 +1502,19 @@ class EnterpriseTradingEngine:
                         else:
                             pred = model.predict(X)[0]
                             confidence = float(pred)
-                    inc_l5_vector_source("snapshot")
+                    inc_l5_vector_source("candles_parity")
                 except Exception as e:
-                    # Fallback to legacy feature dict path
-                    from app.backend.ml.infer import predict_l5_rf_safe
-                    confidence = predict_l5_rf_safe(model, features)
+                    # No legacy fallback: the old predict_l5_rf_safe built a
+                    # 6-feature vector for a 15-feature model — feature-count
+                    # mismatch guaranteed garbage. Surface the failure instead.
                     try:
-                        from app.backend.services.metrics import inc_l5_vector_source
-                        inc_l5_vector_source("fallback")
-                        from app.backend.services.metrics import inc_l5_builder_error
+                        from app.backend.services.metrics import inc_l5_vector_source, inc_l5_builder_error
+                        inc_l5_vector_source("error")
                         inc_l5_builder_error(type(e).__name__)
                     except Exception:
                         pass
+                    logger.error(f"❌ L5 snapshot vector build/predict failed: {e}")
+                    return {"confidence": 0.3, "model_used": False, "error": f"l5_vector_failed: {e}"}
                 logger.info(f"🔍 L5 DEBUG - Raw prediction: {confidence}")
                 
                 logger.info(f"🔍 L5 DEBUG - Final confidence: {confidence}")

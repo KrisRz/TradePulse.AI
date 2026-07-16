@@ -46,6 +46,11 @@ lerna-debug.log*
 .env.test
 .env.production
 
+# Real backend env files with secrets (only *.example is tracked)
+app/backend/config/development.env
+app/backend/config/production.env
+app/backend/config/*.local.env
+
 # Data files (too large for git)
 data/historical/raw_files/*.csv
 data/historical/raw_files/*.zip
@@ -295,3 +300,30 @@ data/ml/historical/processed/BTCUSDT_1m_complete.csv
 data/ml/historical/processed/BTCUSDT_1m_complete.parquet
 data/ml/historical/processed/BTCUSDT_1m_sample.parquet
 infra/terraform.tfvars
+
+# Paper-trading runtime state (local)
+paper_state/
+
+# Historical/training ML data — NOT committed (regenerate on demand with
+# `python -m app.backend.backtesting.download ...`). Kept ~556MB out of git.
+app/data/ml/
+data/ml/
+
+# Terraform local artifacts (plans and editor backups)
+infra/*.tfplan
+infra/*.tf.bak*
+
+# --- Rescued SOURCE wrongly ignored by generic rules above (keep tracked) ---
+# Frontend src/lib is real app code, not a Python build artifact (generic `lib/`).
+!app/frontend/src/lib/
+# Master plan is our durable cross-session memory — keep it tracked (backup for future-you).
+!plan.md
+# Model TRAINING code is source and belongs in git; only its data/outputs are excluded.
+!app/backend/scripts/ml/
+app/backend/scripts/ml/*.pkl
+app/backend/scripts/ml/*.h5
+app/backend/scripts/ml/*.csv
+app/backend/scripts/ml/*.log
+app/backend/scripts/ml/output/
+*.tfplan
+tfplan

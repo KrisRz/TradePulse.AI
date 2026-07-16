@@ -1,0 +1,32 @@
+name: Security Scan (Secrets)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # gitleaks-action v2 lists the PR's commits via the API on pull_request events
+  pull-requests: read
+
+jobs:
+  gitleaks:
+    name: Gitleaks secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # Required by gitleaks-action v2 for pull_request events
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # Scans the working tree and full git history for secrets.
+          # Fails the job (non-zero exit) if any leak is found.

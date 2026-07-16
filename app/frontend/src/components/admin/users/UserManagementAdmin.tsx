@@ -222,7 +222,7 @@ export default function UserManagementAdmin() {
         const response = await fetch('/api/user-management/invitations/bulk', {
           method: 'POST',
           headers: {
-            'Authorization': 'Bearer enterprise_admin_token',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -252,7 +252,7 @@ export default function UserManagementAdmin() {
         const response = await fetch('/api/user-management/invitations', {
           method: 'POST',
           headers: {
-            'Authorization': 'Bearer enterprise_admin_token',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -290,7 +290,7 @@ export default function UserManagementAdmin() {
       const response = await fetch(`/api/user-management/invitations/${invitationId}/resend`, {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer enterprise_admin_token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });
@@ -309,7 +309,7 @@ export default function UserManagementAdmin() {
       const response = await fetch(`/api/user-management/invitations/${invitationId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': 'Bearer enterprise_admin_token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         }
       });

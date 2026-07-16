@@ -86,14 +86,20 @@ def features_to_dataframe(features: Dict[str, float]) -> pd.DataFrame:
 
     return df
 
-def clamp_confidence(confidence: float, lo: float = 0.05, hi: float = 0.95) -> float:
+def clamp_confidence(confidence: float, lo: float = 0.0, hi: float = 0.95) -> float:
     """
-    Clamp confidence values to prevent overconfident predictions.
+    Clamp confidence into a valid, non-overconfident range.
+
+    The ceiling (0.95) guards against overconfident predictions driving
+    oversized positions. There is deliberately NO artificial floor: a
+    genuinely low confidence must stay low so downstream thresholds skip
+    the trade — the old 0.05 floor silently inflated dead-model outputs
+    into tradeable-looking signals.
 
     Args:
         confidence: Raw confidence value
-        lo: Lower bound (default 5%)
-        hi: Upper bound (default 95%)
+        lo: Lower bound (default 0.0 — validity only)
+        hi: Upper bound (default 0.95)
 
     Returns:
         Clamped confidence value
@@ -102,7 +108,7 @@ def clamp_confidence(confidence: float, lo: float = 0.05, hi: float = 0.95) -> f
         logger.warning(f"Clamping overconfident prediction: {confidence:.3f} -> {hi}")
         return hi
     elif confidence < lo:
-        logger.warning(f"Clamping underconfident prediction: {confidence:.3f} -> {lo}")
+        logger.warning(f"Clamping out-of-range prediction: {confidence:.3f} -> {lo}")
         return lo
     return confidence
 
@@ -172,8 +178,8 @@ def adaptive_confidence_calibration(confidence: float, model_type: str = "defaul
         # Low confidence - apply gentle calibration
         return temperature_scaling_calibration(confidence, temperature=1.2)
     else:
-        # Medium confidence - minimal calibration
-        return clamp_confidence(confidence, lo=0.1, hi=0.9)
+        # Medium confidence - no distortion, validity clamp only
+        return clamp_confidence(confidence)
 
 def logit_squash_confidence(confidence: float) -> float:
     """

@@ -20,6 +20,7 @@ import statistics
 from app.backend.core.database import get_database_client
 from app.backend.core.config import get_settings
 from app.backend.services.live_market_data import get_live_bitcoin_price
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -167,4 +168,4 @@ def get_portfolio_showcase_engine():
     return _portfolio_showcase_engine
 
 # Export for backward compatibility
-portfolio_showcase_engine = get_portfolio_showcase_engine()
+portfolio_showcase_engine = LazyProxy(get_portfolio_showcase_engine)

@@ -2,6 +2,7 @@ import { createContext } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { useContext } from 'preact/compat';
 import { authStore } from '../lib/auth-store';
+import { getSecurityConfig } from '../config/environments';
 import type { User, AuthState, LoginRequest, RegisterRequest } from '../types/auth';
 
 interface AuthContextType extends AuthState {
@@ -96,7 +97,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Listen for storage changes (multi-tab support)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'auth_token' && e.newValue === null) {
+      // Unified token storage key ('token') from config/environments.ts
+      if (e.key === getSecurityConfig().tokenStorageKey && e.newValue === null) {
         // Token was removed in another tab
         authStore.logout();
       }

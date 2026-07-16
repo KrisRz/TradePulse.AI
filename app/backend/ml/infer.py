@@ -13,17 +13,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# CRITICAL: RandomForest L5 model was trained on exactly these 6 features
-# DO NOT CHANGE without retraining the model
-L5_RF_MODEL_FEATURES: List[str] = [
-    "close", 
-    "volume", 
-    "rsi", 
-    "macd", 
-    "volatility", 
-    "trend_strength"
-]
-
 # Default values for missing features (based on typical market conditions)
 FEATURE_DEFAULTS = {
     "close": 1.0,
@@ -36,49 +25,6 @@ FEATURE_DEFAULTS = {
     "volume_ratio": 1.0,
     "price_change_24h": 0.0
 }
-
-def build_l5_rf_vector(features: Dict[str, float]) -> np.ndarray:
-    """
-    Build feature vector specifically for L5 RandomForest model.
-    
-    CRITICAL: This model was trained on exactly 6 features in this order.
-    Feeding it more or fewer features will cause prediction errors.
-    
-    Args:
-        features: Dictionary with all available features (can have 9+ features)
-        
-    Returns:
-        numpy array with shape (1, 6) containing exactly the features
-        the L5 RandomForest model expects
-    """
-    try:
-        # Extract only the 6 features the model was trained on
-        vector = []
-        missing_features = []
-        
-        for feature_name in L5_RF_MODEL_FEATURES:
-            if feature_name in features:
-                vector.append(float(features[feature_name]))
-            else:
-                default_val = FEATURE_DEFAULTS.get(feature_name, 0.0)
-                vector.append(default_val)
-                missing_features.append(feature_name)
-        
-        # Log missing features for debugging
-        if missing_features:
-            logger.warning(f"L5 RF missing features: {missing_features} -> using defaults")
-        
-        # Return as numpy array with correct shape
-        arr = np.array([vector], dtype=np.float32)  # shape: (1, 6)
-        
-        logger.debug(f"L5 RF vector built: shape={arr.shape}, features={L5_RF_MODEL_FEATURES}")
-        return arr
-        
-    except Exception as e:
-        logger.error(f"Failed to build L5 RF vector: {e}")
-        # Return safe fallback with neutral values
-        fallback = np.array([[1.0, 0.0, 50.0, 0.0, 0.02, 0.0]], dtype=np.float32)
-        return fallback
 
 def build_model_vector(features: Dict[str, float], model_features: List[str]) -> np.ndarray:
     """
@@ -115,33 +61,9 @@ def build_model_vector(features: Dict[str, float], model_features: List[str]) ->
         fallback = [FEATURE_DEFAULTS.get(name, 0.0) for name in model_features]
         return np.array([fallback], dtype=np.float32)
 
-def predict_l5_rf_safe(model: Any, features: Dict[str, float]) -> float:
-    """
-    Safe prediction for L5 RandomForest model with proper feature vector.
-    
-    Args:
-        model: Trained L5 RandomForest model (expects 6 features)
-        features: Feature dictionary (can contain 9+ features)
-        
-    Returns:
-        Confidence prediction as float
-    """
-    try:
-        # Build the exact 6-feature vector the model expects
-        X = build_l5_rf_vector(features)
-        
-        # Predict using numpy array (no feature names to avoid warnings)
-        if hasattr(model, 'predict_proba'):
-            proba = model.predict_proba(X)[0]
-            return float(proba[1]) if len(proba) > 1 else float(proba[0])
-        else:
-            pred = model.predict(X)[0]
-            return float(pred)
-            
-    except Exception as e:
-        logger.warning(f"L5 RF prediction failed: {e}")
-        return 0.5  # Neutral confidence
-
+# NOTE: the legacy 6-feature RF path (build_l5_rf_vector / predict_l5_rf_safe)
+# was removed — the deployed L5 model is a 15-feature XGBRegressor and the
+# 6-feature vector guaranteed a feature-count mismatch.
 
 # SSOT: build vector from MarketSnapshot (v2.0 - Enhanced with 15 features)
 def build_l5_vector_from_snapshot(snapshot: Any) -> np.ndarray:

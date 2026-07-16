@@ -45,8 +45,10 @@ async def get_current_admin_user(credentials: HTTPAuthorizationCredentials = Dep
         )
     
     try:
-        # DEVELOPMENT MODE: Allow enterprise_admin_token for local testing
-        if credentials.credentials == "enterprise_admin_token":
+        # DEVELOPMENT MODE ONLY: Allow enterprise_admin_token for local testing.
+        # Never honoured in production so a leaked literal cannot grant admin.
+        from app.backend.core.config import get_settings
+        if credentials.credentials == "enterprise_admin_token" and get_settings().is_development:
             logger.info("🔧 Using development admin token bypass")
             return {
                 "user_id": "dev_admin",

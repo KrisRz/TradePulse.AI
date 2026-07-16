@@ -300,5 +300,8 @@ def get_signal_performance_tracker() -> SignalPerformanceTracker:
         _signal_performance_tracker = SignalPerformanceTracker()
     return _signal_performance_tracker
 
-# Export for backward compatibility
-signal_performance_tracker = get_signal_performance_tracker()
+from app.backend.core.lazy import LazyProxy
+
+# Export for backward compatibility — lazy: importing this module must not
+# construct the tracker (it opens a DynamoDB connection).
+signal_performance_tracker = LazyProxy(get_signal_performance_tracker)

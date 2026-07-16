@@ -106,9 +106,8 @@ export default function CommunicationCenter() {
       setLoading(true);
       setError(null);
 
-      // Get auth token
-      // Use enterprise_admin_token for development like other components
-      const token = 'enterprise_admin_token';
+      // Get auth token from localStorage (key defined in config/environments.ts)
+      const token = localStorage.getItem('token') || '';
 
       const [messagesResponse, announcementsResponse, analyticsResponse] = await Promise.all([
         fetch('/api/admin/communications/messages/sent', {
@@ -158,10 +157,10 @@ export default function CommunicationCenter() {
 
   const handleSendMessage = async () => {
     try {
-      const response = await fetch('/api/communication/messages/send', {
+      const response = await fetch('/api/admin/communications/messages/send', {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer enterprise_admin_token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(messageForm)
@@ -188,10 +187,10 @@ export default function CommunicationCenter() {
 
   const handleCreateAnnouncement = async () => {
     try {
-      const response = await fetch('/api/communication/announcements', {
+      const response = await fetch('/api/admin/communications/announcements', {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer enterprise_admin_token',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(announcementForm)

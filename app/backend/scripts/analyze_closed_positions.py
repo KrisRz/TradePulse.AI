@@ -39,19 +39,14 @@ def analyze_closed_positions() -> Dict[str, Any]:
     print("=" * 80)
     print()
     
-    # Setup AWS credentials (from user's access keys)
-    aws_access_key = "AKIAYS2NQFN2UDYJX5PC"
-    aws_secret_key = "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"
-    aws_region = "eu-west-2"
-    
+    # AWS credentials are resolved by boto3's default provider chain
+    # (environment variables, shared config/credentials file, or IAM role).
+    # Never hard-code access keys in source.
+    aws_region = os.getenv("AWS_REGION", "eu-west-2")
+
     # Initialize AWS DynamoDB client
     print(f"📡 Connecting to AWS DynamoDB ({aws_region})...")
-    dynamodb = boto3.resource(
-        'dynamodb',
-        region_name=aws_region,
-        aws_access_key_id=aws_access_key,
-        aws_secret_access_key=aws_secret_key
-    )
+    dynamodb = boto3.resource('dynamodb', region_name=aws_region)
     
     # Fetch all closed positions from AWS
     print("📂 Fetching closed positions from AWS DynamoDB...")

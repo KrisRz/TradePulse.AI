@@ -102,8 +102,8 @@ export default function LiveSignalStatus({
       setError(null);
       setIsConnected(true);
       
-      // PRODUCTION: Fetch real signal status from professional backend
-      const response = await fetch('/api/signals/brain/status', {
+      // PRODUCTION: Fetch real brain status (engines_status router, /api/v1 prefix)
+      const response = await fetch('/api/v1/brain/status', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           'Content-Type': 'application/json'

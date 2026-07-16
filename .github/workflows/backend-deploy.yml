@@ -8,15 +8,12 @@ concurrency:
   group: backend-deploy-${{ github.ref }}
   cancel-in-progress: true
 
+# DISABLED auto-trigger (2026-07-16): the App Runner/ECR stack this deploys to
+# was torn down — the AWS account has no tradepulse resources. The live path is
+# the serverless paper bot (infra-serverless/). Manual trigger kept in case the
+# always-on backend ever comes back (decision ❓D7 in plan).
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'app/backend/**'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - '.github/workflows/backend-deploy.yml'
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:  # Manual only
 
 # OIDC permissions for AWS authentication
 permissions:

@@ -19,6 +19,7 @@ import statistics
 
 from app.backend.core.database import get_database_client
 from app.backend.core.config import get_settings
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -128,4 +129,4 @@ def get_model_performance_metrics():
     return _model_performance_metrics
 
 # Export for backward compatibility
-model_performance_metrics = get_model_performance_metrics()
+model_performance_metrics = LazyProxy(get_model_performance_metrics)

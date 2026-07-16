@@ -17,11 +17,23 @@ from app.backend.core.database import DynamoDBClient
 logger = logging.getLogger(__name__)
 
 class DatabaseService:
-    """Professional database service for admin dashboard data operations"""
-    
+    """Professional database service for admin dashboard data operations.
+
+    The DynamoDB connection is created lazily on first use — route modules
+    instantiate DatabaseService() at import time, and connecting there made
+    importing the app require a live database.
+    """
+
     def __init__(self):
-        self.client = DynamoDBClient()
-        
+        self._client: Optional[DynamoDBClient] = None
+
+    @property
+    def client(self) -> DynamoDBClient:
+        if self._client is None:
+            self._client = DynamoDBClient()
+        return self._client
+
+
     async def put_item(self, table_name: str, item: Dict[str, Any]) -> bool:
         """Put item into DynamoDB table - REQUIRED by emergency controls"""
         try:

@@ -209,23 +209,22 @@ class SingletonTradingApp:
             logger.error(f"❌ Shutdown error: {e}")
     
     async def _load_models(self):
-        """Load ML models (lazy loading)"""
+        """Verify ML models are loaded via the DI container's engine.
+
+        The application factory (phase 1) owns EnterpriseTradingEngine
+        creation — constructing a second engine here loaded every model
+        twice and produced a split-brain instance nothing else could see.
+        """
         try:
-            logger.info("🤖 Loading ML models...")
-            
-            # Import here to avoid circular imports
-            from app.backend.services.enterprise_trading_engine import EnterpriseTradingEngine
-            
-            # Initialize enterprise engine (loads models)
-            engine = EnterpriseTradingEngine()
-            await engine.initialize()
-            
-            self.models_loaded = True
-            logger.info("✅ ML models loaded successfully")
-            
+            from app.backend.core.container import get_container
+            engine = get_container().get("enterprise_trading_engine")
+            self.models_loaded = bool(engine) and getattr(engine, "is_initialized", False)
+            if self.models_loaded:
+                logger.info("✅ ML models available (container's enterprise engine)")
+            else:
+                logger.warning("⚠️ Enterprise engine not initialized yet - models pending")
         except Exception as e:
-            logger.error(f"❌ Failed to load ML models: {e}")
-            # Don't fail startup - models can be loaded later
+            logger.error(f"❌ Failed to verify ML models: {e}")
             self.models_loaded = False
     
     async def _check_database_connectivity(self):
@@ -258,23 +257,20 @@ class SingletonTradingApp:
             # Intentionally not raising here to let the app start and pass health checks
     
     async def _start_trading_brain(self):
-        """Start the trading brain loop"""
+        """Start leader-only background tasks.
+
+        The old trading_brain_loop is deprecated (early-returns immediately);
+        the real orchestration is BrainController, initialized by the
+        application factory (phase 7). Here we only start the CloudWatch
+        heartbeat that proves this instance holds the lease.
+        """
         try:
-            # Import here to avoid circular imports during startup
-            from app.backend.api.v1.routes.trading import trading_brain_loop
-            
-            # Start trading brain as background task
-            self._trading_task = asyncio.create_task(trading_brain_loop())
-            logger.info("🧠 Trading brain loop started as background task")
-            
-            # Start CloudWatch heartbeat loop
             self._heartbeat_task = asyncio.create_task(
                 self.heartbeat_service.heartbeat_loop(self.lease_guard)
             )
             logger.info("💓 CloudWatch heartbeat loop started")
-            
         except Exception as e:
-            logger.error(f"❌ Failed to start trading brain: {e}")
+            logger.error(f"❌ Failed to start leader tasks: {e}")
             raise
     
     # Removed _heartbeat_loop - now handled by CloudWatchHeartbeat service

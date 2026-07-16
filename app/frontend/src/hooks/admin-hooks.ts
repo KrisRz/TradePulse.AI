@@ -128,7 +128,7 @@ export function useAdminUserActions() {
   
   const updateUserStatus = async (userId: string, status: string) => {
     try {
-      const token = 'enterprise_admin_token';
+      const token = localStorage.getItem('token') || '';
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'PUT',
         headers: {
@@ -152,7 +152,7 @@ export function useAdminUserActions() {
 
   const updateUserRole = async (userId: string, role: string) => {
     try {
-      const token = 'enterprise_admin_token';
+      const token = localStorage.getItem('token') || '';
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'PUT',
         headers: {
@@ -186,20 +186,20 @@ export function useAdminUserActions() {
 
 // Communication Center hooks
 export function useCommunicationHistory() {
-  return useAdminData('/api/admin/communications/');
+  return useAdminData('/api/admin/communications/messages/sent');
 }
 
 // AI Models Management hooks
 export function useAIModelsData() {
-  return useAdminData('/api/admin/ai/models');
+  return useAdminData('/api/admin/ai-models');
 }
 
 export function useModelTrainingStatus() {
-  return useAdminData('/api/admin/ai/training/status');
+  return useAdminData('/api/admin/model-training-status');
 }
 
 export function useModelComparison() {
-  return useAdminData('/api/admin/ai/models/comparison');
+  return useAdminData('/api/admin/model-comparison');
 }
 
 export function useAnnouncements() {

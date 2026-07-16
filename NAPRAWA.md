@@ -268,50 +268,27 @@ git push origin main
 
 ---
 
-### 4. ⏳ Verify Emergency Mode Active - PENDING AWS CHECK
+### 4. ✅ Emergency Mode — ZAIMPLEMENTOWANE jako PERFORMANCE circuit breaker (2026-07-16)
 
-**Problem**: Win rate 10% should trigger emergency mode, need verification.
+**Stan faktyczny (poprzednia wersja tej sekcji obiecywała nieistniejący
+skrypt `activate_emergency_mode` i tabelę `emergency_state` — usunięte):**
 
-**Check Emergency State**:
-```bash
-# Query DynamoDB emergency_state table
-aws dynamodb scan \
-    --table-name emergency_state \
-    --region eu-west-2 | jq '.Items[] | {
-        mode: .mode.S,
-        confidence_multiplier: .confidence_multiplier.N,
-        position_size_multiplier: .position_size_multiplier.N,
-        last_updated: .last_updated.S
-    }'
+Realny performance-trigger żyje w
+`app/backend/services/emergency_controls.py` jako
+`CircuitBreakerType.PERFORMANCE`:
 
-# Expected output:
-# {
-#   "mode": "EMERGENCY",
-#   "confidence_multiplier": "1.3",      # 30% higher threshold
-#   "position_size_multiplier": "0.5",   # 50% smaller positions
-#   "last_updated": "2025-10-31T..."
-# }
-```
+- **Warunek**: win rate z ostatnich 24h < **25%** przy **≥ 20** zamkniętych
+  transakcjach (mniejsza próbka = brak decyzji, nie halt).
+- **Źródło danych**: `TradingPerformanceTracker.calculate_real_time_metrics()`.
+- **Cooldown**: 2h między ponownymi wyzwoleniami (zgodnie z pierwotną
+  obietnicą „check every 2 hours").
+- **Recovery**: `auto_recovery=False` — seria strat wymaga decyzji człowieka,
+  nie automatu.
+- **Skutek**: standardowa ścieżka `_trigger_circuit_breaker` → trading halted
+  (`is_trading_halted()` = True), event zapisany jak inne breakery.
 
-**If NOT Active, Force Enable**:
-```bash
-# Run emergency mode activation
-python -m app.backend.scripts.activate_emergency_mode \
-    --reason "win_rate_below_threshold" \
-    --win-rate 0.10 \
-    --threshold 0.10
-
-# Verify in CloudWatch logs
-aws logs tail /aws/apprunner/tradepulse-backend/.../application \
-    --follow --filter-pattern "EMERGENCY"
-# Should see: "🚨 EMERGENCY MODE ACTIVATED"
-```
-
-**Emergency Mode Settings** (from memory):
-- Confidence threshold: 0.60 → 0.78 (+30%)
-- Position size: 4.5% → 2.25% (-50%)
-- Max positions: 5 → 3
-- Win rate check: every 2 hours
+Weryfikacja: log `🚨` z breakerem `performance` w CloudWatch/stdout, lub
+`GET /api/enterprise` status emergency systemu.
 
 ---
 
@@ -421,8 +398,10 @@ EOF
 
 # Run analysis
 cd /Applications/Projects/TradePulse.AI
-export AWS_ACCESS_KEY_ID="AKIAYS2NQFN2UDYJX5PC"
-export AWS_SECRET_ACCESS_KEY="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"
+# Provide AWS credentials via env vars, `aws configure`, or an IAM role.
+# Do NOT paste real access keys into this file.
+export AWS_ACCESS_KEY_ID="<your-access-key-id>"
+export AWS_SECRET_ACCESS_KEY="<your-secret-access-key>"
 python scripts/analyze_losing_trades.py
 ```
 

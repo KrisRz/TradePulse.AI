@@ -19,6 +19,7 @@ import json
 
 from app.backend.core.database import get_database_client
 from app.backend.core.config import get_settings
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -114,4 +115,4 @@ def get_audit_compliance_service():
     return _audit_compliance_service
 
 # Export for backward compatibility
-audit_compliance_service = get_audit_compliance_service()
+audit_compliance_service = LazyProxy(get_audit_compliance_service)

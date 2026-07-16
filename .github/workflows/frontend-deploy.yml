@@ -8,16 +8,11 @@ concurrency:
   group: frontend-deploy-${{ github.ref }}
   cancel-in-progress: true
 
+# DISABLED auto-trigger (2026-07-16): the S3/CloudFront stack this deploys to
+# was torn down — no tradepulse resources exist in the account. Frontend
+# hosting is an open decision (❓D7); re-enable when a target exists.
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'app/frontend/**'
-      - '!app/frontend/test/**'
-      - '!app/frontend/**/*.test.ts'
-      - '!app/frontend/**/*.test.tsx'
-      - '.github/workflows/frontend-deploy.yml'
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:  # Manual only
 
 # OIDC permissions for AWS authentication
 permissions:

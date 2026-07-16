@@ -18,6 +18,7 @@ from typing import Dict, Any, Optional
 import tensorflow as tf
 
 from app.backend.core.config import get_settings
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -83,4 +84,4 @@ def get_model_loader():
     return _model_loader
 
 # Export for backward compatibility
-model_loader = get_model_loader()
+model_loader = LazyProxy(get_model_loader)

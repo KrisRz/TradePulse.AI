@@ -22,6 +22,7 @@ import statistics
 from app.backend.core.database import get_database_client
 from app.backend.core.config import get_settings
 from app.backend.services.live_market_data import get_live_bitcoin_price
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -394,4 +395,4 @@ def get_ai_vs_random_tracker() -> AIvsRandomTracker:
     return _ai_vs_random_tracker
 
 # Export for backward compatibility
-ai_vs_random_tracker = get_ai_vs_random_tracker()
+ai_vs_random_tracker = LazyProxy(get_ai_vs_random_tracker)

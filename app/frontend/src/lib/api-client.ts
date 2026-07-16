@@ -10,7 +10,7 @@
  * - Retry logic for transient failures
  */
 
-import { getEnvironmentConfig, Environment } from '@/config/environments';
+import { getEnvironmentConfig } from '@/config/environments';
 
 /**
  * API Response wrapper for consistent error handling
@@ -68,22 +68,12 @@ class ApiClient {
       retryDelay: 1000,
     };
 
-    // Load auth token from localStorage on init (environment-aware key)
+    // Load auth token from localStorage on init (environment-aware key).
+    // Tokens come only from an explicit login — we never fabricate an admin
+    // token client-side (that previously handed admin to every visitor).
     if (typeof window !== 'undefined') {
       const tokenKey = envConfig.security.tokenStorageKey;
-      let token = localStorage.getItem(tokenKey);
-      
-      // Auto-generate JWT token for production admin dashboard if missing
-      if (!token) {
-        if (envConfig.environment === Environment.PRODUCTION) {
-          // Generate JWT token for production admin access
-          token = this.generateProductionAdminToken();
-          localStorage.setItem(tokenKey, token);
-          console.log('🔑 Auto-generated production admin JWT token');
-        }
-      }
-      
-      this.authToken = token;
+      this.authToken = localStorage.getItem(tokenKey);
     }
 
     // Bind typed namespaces used by SystemStatusDashboard and others
@@ -176,18 +166,6 @@ class ApiClient {
    */
   getAuthToken(): string | null {
     return this.authToken;
-  }
-
-  /**
-   * Generate JWT token for production admin dashboard
-   * This returns a pre-signed JWT token that matches backend SECRET_KEY
-   */
-  private generateProductionAdminToken(): string {
-    // Pre-signed JWT token generated server-side with backend SECRET_KEY
-    // Valid for 30 days from 2025-10-04 
-    // SECRET_KEY: "dev-secret-key-change-in-production" (backend default from config.py)
-    // Payload: { user_id: 'admin_prod_001', is_admin: true, exp: 2025-11-03 }
-    return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWRtaW5fcHJvZF8wMDEiLCJlbWFpbCI6ImFkbWluQHRyYWRlcHVsc2UuYWkiLCJpc19hZG1pbiI6dHJ1ZSwidXNlcm5hbWUiOiJhZG1pbiIsImV4cCI6MTc2MjE2MjQ1MSwiaWF0IjoxNzU5NTY2ODUxLCJpc3MiOiJ0cmFkZXB1bHNlLmFpIiwic3ViIjoiYWRtaW5fcHJvZF8wMDEifQ.ZujENt8ZT0iaj-8i23x_NANZ3UQ7Gct6seYJ6xKUONw';
   }
 
   /**

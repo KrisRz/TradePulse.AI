@@ -20,6 +20,7 @@ import statistics
 
 from app.backend.core.database import get_database_client
 from app.backend.core.config import get_settings
+from app.backend.core.lazy import LazyProxy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -414,4 +415,4 @@ def get_user_performance_showcase() -> UserPerformanceShowcase:
     return _user_performance_showcase
 
 # Export for backward compatibility
-user_performance_showcase = get_user_performance_showcase()
+user_performance_showcase = LazyProxy(get_user_performance_showcase)

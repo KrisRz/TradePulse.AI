@@ -83,7 +83,8 @@ class BrainStateStore:
                 logger.info("🔄 Loading brain state from DynamoDB (single source of truth)")
                 
                 # Use DynamoDB client with consistent read
-                client = DynamoDBClient(local_development=True)
+                from app.backend.core.config import get_settings
+                client = DynamoDBClient(local_development=get_settings().is_development)
                 
                 response = client.get_item(
                     table_name=self.table_name,

@@ -137,15 +137,63 @@ export default function SystemControlAdmin() {
     loadSystemData();
   }, []);
 
+  // Dispatches UI actions to the real backend endpoints defined in
+  // app/backend/api/v1/routes/system_control.py (mounted under /api).
+  // Actions without a backend equivalent are not dispatched; their buttons are disabled below.
   const handleSystemAction = async (action: string) => {
     setActionLoading(action);
-    
+
     try {
-      const response = await apiClient.post('/api/system/action', { action });
+      let response;
+
+      switch (action) {
+        case 'toggle_maintenance':
+          // POST /api/system/maintenance { enabled }
+          response = await apiClient.post('/api/system/maintenance', {
+            enabled: !systemStatus?.maintenance_mode
+          });
+          break;
+        case 'restart_services':
+          // POST /api/system/restart { service_name, force }
+          response = await apiClient.post('/api/system/restart', {
+            service_name: 'all',
+            force: false
+          });
+          break;
+        case 'clear_redis_cache':
+          // POST /api/cache/clear { cache_type }
+          response = await apiClient.post('/api/cache/clear', { cache_type: 'redis' });
+          break;
+        case 'clear_app_cache':
+          response = await apiClient.post('/api/cache/clear', { cache_type: 'application' });
+          break;
+        case 'clear_all_caches':
+          response = await apiClient.post('/api/cache/clear', { cache_type: 'all' });
+          break;
+        case 'save_configuration': {
+          // PUT /api/system/config { config_updates } - only keys the backend allows
+          const config_updates: Record<string, SystemSettingValue> = {};
+          if (systemSettings) {
+            config_updates.trading_enabled = systemSettings.trading_enabled;
+            config_updates.api_rate_limit = systemSettings.api_rate_limit;
+            config_updates.debug_mode = systemSettings.debug_mode;
+            config_updates.log_level = systemSettings.log_level;
+          }
+          response = await apiClient.put('/api/system/config', { config_updates });
+          break;
+        }
+        default:
+          // No backend equivalent exists for: backup_system, clear_logs,
+          // optimize_database, optimize_db_cache, optimize_all_caches.
+          // Their buttons are disabled in the UI; guard here as well.
+          console.warn(`System action "${action}" has no backend endpoint - skipping`);
+          setActionLoading(null);
+          return;
+      }
 
       if (response.success) {
         console.log(`✅ System action ${action} completed:`, response.data);
-        
+
         // Update local state based on action
         if (action === 'toggle_maintenance' && systemStatus) {
           setSystemStatus(prev => prev ? {
@@ -153,7 +201,7 @@ export default function SystemControlAdmin() {
             maintenance_mode: !prev.maintenance_mode
           } : null);
         }
-        
+
         // Reload system data to get updated status
         setTimeout(() => window.location.reload(), 1000);
       } else {
@@ -162,7 +210,7 @@ export default function SystemControlAdmin() {
     } catch (error) {
       console.error(`Error executing ${action}:`, error);
     }
-    
+
     setActionLoading(null);
   };
 
@@ -445,10 +493,11 @@ export default function SystemControlAdmin() {
               Restart Services
             </button>
 
+            {/* Disabled: no backend endpoint for system backup */}
             <button
-              onClick={() => handleSystemAction('backup_system')}
-              disabled={actionLoading === 'backup_system'}
-              className="flex items-center justify-center px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              disabled
+              title="Unavailable: no backend endpoint for system backup"
+              className="flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {actionLoading === 'backup_system' ? (
                 <RefreshCw className="h-4 w-4 animate-spin mr-2" />
@@ -458,10 +507,11 @@ export default function SystemControlAdmin() {
               Create Backup
             </button>
 
+            {/* Disabled: no backend endpoint for clearing logs */}
             <button
-              onClick={() => handleSystemAction('clear_logs')}
-              disabled={actionLoading === 'clear_logs'}
-              className="flex items-center justify-center px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              disabled
+              title="Unavailable: no backend endpoint for clearing logs"
+              className="flex items-center justify-center px-4 py-3 bg-orange-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {actionLoading === 'clear_logs' ? (
                 <RefreshCw className="h-4 w-4 animate-spin mr-2" />
@@ -471,10 +521,11 @@ export default function SystemControlAdmin() {
               Clear Logs
             </button>
 
+            {/* Disabled: no backend endpoint for database optimization */}
             <button
-              onClick={() => handleSystemAction('optimize_database')}
-              disabled={actionLoading === 'optimize_database'}
-              className="flex items-center justify-center px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              disabled
+              title="Unavailable: no backend endpoint for database optimization"
+              className="flex items-center justify-center px-4 py-3 bg-purple-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {actionLoading === 'optimize_database' ? (
                 <RefreshCw className="h-4 w-4 animate-spin mr-2" />
@@ -577,12 +628,13 @@ export default function SystemControlAdmin() {
               </span>
             </div>
           </div>
+          {/* Disabled: no backend endpoint for database cache optimization */}
           <button
-            onClick={() => handleSystemAction('optimize_db_cache')}
-            disabled={actionLoading === 'optimize_db_cache'}
-            className="w-full mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+            disabled
+            title="Unavailable: no backend endpoint for cache optimization"
+            className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {actionLoading === 'optimize_db_cache' ? 'Optimizing...' : 'Optimize Cache'}
+            Optimize Cache
           </button>
         </div>
       </div>
@@ -607,16 +659,13 @@ export default function SystemControlAdmin() {
               Clear All Caches
             </button>
 
+            {/* Disabled: no backend endpoint for cache optimization */}
             <button
-              onClick={() => handleSystemAction('optimize_all_caches')}
-              disabled={actionLoading === 'optimize_all_caches'}
-              className="flex items-center justify-center px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              disabled
+              title="Unavailable: no backend endpoint for cache optimization"
+              className="flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {actionLoading === 'optimize_all_caches' ? (
-                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
+              <RefreshCw className="h-4 w-4 mr-2" />
               Optimize All Caches
             </button>
           </div>

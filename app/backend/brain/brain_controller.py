@@ -598,33 +598,14 @@ class BrainController:
             logger.error(f"Safety check failed: {e}")
             return True  # Fail-safe: halt on error
             
-    @no_fallbacks
-    async def _generate_unified_signal(self) -> Optional[TradingSignal]:
-        """Generate AI signal using day trading engine (fallback method)"""
-        try:
-            if not self.day_trading_engine:
-                logger.warning("⚠️ Day trading engine not available")
-                return None
-                
-            # Day trading engine handles signal generation internally
-            # This method is kept for compatibility but not actively used
-            logger.debug("📊 Signal generation handled by Day Trading Engine")
-            return None
-            
-            # Update trading context (kept for reference)
-            self.state.trading_context.current_signal = brain_signal
-            
-            # Publish signal event
-            publish_signal_event(brain_signal)
-            
-            logger.info(f"🎯 UNIFIED SIGNAL: {brain_signal.action} conf={float(brain_signal.confidence):.1%}")
-            
-            return brain_signal
-            
-        except Exception as e:
-            logger.error(f"Unified signal generation failed: {e}")
-            return None
-            
+    # NOTE (❓D2 resolved 2026-07-16): signal generation deliberately does NOT
+    # live in the brain. Division of responsibility:
+    #   BrainController      — FSM orchestrator: state, safety gates, audit
+    #   DayTradingEngine     — execution loop; asks EnterpriseTradingEngine
+    #   EnterpriseTradingEngine — the 6-layer signal generator
+    # The old _generate_unified_signal stub (always returned None, with
+    # unreachable code after the return) was deleted, not "merged".
+
     @no_fallbacks
     async def _assess_risk(self, signal: TradingSignal, tick_data: Dict) -> Optional[RiskContext]:
         """(D) Risk assessment"""
