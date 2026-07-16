@@ -1346,11 +1346,10 @@ class TableSchemas:
             'AttributeDefinitions': [
                 {'AttributeName': 'symbol', 'AttributeType': 'S'},
                 {'AttributeName': 'period', 'AttributeType': 'S'}
-            ],
-            'TimeToLiveSpecification': {
-                'Enabled': True,
-                'AttributeName': 'ttl'
-            }
+            ]
+            # NOTE: TTL is enabled via update_time_to_live AFTER creation —
+            # TimeToLiveSpecification is not a valid CreateTable parameter
+            # and DynamoDB Local rejects it (E2).
         }
 
 class DatabaseManager:
@@ -1797,7 +1796,7 @@ def ensure_required_tables() -> bool:
                         logger.info(f"✅ Successfully created table {table_name}")
                         
                         # Enable TTL for tables that need it (after table is ACTIVE)
-                        ttl_tables = ['trading_signals', 'exit_analysis_log', 'position_monitoring_log', 'trade_execution_metrics']
+                        ttl_tables = ['trading_signals', 'exit_analysis_log', 'position_monitoring_log', 'trade_execution_metrics', 'market_context_cache']
                         if table_name in ttl_tables:
                             try:
                                 client.dynamodb.meta.client.update_time_to_live(

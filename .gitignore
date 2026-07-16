@@ -325,3 +325,5 @@ app/backend/scripts/ml/*.h5
 app/backend/scripts/ml/*.csv
 app/backend/scripts/ml/*.log
 app/backend/scripts/ml/output/
+*.tfplan
+tfplan

@@ -35,6 +35,10 @@ jobs:
       - name: Run tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        # Scoped to the verified suites; the legacy test_fast_diagnostics.py has
-        # pre-existing failures unrelated to this work (tracked for Phase 2).
-        run: pytest app/backend/tests/test_backtesting.py app/backend/tests/test_paper_trading.py -q
+        # Scoped to the dependency-light suites (no TF/boto3/FastAPI needed).
+        # Full-stack suites (test_container, test_startup, test_l5_contract,
+        # test_fast_diagnostics) run locally where the heavy deps exist.
+        run: >
+          pytest app/backend/tests/test_backtesting.py
+          app/backend/tests/test_paper_trading.py
+          app/backend/tests/test_state_store.py -q
