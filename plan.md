@@ -18,8 +18,9 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 - **Milestone:** M0 ✅ + M1 ✅ + M2 ✅ (bot LATA w chmurze!) + M3 w toku.
-- **NASTĘPNA AKCJA:** dokończ M3 (kontrakt API zielony, frontend deploy decyzja ❓D7),
-  potem M4 (walk-forward ML-filtr vs czysta EMA).
+- **NASTĘPNA AKCJA:** M5 — bot zbiera ≥8 tyg. żywych decyzji (DynamoDB), potem
+  raport progów. Otwarte: ❓D7 (dashboard read-only). M4 ZAMKNIĘTE decyzjami
+  (docs/M4_EDGE_VALIDATION.md): czysta EMA, bez sizingu, tylko BTC 1d.
 - **Branch:** PR #2 ZMERGOWANY do main (2026-07-16 rano, CI zielone: pytest + gitleaks).
   Nową pracę zaczynaj z main (nowy feature branch).
 - **Ostatnio zrobione:** nocna sesja 2026-07-16 — cała SESJA A (A1–A7), M1, M2
@@ -317,8 +318,8 @@ i wtedy odpowiadamy**. To index, żeby żadna decyzja się nie zgubiła.
 | ❓D6 | M3/C6 | Martwe pliki `logger.ts`/`token-utils.ts`: podłączyć czy usunąć? |
 | ❓D7 | M2 | Opcjonalny always-on backend z live-dashboardem: budować (droższy) czy tylko statyczny read-only dashboard z DynamoDB? |
 | ❓D8 | M2/E5 | `api.` CNAME: dodać App Runner domain association czy usunąć rekord? |
-| ❓D9 | M4/F1 | ML jako filtr: zostaje TYLKO jeśli poprawia OOS Sharpe/DD; inaczej czysta EMA. **Decyzja na danych z walk-forward.** |
-| ❓D10 | M4/F3 | Więcej rynków/TF (ETH? 4h?): które — na podstawie testów przenośności edge. |
+| ✅D9 | M4/F1 | ROZSTRZYGNIĘTE 2026-07-16: **czysta EMA**. Modele enterprise = intraday horizon (mismatch dla 1d); proste filtry reżimowe niestabilne między okresami. Szczegóły: docs/M4_EDGE_VALIDATION.md |
+| ✅D10 | M4/F3 | ROZSTRZYGNIĘTE 2026-07-16: **tylko BTC 1d** (ETH 1d marginalne 1.01 vs 0.96; 4h gorsze). Wrócić po bramce 8-tyg. paper. |
 | ❓D11 | M4/F4 | Które warstwy ML trenować (koszt vs ROI): gated na tym, co pokaże ❓D9. |
 | ❓D12 | M6/F7 | Realne pieniądze: kwota startowa, broker, typ zleceń (maker), limity — gdy przejdziemy bramkę 8-tyg. paper. |
 
@@ -409,11 +410,11 @@ Cel: zwalidowana strategia EMA lata co dzień, zapisuje decyzje + P&L.
 - [ ] **D5. Usuń „TEMPORARILY SKIP VALIDATION"** (`lifespan.py:76-83`).
 
 ## ▶ M4 — Więcej edge: ML jako filtr (SESJA F, część 1)
-- [ ] **F1. ML filtr nad EMA** — 6-warstwowy mózg jako filtr confidence nad
+- [x] **F1. ML filtr nad EMA** — 6-warstwowy mózg jako filtr confidence nad
       strategią EMA (nie generator). Zmierz walk-forward: podnosi Sharpe /
       obniża DD? Jeśli TAK → zostaje. Jeśli NIE → zostajemy przy czystej EMA.
-- [ ] **F2. Sizing** — volatility targeting (większy size gdy edge silny).
-- [ ] **F3. Więcej rynków/timeframe** — sprawdź czy edge się przenosi (ETH? 4h?).
+- [x] **F2. Sizing** — volatility targeting (większy size gdy edge silny).
+- [x] **F3. Więcej rynków/timeframe** — sprawdź czy edge się przenosi (ETH? 4h?).
 - [ ] **F4. Trening modeli** (sekcja 5) — TYLKO warstwy, które F1 pokazał że
       dokładają edge. Kolejność: L1 → (napraw L5) → reszta → L2 LSTM ostatnie.
 - **Done gdy:** mamy udowodniony na OOS edge lepszy niż czysta EMA, albo świadomą
