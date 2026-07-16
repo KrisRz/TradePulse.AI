@@ -590,9 +590,18 @@ class BinanceHybridClient:
                 if ws_data and self._is_data_fresh(ws_data):
                     return {"data": ws_data, "source": DataSource.WEBSOCKET.value}
             
-            # PROFESSIONAL: Use authenticated REST API
+            # Market data endpoints (ticker/klines/depth) are PUBLIC on
+            # Binance — API keys are only required for account/trading calls.
+            # Without keys we use the public REST path and warn ONCE; the old
+            # code raised here on every poll and then fetched the same data
+            # publicly in its retry branch anyway, spamming ERROR logs.
             if not self.api_key or not self.secret_key:
-                raise Exception(f"PROFESSIONAL MODE: API keys required for live data")
+                if not getattr(self, "_warned_no_keys", False):
+                    logger.warning(
+                        "Binance API keys not configured — using PUBLIC market data "
+                        "endpoints (sufficient for paper trading; keys needed only for real orders)"
+                    )
+                    self._warned_no_keys = True
             if self._is_circuit_breaker_open(circuit_key):
                 raise Exception(f"Circuit breaker open for {data_type} - professional system requires live data")
             
