@@ -7,7 +7,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.backend.core.database import DynamoDBClient
 
@@ -129,37 +129,33 @@ class BrainStateStore:
         return self._cache
     
     async def update_state(self, enabled: bool, start_time: Optional[str] = None) -> None:
-        """Update brain state in both cache and database"""
+        """Update brain state in database, then cache (cache never holds unpersisted state)"""
         try:
             if start_time is None:
-                start_time = datetime.utcnow().isoformat()
-            
-            # Update cache first
-            if self._cache:
-                self._cache.enabled = enabled
-                self._cache.start_time = start_time
-                self._cache.last_updated = datetime.utcnow().isoformat()
-            else:
-                self._cache = BrainState(
-                    enabled=enabled,
-                    start_time=start_time,
-                    last_updated=datetime.utcnow().isoformat()
-                )
-            
-            # Update database
-            client = DynamoDBClient(local_development=True)
-            
+                start_time = datetime.now(timezone.utc).isoformat()
+            last_updated = datetime.now(timezone.utc).isoformat()
+
+            from app.backend.core.config import get_settings
+            client = DynamoDBClient(local_development=get_settings().is_development)
+
             item = {
                 'id': 'brain_state_global',
                 'enabled': enabled,
                 'start_time': start_time,
-                'last_updated': self._cache.last_updated
+                'last_updated': last_updated
             }
-            
+
             client.put_item(self.table_name, item)
-            
+
+            # DB write succeeded — now the cache may reflect the new state
+            self._cache = BrainState(
+                enabled=enabled,
+                start_time=start_time,
+                last_updated=last_updated
+            )
+
             logger.info(f"✅ Brain state updated: {'ENABLED' if enabled else 'DISABLED'}")
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to update brain state: {e}")
             raise
