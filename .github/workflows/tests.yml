@@ -8,6 +8,8 @@ on:
       - "app/backend/paper_trading/**"
       - "app/backend/tests/test_backtesting.py"
       - "app/backend/tests/test_paper_trading.py"
+      - "app/backend/tests/test_paper_bot.py"
+      - "app/backend/tests/test_state_store.py"
       - ".github/workflows/tests.yml"
   pull_request:
     branches: [main]
@@ -41,4 +43,5 @@ jobs:
         run: >
           pytest app/backend/tests/test_backtesting.py
           app/backend/tests/test_paper_trading.py
+          app/backend/tests/test_paper_bot.py
           app/backend/tests/test_state_store.py -q

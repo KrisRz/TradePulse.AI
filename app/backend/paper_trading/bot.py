@@ -44,6 +44,7 @@ class PaperBot:
             initial_capital=config.initial_capital,
         )
         self.last_bar: Optional[str] = None
+        self.last_decision: Optional[dict] = None
         self._load()
 
     # -- persistence ----------------------------------------------------- #
@@ -53,6 +54,7 @@ class PaperBot:
             return
         self.portfolio = PaperPortfolio.from_dict(state["portfolio"])
         self.last_bar = state.get("last_bar")
+        self.last_decision = state.get("last_decision")
 
     def _save(self) -> None:
         self.store.save({
@@ -60,26 +62,45 @@ class PaperBot:
             "timeframe": self.config.timeframe,
             "strategy": self.strategy.name,
             "last_bar": self.last_bar,
+            "last_decision": self.last_decision,
             "portfolio": self.portfolio.to_dict(),
         })
+
+    def _heal_decision_log(self) -> bool:
+        """Re-append the last decision if a crash lost it after the state save."""
+        rec = self.last_decision
+        if not rec or self.store.has_decision(str(rec.get("bar", ""))):
+            return False
+        self.store.append_decision(rec)
+        return True
 
     # -- run ------------------------------------------------------------- #
     def step(self) -> dict:
         """Process the latest closed bar. Returns a status dict."""
         df = fetch_klines(self.config.symbol, self.config.timeframe,
                           limit=self.config.lookback_bars)
+        # Binance returns `limit` klines including the still-open one we drop.
+        # A shorter response means truncated history: the EMAs would differ
+        # from the backtest and the zeroed warmup could force-flatten a live
+        # position — refuse loudly so the run is retried/alarmed instead.
+        min_bars = self.config.lookback_bars - 1
+        if len(df) < min_bars:
+            raise RuntimeError(
+                f"Feed returned {len(df)} closed bars, expected >= {min_bars} "
+                f"— refusing to trade on truncated history")
         latest_time = str(df.index[-1])
         latest_price = float(df["close"].iloc[-1])
 
         if self.last_bar == latest_time:
-            return {"status": "skipped", "reason": "bar already processed",
-                    "bar": latest_time, "position": self.portfolio.side,
-                    "equity": round(self.portfolio.equity(latest_price), 2)}
+            out = {"status": "skipped", "reason": "bar already processed",
+                   "bar": latest_time, "position": self.portfolio.side,
+                   "equity": round(self.portfolio.equity(latest_price), 2)}
+            if self._heal_decision_log():
+                out["decision_backfilled"] = True
+            return out
 
         target = int(self.strategy.target_positions(df).iloc[-1])
         action = self.portfolio.reconcile(target, latest_price, latest_time)
-        self.last_bar = latest_time
-        self._save()
 
         status = {
             "status": "traded" if action else "held",
@@ -94,27 +115,32 @@ class PaperBot:
 
         # One decision record per processed bar — the raw data for the M5
         # gate metrics (Sharpe/DD/profit factor/net P&L/fee drag) and the
-        # live-vs-paper tracking check.
-        try:
-            self.store.append_decision({
-                "bar": latest_time,
-                "processed_at": datetime.now(timezone.utc).isoformat(),
-                "symbol": self.config.symbol,
-                "timeframe": self.config.timeframe,
-                "strategy": self.strategy.name,
-                "price": latest_price,
-                "target": target,
-                "action": action,
-                "position": self.portfolio.side,
-                "equity": status["equity"],
-                "realized": round(self.portfolio.realized, 2),
-                "total_return_pct": status["total_return_pct"],
-                "trades_count": status["trades"],
-                "fee_rate": self.config.fee_rate,
-                "slippage": self.config.slippage,
-            })
-        except Exception as e:  # the log must never break the trading step
-            logger.error("Failed to append decision record: %s", e)
+        # live-vs-paper tracking check. It is load-bearing: the record is
+        # persisted inside the state (atomically with last_bar), the append
+        # is allowed to raise (-> Lambda error -> alarm), and a lost append
+        # is healed by the skipped path on the next run. Silent gaps here
+        # would corrupt the gate metrics.
+        record = {
+            "bar": latest_time,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+            "symbol": self.config.symbol,
+            "timeframe": self.config.timeframe,
+            "strategy": self.strategy.name,
+            "price": latest_price,
+            "target": target,
+            "action": action,
+            "position": self.portfolio.side,
+            "equity": status["equity"],
+            "realized": round(self.portfolio.realized, 2),
+            "total_return_pct": status["total_return_pct"],
+            "trades_count": status["trades"],
+            "fee_rate": self.config.fee_rate,
+            "slippage": self.config.slippage,
+        }
+        self.last_bar = latest_time
+        self.last_decision = record
+        self._save()
+        self.store.append_decision(record)
 
         if action:
             logger.info("Paper trade: %s -> %s @ %.2f (%s)",

@@ -179,6 +179,27 @@ resource "aws_iam_role_policy" "scheduler_invoke" {
   })
 }
 
+# Delivery failures (broken role, deleted function, throttling) never emit a
+# Lambda Errors metric — they land here instead, and the DLQ alarm fires.
+resource "aws_sqs_queue" "scheduler_dlq" {
+  name                      = "${local.function_name}-scheduler-dlq"
+  message_retention_seconds = 1209600 # 14 days
+}
+
+resource "aws_iam_role_policy" "scheduler_dlq" {
+  name = "${local.function_name}-dlq"
+  role = aws_iam_role.scheduler.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "sqs:SendMessage"
+      Resource = aws_sqs_queue.scheduler_dlq.arn
+    }]
+  })
+}
+
 resource "aws_scheduler_schedule" "daily_step" {
   name                = "${local.function_name}-daily"
   schedule_expression = "cron(10 0 * * ? *)"
@@ -194,6 +215,10 @@ resource "aws_scheduler_schedule" "daily_step" {
     retry_policy {
       maximum_retry_attempts       = 3
       maximum_event_age_in_seconds = 3600
+    }
+
+    dead_letter_config {
+      arn = aws_sqs_queue.scheduler_dlq.arn
     }
   }
 }
@@ -308,6 +333,43 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   dimensions          = { FunctionName = aws_lambda_function.paper_bot.function_name }
   statistic           = "Sum"
   period              = 3600
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# Heartbeat: a disabled schedule / broken scheduler role / delivery failure
+# produces no Errors metric at all — the bot just silently stops running.
+# Lambda emits NO Invocations datapoint in idle hours, so missing data must
+# count as breaching; 25 consecutive empty hourly buckets = no daily run
+# (the 00:10 UTC invocation always lands inside a 25h window).
+resource "aws_cloudwatch_metric_alarm" "lambda_heartbeat" {
+  alarm_name          = "${local.function_name}-no-invocation"
+  alarm_description   = "Paper bot has not been invoked for >24h — schedule or delivery is broken"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Invocations"
+  dimensions          = { FunctionName = aws_lambda_function.paper_bot.function_name }
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 25
+  datapoints_to_alarm = 25
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "scheduler_dlq" {
+  alarm_name          = "${local.function_name}-scheduler-dlq"
+  alarm_description   = "A scheduled invocation was dropped after retries and landed in the DLQ"
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  dimensions          = { QueueName = aws_sqs_queue.scheduler_dlq.name }
+  statistic           = "Maximum"
+  period              = 300
   evaluation_periods  = 1
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"

@@ -15,8 +15,7 @@ import os
 from decimal import Decimal
 from typing import Any
 
-import boto3
-from boto3.dynamodb.conditions import Key
+from .portfolio import PaperPortfolio
 
 TABLE = os.environ.get("PAPER_STATE_TABLE", "tradepulse_paper_bot")
 PK = os.environ.get("PAPER_STATE_PK", "BTCUSDT_1d")
@@ -33,7 +32,36 @@ def _plain(obj: Any) -> Any:
     return obj
 
 
+def _summarize(state_item: dict) -> dict:
+    """Headline numbers from a raw state item.
+
+    Equity is mark-to-market via the same ``PaperPortfolio`` accounting the bot
+    itself uses — ``realized`` alone is frozen at entry while a position is
+    open, which for a trend-follower can be stale for months.
+    """
+    state = _plain(state_item.get("state") or {})
+    portfolio = state.get("portfolio") or {}
+    port = PaperPortfolio.from_dict(portfolio) if portfolio else PaperPortfolio()
+    equity = port.equity()
+    initial = port.initial_capital
+    return {
+        "symbol": state.get("symbol", PK),
+        "strategy": state.get("strategy"),
+        "last_bar": state.get("last_bar"),
+        "position": port.side,
+        "equity": round(equity, 2),
+        "realized_equity": round(port.realized, 2),
+        "marked_at_price": port.last_price or None,
+        "total_return_pct": round((equity / initial - 1) * 100, 2) if initial else 0.0,
+        "trades": portfolio.get("trades", []),
+        "updated_at": state_item.get("updated_at"),
+    }
+
+
 def _fetch() -> dict:
+    import boto3  # provided by the Lambda runtime
+    from boto3.dynamodb.conditions import Key
+
     table = boto3.resource("dynamodb").Table(TABLE)
     state_item = table.get_item(Key={"pk": PK, "sk": "state"}).get("Item") or {}
     decisions = table.query(
@@ -41,21 +69,9 @@ def _fetch() -> dict:
         ScanIndexForward=False,
         Limit=30,
     ).get("Items", [])
-    state = _plain(state_item.get("state") or {})
-    portfolio = state.get("portfolio", {})
-    equity = portfolio.get("realized", 0.0)
-    initial = portfolio.get("initial_capital", 10_000.0)
-    return {
-        "symbol": state.get("symbol", PK),
-        "strategy": state.get("strategy"),
-        "last_bar": state.get("last_bar"),
-        "position": portfolio.get("side", 0),
-        "equity": round(equity, 2),
-        "total_return_pct": round((equity / initial - 1) * 100, 2) if initial else 0.0,
-        "trades": portfolio.get("trades", []),
-        "recent_decisions": [_plain(d) for d in decisions],
-        "updated_at": state_item.get("updated_at"),
-    }
+    data = _summarize(state_item)
+    data["recent_decisions"] = [_plain(d) for d in decisions]
+    return data
 
 
 def _html(data: dict) -> str:
@@ -99,7 +115,7 @@ def _html(data: dict) -> str:
 <tr><th>entry</th><th>exit</th><th>entry px</th><th>exit px</th><th>net</th></tr>{trades}</table>
 <table><caption>Recent decisions (bar / price / action / pos / equity)</caption>
 <tr><th>bar</th><th>price</th><th>action</th><th>pos</th><th>equity</th></tr>{rows}</table>
-<footer>last bar: {data['last_bar']} · state updated: {data['updated_at']} · read-only, paper trading</footer>
+<footer>last bar: {data['last_bar']} · state updated: {data['updated_at']} · equity marked-to-market at last close · read-only, paper trading</footer>
 </body></html>"""
 
 
