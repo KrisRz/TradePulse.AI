@@ -46,6 +46,18 @@ class LocalJsonStateStore:
         with open(self.decisions_path, "a") as f:
             f.write(json.dumps(record, default=str) + "\n")
 
+    def has_decision(self, bar: str) -> bool:
+        if not self.decisions_path.exists():
+            return False
+        with open(self.decisions_path) as f:
+            for line in f:
+                try:
+                    if json.loads(line).get("bar") == bar:
+                        return True
+                except json.JSONDecodeError:  # torn line from a crashed append
+                    continue
+        return False
+
 
 class DynamoDBStateStore:
     """State + decision log in one on-demand DynamoDB table (Lambda path)."""
@@ -93,6 +105,10 @@ class DynamoDBStateStore:
             "sk": f"decision#{record.get('bar', 'unknown')}",
             **self._to_ddb(record),
         })
+
+    def has_decision(self, bar: str) -> bool:
+        resp = self.table.get_item(Key={"pk": self.pk, "sk": f"decision#{bar}"})
+        return "Item" in resp
 
 
 def make_state_store(state_path: str, partition_key: str):
