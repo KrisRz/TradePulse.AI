@@ -50,7 +50,9 @@ def load_csv(path: str | Path) -> pd.DataFrame:
     if _looks_like_header(first_line):
         df = pd.read_csv(path)
         df = df.rename(columns={c: c.lower() for c in df.columns})
-        ts = pd.to_datetime(df["timestamp"], utc=True)
+        # ISO8601 handles mixed precision (e.g. stray sub-second timestamps
+        # around Binance maintenance restarts) without per-element inference.
+        ts = pd.to_datetime(df["timestamp"], utc=True, format="ISO8601")
         df = df.set_index(ts)
     else:
         df = pd.read_csv(path, header=None, names=_RAW_COLUMNS)
