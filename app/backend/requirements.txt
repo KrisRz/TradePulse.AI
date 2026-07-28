@@ -23,7 +23,7 @@ prometheus-client==0.21.0
 # Async networking / HTTP
 aiohttp==3.12.15
 websockets==15.0.1
-requests==2.31.0
+requests==2.34.2   # keep in sync with requirements-lambda.txt (bot runtime)
 tenacity==9.1.2
 
 # AWS SDK (DynamoDB Local / AWS)
