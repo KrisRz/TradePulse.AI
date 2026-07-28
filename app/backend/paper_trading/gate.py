@@ -30,11 +30,25 @@ All Sharpe/skew/kurtosis inputs to PSR/DSR/MinTRL are PER-BAR (non-annualized)
 as the formulas require; the annualized Sharpe (365d, matching
 ``backtesting.metrics``) is reported alongside.
 
+GATE SPLIT (pre-registered 2026-07-28, 44 days before the earliest evaluation,
+on pre-holdout data only — see docs/ANALIZA_KALIBRACJI_2026-07-28.md):
+
+    Gate B (everything above) answers "did it make money". It cannot be
+    answered in 8 weeks: the strategy closes 1.69 round trips a year, so
+    P(activity rule satisfied within 56 days) is ~1%. Its thresholds are
+    UNCHANGED; only the expected horizon moved to 12-18 months.
+
+    Gate A (``--fidelity``) answers "is the machinery honest" — six criteria
+    on execution fidelity, all decidable inside the 8-week window. Passing
+    Gate A does NOT unlock real money; only Gate B opens M6.
+
 Usage:
-    # against prod DynamoDB (needs AWS creds; read-only)
+    # Gate B — profitability, against prod DynamoDB (needs AWS creds; read-only)
     python -m app.backend.paper_trading.gate --source dynamodb
-    # against a local paper_state file
-    python -m app.backend.paper_trading.gate --source local
+    # Gate A — execution fidelity (queries Binance + CloudWatch, read-only)
+    python -m app.backend.paper_trading.gate --source dynamodb --fidelity
+    # either gate against a local paper_state file, no AWS
+    python -m app.backend.paper_trading.gate --source local --fidelity --infra none
 """
 
 from __future__ import annotations
@@ -275,6 +289,365 @@ def evaluate(inputs: GateInputs, as_of: date) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# GATE A — execution fidelity (pre-registered 2026-07-28, plan §3)
+#
+# Gate B above asks "did the strategy make money". It cannot answer that in an
+# 8-week window: EMA20/100 closes 1.69 round trips a year, so P(>= 2 round
+# trips AND >= 10 days in market within 56 days) is ~1%
+# (docs/ANALIZA_KALIBRACJI_2026-07-28.md). Gate A asks the question the window
+# CAN answer: is the machinery honest — is what the bot did live exactly what
+# the backtest says it should have done?
+#
+# Six criteria, all computed from data we already store. Every one must pass;
+# a criterion whose evidence is unavailable is SKIPPED and the verdict becomes
+# INCOMPLETE, never PASS. Passing Gate A does NOT unlock real money — only
+# Gate B opens M6.
+# --------------------------------------------------------------------------- #
+_TIMEFRAME_DELTA = {
+    "1m": pd.Timedelta(minutes=1), "3m": pd.Timedelta(minutes=3),
+    "5m": pd.Timedelta(minutes=5), "15m": pd.Timedelta(minutes=15),
+    "30m": pd.Timedelta(minutes=30), "1h": pd.Timedelta(hours=1),
+    "2h": pd.Timedelta(hours=2), "4h": pd.Timedelta(hours=4),
+    "1d": pd.Timedelta(days=1),
+}
+
+# Decision records persist money already rounded to cents (bot.py builds the
+# record from ``round(equity, 2)``), so accounting parity is checked at that
+# granularity — asking for 1e-6 on a rounded number would fail by construction.
+EQUITY_TOLERANCE = 0.01
+PRICE_REL_TOLERANCE = 1e-6
+
+# How many violations of one kind to quote in the report before truncating.
+_MAX_VIOLATIONS_SHOWN = 10
+
+
+@dataclass
+class FidelityInputs:
+    """Everything Gate A needs. ``infra`` is None when AWS was not queried."""
+    decisions: list[dict]          # raw decision records, one per processed bar
+    state: dict                    # final persisted state (portfolio + last_bar)
+    bars: pd.DataFrame             # exchange reference OHLCV, closed bars only
+    strategy: Any                  # the Strategy the bot is supposed to run
+    timeframe: str = "1d"
+    lookback_bars: int = 400       # BotConfig.lookback_bars (feed request size)
+    infra: Optional[dict] = None
+
+
+def _truncate(items: list) -> list:
+    if len(items) <= _MAX_VIOLATIONS_SHOWN:
+        return items
+    return items[:_MAX_VIOLATIONS_SHOWN] + [f"... and {len(items) - _MAX_VIOLATIONS_SHOWN} more"]
+
+
+def _result(status: str, detail: str, **extra) -> dict:
+    return {"status": status, "detail": detail, **extra}
+
+
+def _sorted_decisions(decisions: list[dict]) -> list[dict]:
+    return sorted(decisions, key=lambda d: str(d["bar"]))
+
+
+def check_log_completeness(inputs: FidelityInputs) -> dict:
+    """1. Exactly one record per closed bar in the window — no gaps, no dupes.
+
+    The exchange bar index is the reference: a gap means the bot silently
+    skipped a day (the gate metrics would then be computed on a hole), a
+    duplicate means idempotency failed.
+    """
+    logged = [str(d["bar"]) for d in inputs.decisions]
+    counts: dict[str, int] = {}
+    for bar in logged:
+        counts[bar] = counts.get(bar, 0) + 1
+    duplicates = sorted(b for b, n in counts.items() if n > 1)
+
+    idx = pd.DatetimeIndex(pd.to_datetime(sorted(set(logged)), utc=True, format="ISO8601"))
+    if len(idx) == 0:
+        return _result("FAIL", "decision log is empty")
+
+    ref = inputs.bars.index
+    expected = ref[(ref >= idx.min()) & (ref <= idx.max())]
+    missing = expected.difference(idx)
+    unknown = idx.difference(ref)     # a bar the exchange does not have at all
+
+    problems = []
+    if len(missing):
+        problems.append(f"{len(missing)} missing bar(s)")
+    if duplicates:
+        problems.append(f"{len(duplicates)} duplicated bar(s)")
+    if len(unknown):
+        problems.append(f"{len(unknown)} bar(s) absent from exchange history")
+
+    status = "PASS" if not problems else "FAIL"
+    return _result(
+        status,
+        (f"{len(idx)} records covering {idx.min().date()} → {idx.max().date()}, "
+         f"{len(expected)} bars expected" if status == "PASS"
+         else "; ".join(problems)),
+        records=len(logged),
+        distinct_bars=len(idx),
+        expected_bars=int(len(expected)),
+        missing=_truncate([str(b) for b in missing]),
+        duplicates=_truncate(duplicates),
+        unknown_bars=_truncate([str(b) for b in unknown]),
+    )
+
+
+def check_signal_parity(inputs: FidelityInputs) -> dict:
+    """2. Every live target equals the strategy's target on the same history.
+
+    Reproduces the bot's exact input window: it requests ``lookback_bars``
+    klines and drops the still-open one, so it decides on the last
+    ``lookback_bars - 1`` closed bars (bot.py). An EMA is recursive, so using a
+    different window length here would compare against a different number.
+    """
+    window = max(inputs.lookback_bars - 1, 1)
+    ref = inputs.bars
+    mismatches, unverifiable = [], []
+    observed_targets: set[int] = set()
+
+    for rec in _sorted_decisions(inputs.decisions):
+        bar = pd.Timestamp(str(rec["bar"]))
+        if bar not in ref.index:
+            unverifiable.append(f"{rec['bar']}: not in exchange history")
+            continue
+        pos = ref.index.get_loc(bar)
+        if pos + 1 < window:
+            unverifiable.append(
+                f"{rec['bar']}: only {pos + 1} bars of history available, "
+                f"need {window} to reproduce the bot's window")
+            continue
+        history = ref.iloc[pos + 1 - window: pos + 1]
+        expected = int(inputs.strategy.target_positions(history).iloc[-1])
+        actual = int(rec["target"])
+        observed_targets.add(actual)
+        if expected != actual:
+            mismatches.append(f"{rec['bar']}: live target {actual}, strategy says {expected}")
+
+    checked = len(inputs.decisions) - len(unverifiable)
+    if mismatches:
+        return _result("FAIL", f"{len(mismatches)} of {checked} targets disagree with the strategy",
+                       checked=checked, mismatches=_truncate(mismatches),
+                       unverifiable=_truncate(unverifiable))
+    if checked == 0:
+        return _result("SKIPPED", "no bar had enough reference history to verify",
+                       unverifiable=_truncate(unverifiable))
+
+    # Discriminating power. If the window was entirely FLAT, every trend
+    # strategy agrees with every other one and a passing parity check is
+    # consistent with the bot running something else entirely. The criterion
+    # is genuinely met, but reporting it as strong evidence would overstate
+    # what a quiet window proves — say so instead of hiding it.
+    distinct = len(observed_targets)
+    detail = f"{checked} targets reproduce exactly (window {window} bars)"
+    if unverifiable:
+        detail += f"; {len(unverifiable)} unverifiable (insufficient reference history)"
+    if distinct < 2:
+        only = next(iter(observed_targets)) if observed_targets else None
+        detail += (f" — but every target was {only}, so this cannot distinguish "
+                   f"the live strategy from any other that stayed flat")
+    return _result("PASS", detail, checked=checked, distinct_targets=distinct,
+                   discriminating=distinct >= 2,
+                   unverifiable=_truncate(unverifiable))
+
+
+def check_price_parity(inputs: FidelityInputs) -> dict:
+    """3. Every recorded price is the exchange's close for that bar."""
+    ref = inputs.bars["close"]
+    mismatches, unverifiable = [], []
+
+    for rec in _sorted_decisions(inputs.decisions):
+        bar = pd.Timestamp(str(rec["bar"]))
+        if bar not in ref.index:
+            unverifiable.append(f"{rec['bar']}: not in exchange history")
+            continue
+        live, actual = float(rec["price"]), float(ref.loc[bar])
+        if actual == 0 or abs(live - actual) / abs(actual) > PRICE_REL_TOLERANCE:
+            mismatches.append(f"{rec['bar']}: bot {live}, exchange {actual}")
+
+    checked = len(inputs.decisions) - len(unverifiable)
+    if mismatches:
+        return _result("FAIL", f"{len(mismatches)} of {checked} prices differ from the exchange",
+                       checked=checked, mismatches=_truncate(mismatches))
+    if checked == 0:
+        return _result("SKIPPED", "no bar could be cross-checked against the exchange",
+                       unverifiable=_truncate(unverifiable))
+    return _result("PASS", f"{checked} prices match the exchange close exactly",
+                   checked=checked, unverifiable=_truncate(unverifiable))
+
+
+def check_no_lookahead(inputs: FidelityInputs) -> dict:
+    """4. Nothing was decided before its bar had closed.
+
+    The live analogue of the backtest's next-bar-open rule: a record whose
+    ``processed_at`` precedes the bar's close means the bot acted on a bar that
+    was still forming, and every metric downstream of it is contaminated.
+    """
+    delta = _TIMEFRAME_DELTA.get(inputs.timeframe)
+    if delta is None:
+        return _result("SKIPPED", f"unknown timeframe {inputs.timeframe!r}")
+
+    violations, unverifiable = [], []
+    for rec in _sorted_decisions(inputs.decisions):
+        stamp = rec.get("processed_at")
+        if not stamp:
+            unverifiable.append(f"{rec['bar']}: no processed_at")
+            continue
+        bar_close = pd.Timestamp(str(rec["bar"])) + delta
+        processed = pd.Timestamp(str(stamp))
+        if processed.tzinfo is None:
+            processed = processed.tz_localize("UTC")
+        if processed < bar_close:
+            violations.append(
+                f"{rec['bar']}: processed {processed.isoformat()} "
+                f"before bar close {bar_close.isoformat()}")
+
+    checked = len(inputs.decisions) - len(unverifiable)
+    if violations:
+        return _result("FAIL", f"{len(violations)} record(s) decided on an unclosed bar",
+                       checked=checked, violations=_truncate(violations))
+    if checked == 0:
+        return _result("SKIPPED", "no record carried a processed_at timestamp",
+                       unverifiable=_truncate(unverifiable))
+    return _result("PASS", f"{checked} records processed strictly after their bar closed",
+                   checked=checked, unverifiable=_truncate(unverifiable))
+
+
+def check_accounting_parity(inputs: FidelityInputs) -> dict:
+    """5. Replaying the decision log reproduces the equity the bot recorded.
+
+    Feeds the recorded (target, price) pairs through a fresh ``PaperPortfolio``
+    — the same class, hence the same shared cost model as the backtest. If the
+    replay diverges, the live book drifted from the accounting the gates are
+    computed on.
+    """
+    from .portfolio import PaperPortfolio
+
+    book = inputs.state.get("portfolio", {}) or {}
+    portfolio = PaperPortfolio(
+        fee_rate=float(book.get("fee_rate", 0.001)),
+        slippage=float(book.get("slippage", 0.0002)),
+        initial_capital=float(book.get("initial_capital", 10_000.0)),
+    )
+
+    drifts = []
+    records = _sorted_decisions(inputs.decisions)
+    for rec in records:
+        price = float(rec["price"])
+        portfolio.reconcile(int(rec["target"]), price, str(rec["bar"]))
+        replay_equity = round(portfolio.equity(price), 2)
+        replay_realized = round(portfolio.realized, 2)
+        if abs(replay_equity - float(rec["equity"])) > EQUITY_TOLERANCE:
+            drifts.append(f"{rec['bar']}: equity recorded {float(rec['equity'])}, "
+                          f"replay {replay_equity}")
+        if "realized" in rec and abs(replay_realized - float(rec["realized"])) > EQUITY_TOLERANCE:
+            drifts.append(f"{rec['bar']}: realized recorded {float(rec['realized'])}, "
+                          f"replay {replay_realized}")
+
+    live_trades = len(book.get("trades", []) or [])
+    replay_trades = len(portfolio.trades)
+    if live_trades != replay_trades:
+        drifts.append(f"closed trades: state has {live_trades}, replay produced {replay_trades}")
+
+    if drifts:
+        return _result("FAIL", f"{len(drifts)} accounting divergence(s)",
+                       checked=len(records), drifts=_truncate(drifts))
+    if not records:
+        return _result("SKIPPED", "no records to replay")
+    return _result(
+        "PASS",
+        f"{len(records)} bars replay to the recorded book "
+        f"(±${EQUITY_TOLERANCE:.2f}, {replay_trades} closed trades)",
+        checked=len(records), replay_trades=replay_trades)
+
+
+def check_infrastructure(inputs: FidelityInputs) -> dict:
+    """6. The scheduler actually ran, nothing landed in the DLQ, no alarm fired.
+
+    Criteria 1-5 prove the records we have are honest; this one proves there
+    were no runs whose records never made it at all.
+    """
+    infra = inputs.infra
+    if infra is None:
+        return _result("SKIPPED", "AWS not queried (use --infra aws)")
+
+    problems = []
+    missing_days = infra.get("days_without_invocation") or []
+    if missing_days:
+        problems.append(f"{len(missing_days)} day(s) with no Lambda invocation")
+    dlq = infra.get("dlq_messages_max")
+    if dlq:
+        problems.append(f"DLQ held up to {dlq} message(s)")
+    fired = infra.get("alarms_fired") or []
+    if fired:
+        problems.append(f"{len(fired)} alarm transition(s) into ALARM")
+
+    if problems:
+        return _result("FAIL", "; ".join(problems),
+                       days_without_invocation=_truncate([str(d) for d in missing_days]),
+                       dlq_messages_max=dlq, alarms_fired=_truncate(fired))
+    return _result(
+        "PASS",
+        f"{infra.get('days_checked', '?')} day(s) with >=1 invocation, "
+        f"DLQ empty, no alarm fired",
+        days_checked=infra.get("days_checked"))
+
+
+FIDELITY_CHECKS = [
+    ("log_completeness", check_log_completeness),
+    ("signal_parity", check_signal_parity),
+    ("price_parity", check_price_parity),
+    ("no_lookahead", check_no_lookahead),
+    ("accounting_parity", check_accounting_parity),
+    ("infrastructure", check_infrastructure),
+]
+
+
+def evaluate_fidelity(inputs: FidelityInputs, as_of: date) -> dict:
+    """Gate A verdict. Pure — no I/O, fully testable.
+
+    PASS only when all six criteria pass. Any FAIL -> FAIL. Otherwise, if any
+    criterion lacked evidence -> INCOMPLETE (never silently PASS on a gap).
+    """
+    criteria = {name: check(inputs) for name, check in FIDELITY_CHECKS}
+    statuses = [c["status"] for c in criteria.values()]
+
+    if "FAIL" in statuses:
+        verdict = "FAIL"
+        failed = [n for n, c in criteria.items() if c["status"] == "FAIL"]
+        reason = f"execution is not faithful: {', '.join(failed)}"
+    elif "SKIPPED" in statuses:
+        verdict = "INCOMPLETE"
+        skipped = [n for n, c in criteria.items() if c["status"] == "SKIPPED"]
+        reason = f"evidence missing for: {', '.join(skipped)}"
+    else:
+        verdict = "PASS"
+        reason = "live execution reproduces the backtest exactly"
+
+    # A PASS earned in a fully FLAT window is weaker than it looks — surface
+    # that at verdict level so a reader of the summary line cannot miss it.
+    caveats = []
+    parity = criteria.get("signal_parity", {})
+    if parity.get("status") == "PASS" and parity.get("discriminating") is False:
+        caveats.append(
+            "signal parity has low discriminating power: the window never left "
+            "target 0, so it cannot distinguish EMA20/100 from any other "
+            "strategy that also stayed flat")
+
+    return {
+        "gate": "A — execution fidelity",
+        "as_of": str(as_of),
+        "window_start": str(WINDOW_START),
+        "window_days": (as_of - WINDOW_START).days,
+        "criteria": criteria,
+        "verdict": verdict,
+        "verdict_reason": reason + (f" (with caveats: {len(caveats)})" if caveats else ""),
+        "caveats": caveats,
+        "note": ("Gate A does not unlock real money — only Gate B "
+                 "(profitability) opens M6."),
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Data loading (decision log + state -> GateInputs)
 # --------------------------------------------------------------------------- #
 def _inputs_from_records(decisions: list[dict], state: dict) -> GateInputs:
@@ -296,7 +669,7 @@ def _inputs_from_records(decisions: list[dict], state: dict) -> GateInputs:
     )
 
 
-def load_dynamodb(table_name: str, partition_key: str) -> GateInputs:
+def load_records_dynamodb(table_name: str, partition_key: str) -> tuple[list[dict], dict]:
     """Read-only pull of the full decision log + state from DynamoDB."""
     import boto3
     from boto3.dynamodb.conditions import Key
@@ -321,10 +694,10 @@ def load_dynamodb(table_name: str, partition_key: str) -> GateInputs:
     if "Item" not in state_resp:
         raise RuntimeError(f"No state item for {partition_key} in {table_name}")
     state = DynamoDBStateStore._from_ddb(state_resp["Item"]["state"])
-    return _inputs_from_records(decisions, state)
+    return decisions, state
 
 
-def load_local(state_path: str) -> GateInputs:
+def load_records_local(state_path: str) -> tuple[list[dict], dict]:
     from .state_store import LocalJsonStateStore
 
     store = LocalJsonStateStore(state_path)
@@ -338,7 +711,61 @@ def load_local(state_path: str) -> GateInputs:
                 decisions.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-    return _inputs_from_records(decisions, state)
+    return decisions, state
+
+
+def load_dynamodb(table_name: str, partition_key: str) -> GateInputs:
+    return _inputs_from_records(*load_records_dynamodb(table_name, partition_key))
+
+
+def load_local(state_path: str) -> GateInputs:
+    return _inputs_from_records(*load_records_local(state_path))
+
+
+def load_infra_aws(function_name: str, dlq_queue_name: str, alarm_names: list[str],
+                   start: date, end: date, region: Optional[str] = None) -> dict:
+    """Criterion 6 evidence from CloudWatch — read-only.
+
+    Invocations are summed per UTC day: the scheduler fires once daily, so any
+    day with a zero sum is a run whose decision record could never exist.
+    """
+    import boto3
+
+    cw = boto3.client("cloudwatch", region_name=region) if region else boto3.client("cloudwatch")
+    start_dt = pd.Timestamp(start, tz="UTC").to_pydatetime()
+    end_dt = (pd.Timestamp(end, tz="UTC") + pd.Timedelta(days=1)).to_pydatetime()
+
+    invocations = cw.get_metric_statistics(
+        Namespace="AWS/Lambda", MetricName="Invocations",
+        Dimensions=[{"Name": "FunctionName", "Value": function_name}],
+        StartTime=start_dt, EndTime=end_dt, Period=86_400, Statistics=["Sum"])
+    seen = {pd.Timestamp(p["Timestamp"]).tz_convert("UTC").date()
+            for p in invocations["Datapoints"] if p["Sum"] >= 1}
+    # The final day is only complete after the 00:10 UTC run, so exclude it.
+    expected_days = pd.date_range(start, end, freq="D", inclusive="left")
+    missing = [d.date() for d in expected_days if d.date() not in seen]
+
+    dlq = cw.get_metric_statistics(
+        Namespace="AWS/SQS", MetricName="ApproximateNumberOfMessagesVisible",
+        Dimensions=[{"Name": "QueueName", "Value": dlq_queue_name}],
+        StartTime=start_dt, EndTime=end_dt, Period=86_400, Statistics=["Maximum"])
+    dlq_max = max((p["Maximum"] for p in dlq["Datapoints"]), default=0.0)
+
+    fired = []
+    for alarm in alarm_names:
+        history = cw.describe_alarm_history(
+            AlarmName=alarm, HistoryItemType="StateUpdate",
+            StartDate=start_dt, EndDate=end_dt, MaxRecords=100)
+        for item in history.get("AlarmHistoryItems", []):
+            if '"newState":{"stateValue":"ALARM"' in item.get("HistoryData", "").replace(" ", ""):
+                fired.append(f"{alarm} @ {item['Timestamp']}")
+
+    return {
+        "days_checked": len(expected_days),
+        "days_without_invocation": missing,
+        "dlq_messages_max": dlq_max,
+        "alarms_fired": fired,
+    }
 
 
 def _print_report(report: dict) -> None:
@@ -367,6 +794,22 @@ def _print_report(report: dict) -> None:
     print(f"VERDICT: {report['verdict']} — {report['verdict_reason']}")
 
 
+def _print_fidelity_report(report: dict) -> None:
+    print(f"=== M5 GATE A — EXECUTION FIDELITY — as of {report['as_of']} "
+          f"(day {report['window_days']} of window) ===")
+    mark = {"PASS": "PASS", "FAIL": "FAIL", "SKIPPED": "SKIP"}
+    for name, res in report["criteria"].items():
+        print(f"  [{mark[res['status']]}] {name}: {res['detail']}")
+        for key in ("missing", "duplicates", "unknown_bars", "mismatches",
+                    "violations", "drifts", "days_without_invocation", "alarms_fired"):
+            for item in res.get(key) or []:
+                print(f"         - {item}")
+    print(f"VERDICT: {report['verdict']} — {report['verdict_reason']}")
+    for caveat in report.get("caveats", []):
+        print(f"CAVEAT: {caveat}")
+    print(f"NOTE: {report['note']}")
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Evaluate the M5 paper window gates.")
     p.add_argument("--source", choices=["dynamodb", "local"], default="dynamodb")
@@ -378,19 +821,80 @@ def main(argv: list[str] | None = None) -> None:
                    help="live-vs-paper P&L deviation fraction (M5.3), when known")
     p.add_argument("--as-of", default=None, help="ISO date (default: today UTC)")
     p.add_argument("--json", action="store_true", help="print raw JSON")
+
+    g = p.add_argument_group("Gate A — execution fidelity")
+    g.add_argument("--fidelity", action="store_true",
+                   help="run Gate A (execution fidelity) instead of Gate B")
+    g.add_argument("--infra", choices=["aws", "none"], default="aws",
+                   help="criterion 6 evidence source (default: aws)")
+    g.add_argument("--symbol", default="BTCUSDT")
+    g.add_argument("--timeframe", default="1d")
+    g.add_argument("--fast", type=int, default=20, help="live EMA fast period")
+    g.add_argument("--slow", type=int, default=100, help="live EMA slow period")
+    g.add_argument("--lookback-bars", type=int, default=400,
+                   help="BotConfig.lookback_bars the live bot uses")
+    g.add_argument("--function", default="tradepulse-paper-bot")
+    g.add_argument("--dlq", default="tradepulse-paper-bot-scheduler-dlq")
+    g.add_argument("--region", default=os.environ.get("AWS_REGION", "eu-west-2"))
     args = p.parse_args(argv)
+
+    as_of = (date.fromisoformat(args.as_of) if args.as_of
+             else pd.Timestamp.now(tz="UTC").date())
+
+    if args.fidelity:
+        report = run_fidelity(args, as_of)
+        if args.json:
+            print(json.dumps(report, indent=2, default=str))
+        else:
+            _print_fidelity_report(report)
+        return
 
     inputs = (load_dynamodb(args.table, args.pk) if args.source == "dynamodb"
               else load_local(args.state))
     if args.tracking_error is not None:
         inputs.tracking_error = args.tracking_error
-    as_of = (date.fromisoformat(args.as_of) if args.as_of
-             else pd.Timestamp.now(tz="UTC").date())
     report = evaluate(inputs, as_of)
     if args.json:
         print(json.dumps(report, indent=2, default=str))
     else:
         _print_report(report)
+
+
+def run_fidelity(args, as_of: date) -> dict:
+    """Wire the CLI arguments into Gate A: records + reference bars + infra."""
+    from ..backtesting.strategies import EmaCrossover
+    from .feed import fetch_klines
+
+    decisions, state = (load_records_dynamodb(args.table, args.pk)
+                        if args.source == "dynamodb"
+                        else load_records_local(args.state))
+
+    # Enough reference history to rebuild the bot's decision window for the
+    # oldest record: its lookback plus the bars processed since. 1000 is the
+    # Binance per-request maximum.
+    needed = min(args.lookback_bars + len(decisions) + 5, 1000)
+    bars = fetch_klines(args.symbol, args.timeframe, limit=needed)
+
+    infra = None
+    if args.infra == "aws":
+        try:
+            infra = load_infra_aws(
+                function_name=args.function, dlq_queue_name=args.dlq,
+                alarm_names=[f"{args.function}-errors",
+                             f"{args.function}-no-invocation",
+                             f"{args.function}-scheduler-dlq"],
+                start=WINDOW_START, end=as_of, region=args.region)
+        except Exception as exc:                      # noqa: BLE001 — reported, not fatal
+            infra = None
+            print(f"warning: AWS infrastructure check unavailable ({exc}) "
+                  f"— criterion 6 will be SKIPPED")
+
+    inputs = FidelityInputs(
+        decisions=decisions, state=state, bars=bars,
+        strategy=EmaCrossover(fast=args.fast, slow=args.slow, allow_short=False),
+        timeframe=args.timeframe, lookback_bars=args.lookback_bars, infra=infra,
+    )
+    return evaluate_fidelity(inputs, as_of)
 
 
 if __name__ == "__main__":

@@ -276,11 +276,23 @@ dokładnie tym, co policzył backtest. Kryteria (wszystkie muszą przejść):
 4. **Zero look-ahead na żywo:** `processed_at` > zamknięcie bara dla każdego
    rekordu; żaden otwarty bar nie został przetworzony.
 5. **Parytet księgowości:** replay `PaperPortfolio` po logu decyzji odtwarza
-   zapisane `equity`/`realized` do 1e-6.
+   zapisane `equity`/`realized` **do 1 grosza** (rekordy są zapisywane już
+   zaokrąglone do 2 miejsc — `bot.py`; żądanie 1e-6 od zaokrąglonej liczby
+   byłoby niespełnialne z definicji).
 6. **Ciągłość infrastruktury:** zero pominiętych dni cronu, zero wiadomości
    w DLQ, alarmy `errors`/`no-invocation` nie odpaliły.
-- Wszystkie 6 liczone WYŁĄCZNIE z danych, które już zapisujemy → kryteria są
-  implementowalne (tryb `gate.py --fidelity`, do dopisania).
+- Wszystkie 6 liczone WYŁĄCZNIE z danych, które już zapisujemy.
+  ✅ ZAIMPLEMENTOWANE 2026-07-28: `gate.py --fidelity` (31 testów; każde
+  kryterium ma test, że faktycznie ŁAPIE swoją awarię, nie tylko przechodzi).
+- **Brakujący dowód ≠ PASS.** Kryterium bez danych = SKIPPED, a werdykt
+  całości = **INCOMPLETE**. PASS wymaga wszystkich sześciu.
+- ⚠️ **ZNANE OGRANICZENIE, zarejestrowane z góry:** w oknie w całości FLAT
+  kryterium 2 (parytet sygnału) traci moc rozróżniającą — każda strategia
+  trendowa mówi wtedy „0", więc PASS jest zgodny z hipotezą, że na żywo
+  chodzi coś innego. Zweryfikowane empirycznie: weryfikacja logu prod wobec
+  EMA10/50 (zamiast 20/100) też przechodzi. Narzędzie **samo to raportuje**
+  (`discriminating: false` + CAVEAT przy werdykcie) — nie wolno tego przy
+  ocenie przemilczeć ani interpretować jako pełnego dowodu.
 - **Bramka A NIE odblokowuje realnych pieniędzy.** PASS znaczy tylko:
   „paper==backtest, infrastruktura nie kłamie". To zamyka M5.3.
 
@@ -606,8 +618,10 @@ Cel: zwalidowana strategia EMA lata co dzień, zapisuje decyzje + P&L.
       w 56 dni) = 1%). Re-ocena co 28 dni; realny horyzont 12–18 mies.
 - [ ] **M5.3** BRAMKA A (wierność wykonania) — 6 kryteriów z sekcji 3.
       TO jest rozstrzygalne 2026-09-10 i to jest realny dorobek okna.
-- [ ] **M5.4** Zaimplementuj `gate.py --fidelity` (Bramka A) — musi być gotowe
-      i przetestowane PRZED 2026-09-10.
+      Stan 2026-07-28 (dzień 12): **PASS wszystkie 6** na prodzie, z
+      zastrzeżeniem o mocy rozróżniającej (okno FLAT). Odhaczyć po 09-10.
+- [x] **M5.4** Zaimplementuj `gate.py --fidelity` (Bramka A) — ZROBIONE
+      2026-07-28, 31 testów, zweryfikowane na żywym prodzie.
 
 ## ▶ M6 — Małe realne kwoty + PR (SESJA F, część 2)
 - [ ] **F5. Rotacja sekretów** (user): AWS key, Binance key, SECRET_KEY.
@@ -816,4 +830,23 @@ frontend się builduje. Problem = wykonanie, nie koncept.
   zbędny) + test_lambda_package.py. Dryf prod↔repo funkcjonalnie zerowy
   (bot nie importuje data.py). Zero ML na prodzie potwierdzone. Poprawione
   nieaktualne zapisy planu (fee >0.3%, „3.4 trejdy/rok", PR-y do zmergowania).
-  Suite 95 testów zielonych. NASTĘPNY KROK: `gate.py --fidelity` (M5.4).
+  Suite 95 testów zielonych. → PR #20.
+- 2026-07-28 (cd.) — BRAMKA A ZAIMPLEMENTOWANA (branch feat/gate-fidelity,
+  `gate.py --fidelity`). 6 kryteriów jako czyste funkcje + `evaluate_fidelity`
+  (bez I/O, testowalne), loadery DynamoDB/local rozbite na surowe rekordy,
+  `load_infra_aws` czyta CloudWatch (Invocations/dzień, DLQ max, historia
+  alarmów) — wszystko read-only. 31 testów: KAŻDE kryterium ma parę
+  „przechodzi na poprawnym logu" + „łapie swoją konkretną awarię"
+  (brakujący bar, duplikat, przekręcony target, inna strategia, zła cena,
+  decyzja przed zamknięciem bara, podmieniona equity, zły fee_rate,
+  zgubiony trejd, brak inwokacji, DLQ, alarm). Fixture wymusza pełny
+  round-trip — pierwsza wersja była FLAT i dwa testy przechodziły z
+  niewłaściwego powodu (naprawione). Werdykt: brak dowodu = INCOMPLETE,
+  nigdy PASS. **Na żywym prodzie dzień 12: PASS wszystkie 6** (13 rekordów
+  07-15→07-27, parytet sygnału na oknie 399 barów, ceny co do grosza, brak
+  look-ahead, replay księgowości ±$0.01, 12 dni inwokacji, DLQ pusty).
+  ⚠️ ODKRYTE PRZY OKAZJI: w oknie FLAT kryterium 2 nie rozróżnia strategii
+  — weryfikacja logu prod wobec EMA10/50 też przechodzi. Narzędzie samo
+  raportuje `discriminating: false` + CAVEAT, ograniczenie ZAREJESTROWANE
+  w §3 z góry. Suite 126 zielonych. NASTĘPNY KROK: tryb czekania;
+  porządki: tfstate→S3, kwarantanna enterprise; domena przed 09-10.
