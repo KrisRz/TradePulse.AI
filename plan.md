@@ -37,8 +37,15 @@
   min-history (M3). Zweryfikowane na żywo: obie Lambdy CodeSha256 =
   r8Luxno...tNq0= (prod=repo), DLQ+alarm istnieją, dashboard renderuje MTM
   equity $10k FLAT. tfstate zbackupowany → ~/TradePulse_safety/tfstate-backups.
-  OTWARTE M5-safe (jeszcze nie zrobione): kwarantanna enterprise w monolicie,
-  tfstate→S3, domena → odnowić przed 09-10 (reminder ustawiony). Opcjonalne prace
+  OTWARTE M5-safe (jeszcze nie zrobione): **już tylko kwarantanna enterprise
+  w monolicie** (porządek w kodzie, którego nic nie uruchamia — zero pilności).
+  ✅ tfstate→S3 ZROBIONE 2026-07-28. ✅ Domena: NIE MA CO ROBIĆ — sprawdzone
+  2026-07-28 u rejestratora: `AutoRenew: true`, `TransferLock: true`, wygasa
+  2026-09-28; strefa DNS ISTNIEJE (Z04807683284XCLGPEP5H, wbrew staremu
+  zapisowi „skasowana"), delegacja NS u rejestratora wskazuje na AWS,
+  `bot.tradepulseai.co.uk` → HTTP 200. Reminder 08-24 jest zbędny; jedyne
+  realne ryzyko to nieważna karta na koncie AWS (auto-renew nie uratuje przy
+  odrzuconej płatności) — sprawdzić w Billing, nie w Terraformie. Opcjonalne prace
   w oknie (nie dotykają strategii), KOLEJNOŚĆ: (1) ✅ ZROBIONE 2026-07-25 — dane
   historyczne kompletne i zwalidowane (1h dociągnięty, holdout wyegzekwowany,
   tooling w repo; branch feat/historical-data-prep, patrz §4);
@@ -58,7 +65,12 @@
   ROZDZIELONA (§3): A=wierność wykonania (rozstrzygalna teraz), B=rentowność
   (progi bez zmian, horyzont 12–18 mies., tylko ona otwiera M6). Naprawione
   też: paczka Lambdy nie była reprodukowalna (unpinned `requests`).
-  Zostały porządki: kwarantanna enterprise, tfstate→S3.
+  (5) ✅ ZROBIONE 2026-07-28 — **tfstate→S3**: bucket
+  `tradepulse-tfstate-590183672693` (versioning + SSE + block-public + deny
+  non-TLS), lock przez S3 conditional writes (`use_lockfile`, bez tabeli
+  DynamoDB), bootstrap w `scripts/bootstrap_tf_backend.sh`. Migracja
+  zweryfikowana: plan czysty PRZED i PO, `state list` = 32/32 zasoby.
+  **Lista porządków wyczerpana poza kwarantanną enterprise.**
 - **NASTĘPNA AKCJA:** zaimplementować `gate.py --fidelity` (Bramka A, M5.4)
   PRZED 2026-09-10 — inaczej okno skończy się bez formalnego dorobku.
   Poza tym M5 — bot zbiera żywe decyzje. Otwarta decyzja:
@@ -860,5 +872,25 @@ frontend się builduje. Problem = wykonanie, nie koncept.
   ⚠️ ODKRYTE PRZY OKAZJI: w oknie FLAT kryterium 2 nie rozróżnia strategii
   — weryfikacja logu prod wobec EMA10/50 też przechodzi. Narzędzie samo
   raportuje `discriminating: false` + CAVEAT, ograniczenie ZAREJESTROWANE
-  w §3 z góry. Suite 126 zielonych. NASTĘPNY KROK: tryb czekania;
-  porządki: tfstate→S3, kwarantanna enterprise; domena przed 09-10.
+  w §3 z góry. Suite 126 zielonych. → PR #21.
+- 2026-07-28 (cd.2) — TFSTATE→S3 (branch chore/tfstate-s3-backend). Bucket
+  `tradepulse-tfstate-590183672693` w eu-west-2: versioning ON (bo zły zapis
+  ma być odwracalny), SSE-S3 + bucket key, block-public-access 4/4, policy
+  deny na non-TLS. BEZ reguły lifecycle świadomie — stan waży ~60 KB, a
+  expiration kasowałaby właśnie te punkty odtworzenia, po które ten bucket
+  istnieje. Locking przez S3 conditional writes (`use_lockfile`, TF ≥1.10) —
+  zero tabel DynamoDB do utrzymywania i opłacania. Bootstrap poza Terraformem
+  (`scripts/bootstrap_tf_backend.sh`, idempotentny) — bucket nie może być
+  zarządzany przez stan, który sam przechowuje. PROCEDURA: backup stanu do
+  ~/TradePulse_safety + scratchpad → `plan` PRZED (czysty, „No changes") →
+  `init -migrate-state` → `plan` PO (czysty) + `state list` 32/32. Uwaga:
+  kopia dostała nowy lineage i serial 1 (metadane), treść i komplet zasobów
+  bez zmian. Lokalny terraform.tfstate wyzerowany przez TF, .backup (61 KB)
+  został jako dodatkowa siatka. `required_version` podbity do >=1.10;
+  sprawdzone, że nie psuje CI — infra-deploy.yml celuje w martwy `infra/`,
+  nie w `infra-serverless/`, i jest manual-only.
+  ODKRYCIE PRZY OKAZJI: pozycja „odnowić domenę przed 09-10" była FAŁSZYWYM
+  to-do — `AutoRenew: true` u rejestratora, strefa DNS istnieje (stary zapis
+  „skasowana" nieaktualny), bot.tradepulseai.co.uk → 200. Reminder 08-24
+  zbędny. NASTĘPNY KROK: tryb czekania do 2026-09-10; jedyny zaległy porządek
+  to kwarantanna enterprise (zero pilności, nic tego nie uruchamia).

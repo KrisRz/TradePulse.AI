@@ -5,19 +5,30 @@
 # destructively rename tables. This stack is: one DynamoDB table, one zip
 # Lambda, one daily EventBridge schedule, one error alarm. ~$0/month.
 #
-# State: local for now (bootstrap without a state bucket). Migrate to the
-# S3 backend once the bucket exists:
-#   terraform init -migrate-state \
-#     -backend-config="bucket=tradepulse-terraform-state-590183672693" \
-#     -backend-config="key=serverless/terraform.tfstate"
+# State: S3, versioned and encrypted (migrated 2026-07-28). It used to be a
+# single file on one laptop — losing it meant rebuilding this whole stack by
+# hand against live resources. Bootstrap the bucket with
+# `scripts/bootstrap_tf_backend.sh` (it cannot live in this state, since it is
+# what stores it).
 
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.10" # use_lockfile (S3 conditional-write locking)
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+  }
+
+  backend "s3" {
+    bucket = "tradepulse-tfstate-590183672693"
+    key    = "infra-serverless/terraform.tfstate"
+    region = "eu-west-2"
+
+    encrypt = true
+    # Locking via S3 conditional writes — no DynamoDB lock table to run or pay
+    # for. Requires Terraform >= 1.10 (pinned above).
+    use_lockfile = true
   }
 }
 
