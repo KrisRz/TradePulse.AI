@@ -1,0 +1,26 @@
+# Paper-bot Lambda runtime dependencies — EXACT pins, no ranges.
+#
+# Why a separate file: the bot's zip carries only the dependency-light packages
+# it actually imports. numpy/pandas come from the AWS managed
+# AWSSDKPandas-Python311 layer; boto3/botocore from the Lambda runtime itself.
+# Installing either into the zip shadows the layer/runtime copy and breaks it.
+#
+# Why exact pins: `scripts/build_lambda_package.sh` rebuilds this zip on every
+# deploy. An unpinned install silently ships whatever PyPI serves that day into
+# a bot that trades — the build must be reproducible, and the version that runs
+# in production must be the version we validated.
+#
+# These are the versions verified live in the eu-west-2 deployment
+# (CodeSha256 r8LuxnoJgluluwOEuPP6tk5nRDrhpjNq4emap/stNq0=, deployed 2026-07-22).
+# Bumping any of them = rebuild + `terraform apply` + re-verify the hash.
+
+requests==2.34.2
+
+# Transitive deps of requests, pinned so the zip contents are deterministic.
+certifi==2026.7.22
+charset-normalizer==3.4.9
+idna==3.18
+
+# urllib3 held below 2.1: the Lambda runtime's botocore imports urllib3 from
+# /var/task when present, and botocore requires <2.1 on py3.10+.
+urllib3==2.0.7

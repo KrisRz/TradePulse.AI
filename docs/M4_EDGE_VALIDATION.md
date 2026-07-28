@@ -1,5 +1,25 @@
 # M4 — Edge validation (walk-forward, out-of-sample) — 2026-07-16
 
+> **⚠️ SPROSTOWANIE 2026-07-28.** Liczby w tabeli F0 („EMA Sharpe 1.11–1.18")
+> należą do strategii **przestrajanej na każdym foldzie**, a nie do stałego
+> EMA20/100, które handluje na Lambdzie. Optymalizator walk-forward nie wybrał
+> 20/100 ani razu (0/73 foldów — zawsze 10/50), więc zdanie „Paper bot keeps
+> trading EMA20/100 … exactly what is deployed on Lambda" nie znaczyło, że te
+> Sharpe'y dotyczą produkcji.
+>
+> Konfiguracja produkcyjna została zmierzona osobno 2026-07-28 i **broni się**:
+>
+> | layout | adaptive (poniżej) | **stałe 20/100 = prod** | Buy&Hold |
+> |---|---|---|---|
+> | 730/180 | 1.11 | **1.01** | 0.87 |
+> | 500/125 | 1.14 | **1.00** | 0.97 |
+> | 1000/250 | 1.12 | **1.14** | 1.00 |
+> | 365/90 | 1.18 | **1.02** | 0.81 |
+>
+> Bije buy & hold w każdym layoucie; brak śladów przeuczenia (in-sample ranga
+> 28/42). Pełna analiza: `docs/ANALIZA_KALIBRACJI_2026-07-28.md`,
+> reprodukcja: `python scripts/research/calibration_audit.py`.
+
 Data: Binance BTCUSDT/ETHUSDT, fresh through 2026-07-16
 (`data/ml/historical/`, regenerate with `backtesting.download`).
 Engine: shared backtest engine (next-bar-open, fees 0.1% + slippage 0.02%,

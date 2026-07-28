@@ -21,10 +21,10 @@ cp -R "$ROOT/app/backend/paper_trading" "$BUILD/app/backend/"
 cp -R "$ROOT/app/backend/backtesting"   "$BUILD/app/backend/"
 find "$BUILD" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
-# --- third-party: requests for the Lambda platform ---
-# urllib3 pinned <2.1: the Lambda runtime's botocore imports urllib3 from
-# /var/task if present, and botocore requires <2.1 on py3.10+.
-"$ROOT/.venv/bin/pip" install requests "urllib3<2.1" \
+# --- third-party: exact pins, built for the Lambda platform ---
+# Versions live in app/backend/requirements-lambda.txt so a rebuild ships the
+# same bytes we validated, instead of whatever PyPI serves today.
+"$ROOT/.venv/bin/pip" install -r "$ROOT/app/backend/requirements-lambda.txt" \
     --target "$BUILD" \
     --platform manylinux2014_x86_64 \
     --implementation cp \
