@@ -202,10 +202,24 @@ który handluje. Prod miał `requests 2.34.2`, a `requirements.txt` deklarował
 (zweryfikowane — rozwiązują się dokładnie do zestawu z działającego prod, więc
 redeploy jest zbędny) + 11 testów w `test_lambda_package.py`.
 
-**Dryf prod ↔ repo: funkcjonalnie zerowy.** Zdeployowany zip (2026-07-22) różni
-się od repo tylko w `backtesting/data.py` (fix ISO8601 z PR #17) i pustym
-`app/backend/__init__.py`. Bot nie importuje `data.py` (`bot.py:16-19`), więc
-redeploy nie jest pilny.
+**Dryf prod ↔ repo: funkcjonalnie zerowy.** Zdeployowany zip (2026-07-22, obie
+Lambdy `CodeSha256 r8Luxno…tNq0=`) różni się od repo w `backtesting/data.py`
+(fix ISO8601 z PR #17) i pustym `app/backend/__init__.py`; nowe narzędzia CLI
+(`gate.py`, `bulk_download.py`, `integrity.py`) w zipie nie istnieją, ale
+Lambda ich nie uruchamia.
+
+> **Sprostowanie 2026-07-28 (cd.):** pierwotnie napisałem tu, że „bot nie
+> importuje `data.py`". To było nieścisłe — `data.py` **jest** ładowany przy
+> cold starcie przez `backtesting/__init__.py:18` (`from . import data,
+> indicators`). Wniosek się nie zmienia, ale z innego powodu: zmieniona linia
+> siedzi w `load_csv()`, a bot czyta rynek przez `feed.fetch_klines()` i
+> `load_csv` nigdy nie wywołuje. Import bez wywołania = zero zmiany zachowania.
+> Zweryfikowane przez zaimportowanie obu handlerów i wylistowanie
+> `sys.modules`, nie przez czytanie nagłówków importów.
+
+Redeploy nie jest potrzebny: kod ścieżki bota jest funkcjonalnie identyczny,
+a przypięte zależności rozwiązują się dokładnie do zestawu, który już działa.
+W oknie M5 `terraform apply` bez zysku funkcjonalnego = samo ryzyko.
 
 **Zero ML na produkcji — potwierdzone.** Zip zawiera wyłącznie `paper_trading`
 + `backtesting` + `requests`. Żaden model z `models/enterprise/` nie jest

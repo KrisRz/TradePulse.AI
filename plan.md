@@ -18,6 +18,15 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 - **Milestone:** M0 ✅ + M1 ✅ + M2 ✅ + M3 ✅ + M4 ✅ (decyzje na danych) → **M5 BIEGNIE**.
+- **🚀 STAN DEPLOYU (sprawdzaj TU, zanim zaczniesz kombinować z `terraform apply`):**
+  ostatni deploy **2026-07-22**, obie Lambdy `CodeSha256 r8Luxno…tNq0=`.
+  Wszystko po tej dacie (PR #17–#21) to **narzędzia CLI, badania, testy i
+  dokumenty — NIC z tego nie jest uruchamiane przez Lambdę**, więc redeploy
+  jest ZBĘDNY i w oknie M5 byłby samym ryzykiem. Kod ścieżki bota =
+  funkcjonalnie identyczny z prod (jedyna różnica: `load_csv()` w data.py,
+  którego bot nie woła). Piny z `requirements-lambda.txt` rozwiązują się
+  dokładnie do zestawu działającego na prodzie — zweryfikowane. Deployować
+  dopiero, gdy zmieni się coś, co Lambda faktycznie wykonuje (np. M6).
 - **TRYB: CZEKAMY.** Okno M5 od 2026-07-16, oceny bramek ≥2026-09-10, ZERO zmian
   strategii w oknie. Health-check 2026-07-17: wszystko zielone (scheduler, Lambda,
   DynamoDB, SNS). Deep-audit 6 warstw zrobiony → docs/ANALIZA_6_WARSTW_2026-07-17.md
@@ -828,7 +837,10 @@ frontend się builduje. Problem = wykonanie, nie koncept.
   bez wersji (prod 2.34.2 vs requirements 2.31.0) → requirements-lambda.txt
   z dokładnymi pinami (rozwiązują się DOKŁADNIE do zestawu z prod, redeploy
   zbędny) + test_lambda_package.py. Dryf prod↔repo funkcjonalnie zerowy
-  (bot nie importuje data.py). Zero ML na prodzie potwierdzone. Poprawione
+  (`data.py` JEST importowany przy cold starcie przez backtesting/__init__.py,
+  ale zmieniona linia siedzi w load_csv(), którego bot nigdy nie woła —
+  sprostowanie pierwotnego zapisu „bot nie importuje data.py").
+  Zero ML na prodzie potwierdzone. Poprawione
   nieaktualne zapisy planu (fee >0.3%, „3.4 trejdy/rok", PR-y do zmergowania).
   Suite 95 testów zielonych. → PR #20.
 - 2026-07-28 (cd.) — BRAMKA A ZAIMPLEMENTOWANA (branch feat/gate-fidelity,
