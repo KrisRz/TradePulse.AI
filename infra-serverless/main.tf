@@ -93,6 +93,10 @@ resource "aws_dynamodb_table" "paper_bot" {
   point_in_time_recovery {
     enabled = true
   }
+
+  # The M5 evidence base lives here: live, timestamped decisions that cannot be
+  # recreated after the fact. PITR only covers 35 days; the paper window is 56+.
+  deletion_protection_enabled = true
 }
 
 # ------------------------------------------------------------------ Lambda --
