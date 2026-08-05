@@ -11,7 +11,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Any, Optional
 
-from ..backtesting.costs import apply_fee, entry_fill_price, exit_fill_price
+from ..backtesting.costs import apply_fee
+from .execution import (
+    Executor,
+    Order,
+    SimulatedExecutor,
+    closing_order_side,
+    opening_order_side,
+)
 
 
 @dataclass
@@ -44,18 +51,43 @@ class PaperPortfolio:
     def __post_init__(self) -> None:
         if self.realized is None:
             self.realized = self.initial_capital
+        # Plain attribute, deliberately NOT a dataclass field: ``to_dict`` uses
+        # ``asdict`` and this state is persisted to DynamoDB, so the executor
+        # must stay out of the serialised book.
+        self._executor: Optional[Executor] = None
 
     # -- execution ------------------------------------------------------- #
+    def set_executor(self, executor: Optional[Executor]) -> None:
+        """Route fills through ``executor`` (None restores the slippage model).
+
+        This is how a real venue — Binance's test network, later the live
+        exchange — gets substituted for simulation without the accounting
+        below knowing the difference.
+        """
+        self._executor = executor
+
+    def _fill(self, order_side: int, price: float, time: str):
+        """Obtain a fill for one order leg.
+
+        Defaults to a :class:`SimulatedExecutor` built from the portfolio's
+        *current* slippage, so restoring a book from disk can never execute
+        against a stale cost model.
+        """
+        executor = self._executor or SimulatedExecutor(slippage=self.slippage)
+        return executor.execute(Order(side=order_side, reference_price=price,
+                                      time=time))
+
     def _open(self, new_side: int, price: float, time: str) -> None:
+        fill = self._fill(opening_order_side(new_side), price, time)
         self.equity_before_entry = self.realized
         self.realized = apply_fee(self.realized, self.fee_rate)   # entry fee
         self.side = new_side
-        self.entry_fill = entry_fill_price(price, new_side, self.slippage)
+        self.entry_fill = fill.price
         self.entry_equity = self.realized
         self.entry_time = time
 
     def _close(self, price: float, time: str, reason: str) -> None:
-        exit_fill = exit_fill_price(price, self.side, self.slippage)
+        exit_fill = self._fill(closing_order_side(self.side), price, time).price
         gross = self.side * (exit_fill / self.entry_fill - 1.0)
         self.realized = apply_fee(self.entry_equity * (1.0 + gross), self.fee_rate)
         net = self.realized / self.equity_before_entry - 1.0
