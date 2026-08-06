@@ -115,8 +115,16 @@ resource "aws_lambda_function" "shadow_bot" {
   filename         = var.shadow_lambda_zip_path
   source_code_hash = filebase64sha256(var.shadow_lambda_zip_path)
   timeout          = 120
-  memory_size      = 256 # no pandas on this path — it never touches the strategy
+  memory_size      = 256
   architectures    = ["x86_64"]
+
+  # Required even though this path never runs the strategy: importing anything
+  # under `app.backend.paper_trading` executes the package __init__, which pulls
+  # in `bot` and therefore pandas. Reasoning "the heartbeat does not need pandas"
+  # is how this first deploy failed with Runtime.ImportModuleError — the import
+  # chain decides, not the call graph. `status` carries the layer for the same
+  # reason (see its comment in main.tf).
+  layers = [var.pandas_layer_arn]
 
   environment {
     variables = {
