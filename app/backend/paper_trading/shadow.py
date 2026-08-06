@@ -18,13 +18,19 @@ Why it does not follow the strategy signal
 It could: demo carries live prices (verified — same ticker, same kline opens), so
 mirroring the production signal would be coherent. But a signal-following shadow
 would sit flat for months at a time, which is precisely the situation this exists
-to avoid. Holding a position across days also needs the book to represent a venue
-position in quantities, which is step 4's job, not this one's.
+to avoid.
 
 So each run is deliberately **self-contained**: it opens and closes within the
 same invocation and always ends flat. Nothing to carry, nothing to drift out of
 sync with the venue — except the one case where the sell fails, which is exactly
 why :meth:`ShadowRunner.run_once` checks for a stranded position first.
+
+The round-trip is driven through a throwaway :class:`PaperPortfolio`, not the
+executor alone. That way the daily heartbeat also exercises the book's
+**quantity-backed** accounting against real fills — real quantities, venue
+prices, and whatever asset the commission happens to arrive in. Without that,
+the path M6 depends on would be proven only by tests until the day money rides
+on it, which is the same mistake this whole track exists to avoid.
 
 What it costs
 -------------
@@ -41,6 +47,7 @@ from typing import Any, Optional
 
 from .binance_demo import BinanceAPIError, BinanceDemoExecutor, OrderTooSmall
 from .execution import BUY, SELL, Order
+from .portfolio import PaperPortfolio
 
 logger = logging.getLogger(__name__)
 
@@ -129,34 +136,52 @@ class ShadowRunner:
             entry_ref = self.executor.mark_price()
             qty = self.executor.plan_quantity(BUY, entry_ref)
 
-            entry = self.executor.execute(
-                Order(side=BUY, reference_price=entry_ref, time=now.isoformat())
-            )
+            # Drive the round-trip through a throwaway PaperPortfolio rather
+            # than the executor alone. The heartbeat then exercises the
+            # QUANTITY-BACKED accounting path with real fills every day —
+            # partial quantities, venue prices, whatever asset the commission
+            # arrives in — instead of that path only ever being proven by
+            # tests until the day M6 depends on it.
+            book = PaperPortfolio(fee_rate=0.001,
+                                  slippage=self.executor.assumed_slippage,
+                                  initial_capital=10_000.0)
+            book.set_executor(self.executor)
+
+            book.reconcile(1, entry_ref, now.isoformat())
+            entry = self.executor.reconciliations()[-1]
             # Persist immediately: if the sell now fails, the next run must know
             # there is something to flatten.
             state["open_qty"] = float(self.executor.position_qty)
             self.store.save(state)
 
             exit_ref = self.executor.mark_price()
-            exit_fill = self.executor.execute(
-                Order(side=SELL, reference_price=exit_ref, time=now.isoformat())
-            )
+            book.reconcile(0, exit_ref, now.isoformat())
+            exit_rec = self.executor.reconciliations()[-1]
             state["open_qty"] = float(self.executor.position_qty)
             self.store.save(state)
 
-            recs = self.executor.reconciliations()[-2:]
+            trade = book.trades[-1] if book.trades else {}
             record.update({
                 "status": "ok",
                 "planned_qty": float(qty),
-                "entry": {"price": entry.price, "qty": entry.qty,
+                "entry": {"price": entry.actual_price, "qty": entry.qty,
                           "order_id": entry.order_id, "reference": entry_ref},
-                "exit": {"price": exit_fill.price, "qty": exit_fill.qty,
-                         "order_id": exit_fill.order_id, "reference": exit_ref},
-                "fee_paid": (entry.fee_paid or 0) + (exit_fill.fee_paid or 0),
+                "exit": {"price": exit_rec.actual_price, "qty": exit_rec.qty,
+                         "order_id": exit_rec.order_id, "reference": exit_ref},
+                "fee_paid": entry.fee_paid + exit_rec.fee_paid,
                 "fee_asset": entry.fee_asset,
-                "slippage": [r.slippage_actual for r in recs],
+                "slippage": [entry.slippage_actual, exit_rec.slippage_actual],
                 "slippage_assumed": self.executor.assumed_slippage,
                 "flat": float(self.executor.position_qty) == 0.0,
+                # Evidence that the quantity path itself works on live fills.
+                "book": {
+                    "quantity_backed": book.quantity_backed,
+                    "net_return": trade.get("net_return"),
+                    "realized": book.realized,
+                    "qty_after": book.qty,
+                    "fees_quote": book.fees_quote,
+                    "fees_external": book.fees_external,
+                },
             })
             if not record["flat"]:
                 # Loud, not fatal: the position is recorded and the next run

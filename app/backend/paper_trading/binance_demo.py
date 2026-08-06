@@ -585,6 +585,7 @@ class BinanceDemoExecutor:
             fee_asset=fee_asset or None,
             order_id=str(response.get("orderId", "")) or None,
             raw=response,
+            base_asset=rules.base_asset,
         )
 
     # ----------------------------------------------------------------- reporting --
