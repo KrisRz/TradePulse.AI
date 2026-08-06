@@ -147,9 +147,14 @@
   (`scripts/research/scenario_lab.py`, docs/SCENARIO_LAB_2026-08-06.md).
   64 próby: 4 kandydatów × 4 layouty × 4 poziomy prowizji, holdout wyegzekwowany
   w kodzie, reguła PRE-REJESTROWANA przed uruchomieniem, kara za liczbę prób.
-  🟢 **BTC 4h PRZYJĘTY** (4/4 kryteria) — 130–190 trejdów tam, gdzie 1d robi
-  13–31, czyli **7,2× szybszy dowód**: werdykt o rentowności w miesiącach
-  zamiast w 12–18 mies. ⚠️ ALE KRUCHY: przy 0,1% (tyle bierze giełda) bije B&H
+  🟢 **BTC 4h PRZYJĘTY** (4/4 kryteria) — 130–190 trejdów tam, gdzie 1d robi 13–31.
+  🔴 **SPROSTOWANIE 2026-08-06: „7,2× szybszy dowód" to NIEPRAWDA.** Obalone
+  symulacją (20 000 historii): SE zannualizowanego Sharpe'a przy 4h vs 1d to
+  stosunek **1,00–1,02×**, a nie √6=2,45×. Algebra: `SE = √P·√(1/(P·T)) = √(1/T)`
+  — częstotliwość się skraca, zostaje sam CZAS KALENDARZOWY. 4h daje szybciej
+  statystyki NA TREJD (win rate, profit factor, fee drag, egzekucja), ale NIE
+  szybszy werdykt o zannualizowanym wyniku — a o to pyta bramka B.
+  Wniosek: **4h nie jest skrótem do M6.** ⚠️ ALE KRUCHY: przy 0,1% (tyle bierze giełda) bije B&H
   4/4, przy 0,2% 3/4, przy **0,3% przegrywa 4/4** — margines to JEDEN krok
   prowizji. Drawdown gorszy: −53…−69% vs −49% na 1d. Przewidywany haczyk
   „7× częstotliwość = 7× fee drag" POTWIERDZONY.
@@ -163,7 +168,32 @@
   UCZCIWIE O DSR: wszyscy przechodzą z 1,000 — mówi „to nie artefakty
   przeszukiwania", ale to nie DSR ich odsiał, tylko porównanie z B&H i siatka
   prowizji. Przy większej liczbie kandydatów zacznie mieć znaczenie.
-- **NASTĘPNA AKCJA:** **nowe okno papierowe dla BTC 4h** — zgodnie z
+- **✅ KANAŁ BTC 4h NA ŻYWYM VENUE — ZBUDOWANY 2026-08-06**
+  (docs/VENUE_4H_CHANNEL_2026-08-06.md). Nie zwykłe okno papierowe: księga jest
+  papierowa, ale **fille pochodzą z prawdziwego silnika dopasowań** przez
+  `BinanceDemoExecutor`. ~12 prawdziwych round-tripów/rok zamiast 1,69 — i o to
+  chodzi po sprostowaniu: poślizg, fee drag i zachowanie księgi na prawdziwym
+  fillu zbiegają się z LICZBĄ TREJDÓW, nie z czasem.
+  PIERWSZY POMIAR NA ZLECENIU ZE STRATEGII (`54508851440`): poślizg **0,0189%**
+  wobec zakładanych 0,0200% — model trafia niemal co do joty (jeden fill, nie dowód).
+  🔴 PUŁAPKA ROZBROJONA: executor śledzi pozycję W PAMIĘCI, a Lambda żyje
+  sekundy przy pozycji trzymanej tygodniami → odtworzony bot dostałby
+  `nothing to sell`, a prawdziwe coiny zostałyby na giełdzie bez kodu zdolnego
+  je zamknąć, i wyszłoby to dopiero przy pierwszym wyjściu. Lekarstwo:
+  `PaperPortfolio.qty` z kroku 4 jest persystowane, więc `attach_venue()`
+  odtwarza pozycję Z KSIĘGI (nie z salda — saldo nie odróżnia naszej pozycji od
+  0,05 BTC, którymi konto było zasilone). Zweryfikowane lokalnie.
+  PRE-REJESTROWANE PRZED STARTEM: bramka A bez zmian, bramka B te same progi i
+  ten sam horyzont co 1d (ŻADNEGO przyspieszenia), oraz nowa **bramka C —
+  wierność kosztowa** (mediana poślizgu ≤0,02%, p90 ≤0,05%, odrzucenia ≤2%,
+  zero niedomkniętych pozycji, zero rozjazdów księga↔venue) rozstrzygalna po
+  ≥20 fillach ≈ 10 miesięcy.
+  Kapitał księgi = pułap zlecenia = 200 USDT (celowo równe, inaczej księga
+  raportowałaby strategię w 99% w gotówce). Koszt: $0.
+- **NASTĘPNA AKCJA:** wgrać kanał 4h (`terraform apply tfplan`, 13 zasobów,
+  0 zmian) i zweryfikować pierwszy przebieg. Potem: **maker orders (F7)** —
+  przy 4h prowizja przestaje być szczegółem (edge ginie między 0,2% a 0,3%),
+  więc to awansuje z kosmetyki na wymóg. (Stary zapis kroku 4h — zrobiony:) — zgodnie z
   pre-rejestrowaną regułą: osobny kanał, osobna księga, ZERO zmian w biegnącym
   BTC 1d. To jedyna droga do werdyktu o rentowności szybciej niż w 2027.
   Uwaga: przy 4h prowizja staje się zmienną krytyczną (edge ginie między 0,2%
@@ -1217,3 +1247,22 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   dowodzić ścieżki wykonawczej, nie mierzyć kosztów. Przy okazji ścieżka
   `fees_external` jest dzięki temu ćwiczona codziennie na prodzie.
   NASTĘPNY KROK: nowe okno papierowe dla BTC 4h.
+- 2026-08-06 (późna noc) — **Kanał BTC 4h na żywym venue + SPROSTOWANIE, które
+  zmieniło uzasadnienie.** Przed budową zweryfikowałem tezę „7,2× szybszy dowód"
+  symulacją (20 000 historii): **JEST NIEPRAWDZIWA.** SE zannualizowanego
+  Sharpe'a przy 4h vs 1d to 1,00–1,02×, nie √6=2,45×. Algebra:
+  `SE = √P·√(1/(P·T)) = √(1/T)` — częstotliwość się skraca, zostaje sam czas
+  kalendarzowy. Poprawione w docs/SCENARIO_LAB i w tym planie; PR #30 zawierał
+  to błędne twierdzenie.
+  User poinformowany i wybrał wariant mocniejszy: kanał 4h WPIĘTY W GIEŁDĘ demo,
+  czyli księga papierowa z prawdziwymi fillami. Uzasadnienie po korekcie:
+  ~12 prawdziwych round-tripów/rok zamiast 1,69, a poślizg/fee drag/zachowanie
+  księgi zbiegają się z liczbą trejdów, nie z czasem — i to jest dokładnie to,
+  na czym zawiśnie M6, a czego 1d nie da z zasady.
+  Zweryfikowane lokalnie na żywym venue: zlecenie 54508851440, 0,0031 BTC,
+  poślizg 0,0189% vs 0,0200% zakładane, księga quantity_backed, equity 199,96.
+  Restart z dysku odtwarza pozycję executora (0,0031) i nie kupuje ponownie.
+  Infrastruktura: osobna Lambda/rola/harmonogram (`cron(10 0,4,8,12,16,20)`)/
+  DLQ/alarmy + osobny zip; dzieli tylko tabelę (pk `BTCUSDT_4h`) i SNS.
+  Plan: 13 do dodania, 0 zmian — M5 nietknięte, zip M5 hash bez zmian.
+  NASTĘPNY KROK: wgrać, zweryfikować pierwszy przebieg, potem maker orders (F7).
