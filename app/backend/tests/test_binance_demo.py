@@ -568,3 +568,64 @@ def test_commission_split_across_assets_is_reported_without_losing_either():
     fill = ex.execute(Order(side=BUY, reference_price=64_000.0, time="t"))
     assert fill.fee_asset == "BNB/BTC"                      # both, sorted
     assert ex.position_qty == Decimal("0.002") - Decimal("0.000001")   # only BTC nets off
+
+
+# ------------------------------------------------- drift vs true slippage --
+def test_slippage_splits_into_drift_and_execution_when_measured():
+    """Two different costs, and only one of them is what `slippage` models.
+
+    The strategy decides on a bar CLOSE; the order reaches the venue minutes
+    later. Measured live 2026-08-06: the same reference produced 0.0189% on one
+    order and 0.0437% on another — not because execution changed, but because
+    the market moved in between. Gate C's threshold is written for the execution
+    part, so the two must be separable.
+    """
+    fills = [{"price": "64474.17", "qty": "0.0031", "commission": "0",
+              "commissionAsset": "BNB"}]
+    ex, _session = make_executor(
+        responses={"/api/v3/order": [order_response(fills)],
+                   "/api/v3/ticker/price": [{"symbol": "BTCUSDT", "price": "64470.00"}]},
+        measure_drift=True,
+    )
+    ex.execute(Order(side=BUY, reference_price=64_446.0, time="t"))
+    rec = ex.reconciliations()[-1]
+
+    assert rec.mark_at_order == pytest.approx(64_470.0)
+    # Total is what a naive reading reports...
+    assert rec.slippage_actual == pytest.approx((64_474.17 / 64_446.0) - 1.0)
+    # ...and it decomposes into market drift plus the cost of crossing the book.
+    assert rec.drift == pytest.approx((64_470.0 / 64_446.0) - 1.0)
+    assert rec.execution_slippage == pytest.approx((64_474.17 / 64_470.0) - 1.0)
+    assert rec.drift + rec.execution_slippage == pytest.approx(rec.slippage_actual,
+                                                               rel=1e-3)
+    # The part Gate C cares about is far smaller than the conflated figure.
+    assert rec.execution_slippage < rec.slippage_actual
+
+
+def test_drift_is_signed_adversely_for_a_sell():
+    fills = [{"price": "64400.00", "qty": "0.0031", "commission": "0",
+              "commissionAsset": "BNB"}]
+    ex, _session = make_executor(
+        responses={"/api/v3/order": [order_response(fills)],
+                   "/api/v3/ticker/price": [{"symbol": "BTCUSDT", "price": "64420.00"}]},
+        measure_drift=True,
+    )
+    ex.set_position(Decimal("0.0031"))
+    ex.execute(Order(side=SELL, reference_price=64_446.0, time="t"))
+    rec = ex.reconciliations()[-1]
+    # Selling into a market that fell since the decision is adverse => positive.
+    assert rec.drift > 0
+    assert rec.execution_slippage > 0
+
+
+def test_drift_is_not_measured_unless_asked():
+    """One extra public request per order — nobody pays for it by accident."""
+    fills = [{"price": "64474.17", "qty": "0.0031", "commission": "0",
+              "commissionAsset": "BNB"}]
+    ex, session = make_executor(responses={"/api/v3/order": [order_response(fills)]})
+    ex.execute(Order(side=BUY, reference_price=64_446.0, time="t"))
+    rec = ex.reconciliations()[-1]
+
+    assert rec.mark_at_order is None
+    assert rec.drift is None and rec.execution_slippage is None
+    assert not [p for _m, p, _q in session.requests if p == "/api/v3/ticker/price"]

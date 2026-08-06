@@ -97,6 +97,9 @@ def handler(event, context):
         api_secret=credentials["BINANCE_DEMO_SECRET"],
         symbol=symbol,
         max_notional=max_notional,
+        # The strategy decides on a bar close; the order lands minutes later.
+        # Without this the two costs are indistinguishable.
+        measure_drift=True,
     )
     executor.sync_time()
 
@@ -113,7 +116,10 @@ def handler(event, context):
         result["fill"] = {
             "price": last.actual_price,
             "reference": last.reference_price,
-            "slippage_actual": last.slippage_actual,
+            "slippage_total": last.slippage_actual,
+            "slippage_execution": last.execution_slippage,
+            "drift_decision_to_order": last.drift,
+            "mark_at_order": last.mark_at_order,
             "slippage_assumed": last.slippage_assumed,
             "qty": last.qty,
             "fee_paid": last.fee_paid,
