@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -78,11 +79,15 @@ class FakeExecutor:
         else:
             self._position_qty = max(Decimal("0"), self._position_qty - self.qty)
 
-        rec = type("R", (), {"slippage_actual": 0.0001})()
-        self._recs.append(rec)
+        order_id = f"order-{len(self.orders)}"
+        # Stands in for a Reconciliation: the runner reads these fields off it.
+        self._recs.append(SimpleNamespace(
+            slippage_actual=0.0001, actual_price=self.price, qty=float(self.qty),
+            order_id=order_id, fee_paid=1e-6, fee_asset="BNB",
+        ))
         return Fill(price=self.price, side=order.side, time=order.time,
                     qty=float(self.qty), fee_paid=1e-6, fee_asset="BNB",
-                    order_id=f"order-{len(self.orders)}")
+                    base_asset="BTC", order_id=order_id)
 
     def reconciliations(self):
         return self._recs
@@ -124,6 +129,20 @@ def test_it_records_both_fills_and_the_measured_slippage():
     assert result["slippage"] == [0.0001, 0.0001]
     assert result["slippage_assumed"] == 0.0002
     assert result["fee_asset"] == "BNB"
+
+
+def test_the_heartbeat_exercises_the_quantity_backed_book():
+    """The path M6 depends on must be proven daily on real fills, not only in tests."""
+    runner, _ex, store = make_runner()
+    result = runner.run_once(now=NOW)
+
+    book = result["book"]
+    assert book["quantity_backed"] is True      # venue fills drove the accounting
+    assert book["qty_after"] == pytest.approx(0.0)
+    assert book["net_return"] is not None
+    # The fake bills BNB, so the cost is recorded but deliberately not in equity.
+    assert book["fees_external"]["BNB"] == pytest.approx(2e-6)
+    assert book["fees_quote"] == 0.0
 
 
 def test_the_partition_key_keeps_it_out_of_the_paper_bots_book():

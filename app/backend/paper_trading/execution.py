@@ -72,6 +72,10 @@ class Fill:
     fee_asset: Optional[str] = None
     order_id: Optional[str] = None
     raw: Optional[dict[str, Any]] = None  # venue response, kept for audit
+    # Which asset ``qty`` is denominated in. The book needs it to tell a
+    # commission billed in the asset just bought (which reduces the position)
+    # from one billed in something else (which does not).
+    base_asset: Optional[str] = None
 
 
 class Executor(Protocol):

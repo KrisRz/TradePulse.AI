@@ -122,7 +122,36 @@
   `app.backend.paper_trading` odpala `__init__`, który ciągnie `bot` → pandas.
   Rozumowanie „heartbeat nie potrzebuje pandas" jest BŁĘDNE — decyduje łańcuch
   importów, nie graf wywołań. Shadow musi mieć warstwę pandas, tak jak `status`.
-- **NASTĘPNA AKCJA:** **krok 4 — księga ilościowa** (`qty` w BTC zamiast ułamka
+- **✅ KROK 4 ZROBIONY 2026-08-06 — księga ilościowa**
+  (docs/QUANTITY_BOOK_2026-08-06.md). NIE przepisaliśmy księgi na ilości, bo to
+  przestawiłoby arytmetykę floatów i wymusiło przebłogosławienie złotego wzorca.
+  Zamiast tego **o ścieżce decyduje fill**: bez `qty` → ścieżka modelowana,
+  nietknięta instrukcja po instrukcji; z `qty` → ścieżka ilościowa
+  (`cash + qty*price`, prowizja faktyczna). Spięte testem równoważności —
+  zmierzony rozjazd 1,8e-12 względnie, czyli sama reasocjacja floatów.
+  DOWÓD: złoty wzorzec `==` PASS, **bramka A na żywym prodzie PASS 6/6**
+  (22 decyzje odtwarzają się ±$0,01), shadow-bot prowadzi round-trip przez
+  `PaperPortfolio` na prawdziwych fillach. Suite 295 zielonych.
+  🔴 ODKRYCIE: **model ułamkowy zaniża koszt SHORTA.** Przy zamknięciu nalicza
+  prowizję od wynikowego kapitału, giełda od notionalu transakcji — dla longa
+  to ta sama liczba, dla shorta różnica ~$0,07/$10k. Żywej strategii nie dotyczy
+  (`allow_short=False`, spot nie shortuje), ale `backtesting.engine` ma
+  `allow_short=True` DOMYŚLNIE, więc każdy research shortów niesie to
+  przybliżenie. Przybite testem, do rozstrzygnięcia przy walidacji shortów.
+  🔴 REKOMENDACJA DO M6: **wyłączyć płacenie prowizji w BNB** na koncie.
+  Zmierzone: prowizja poszła w BNB, więc `realized` prawie nie drgnął, a koszt
+  wylądował w `fees_external` poza equity — dopóki tak jest, `backtest = live`
+  nie domyka się po kosztach. Rabat 25% to ~0,025%/stronę, przy 1,69
+  round-tripa/rok grosze. Wierność modelu warta więcej.
+- **NASTĘPNA AKCJA:** **`scenario_lab.py`** — warsztat scenariuszy z
+  PRE-REJESTROWANĄ regułą decyzyjną i liczeniem prób (Deflated Sharpe), żeby
+  testowanie wielu kandydatów nie zamieniło się w wybieranie najlepszego szumu.
+  Folder `app/backend/backtesting/strategies/` już istnieje (ema_crossover,
+  rsi_mean_reversion, regime_routed) — brakuje nie folderu, tylko jednego
+  młynka, przez który przechodzi każdy kandydat. Bazę ma
+  `scripts/research/calibration_audit.py` (~90% mechaniki). Koszt: $0, M5-safe.
+  Kandydaci do zbadania jednym protokołem: BTC 4h, ETH 1d, noga SHORT.
+  (Stary zapis kroku 4 poniżej — zrobiony:) (`qty` w BTC zamiast ułamka
   kapitału, + sprawa prowizji w BNB). To jest to, czego naprawdę potrzebuje M6.
   UWAGA: dotyka `PaperPortfolio` → wymaga ponownego zamrożenia złotego wzorca
   PRZED refaktorem i weryfikacji bramką A na żywym prodzie (patrz
@@ -1122,3 +1151,27 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   KOSZT: $0 dodatkowo (alarmy w darmowym progu 10, Lambda 1×/dzień, SSM
   standard, SQS free tier). Suite 273 zielone.
   NASTĘPNY KROK bez zmian: krok 4 — księga ilościowa.
+- 2026-08-06 (późny wieczór) — **Krok 4 ZROBIONY: księga ilościowa.**
+  Kluczowa decyzja projektowa: NIE przepisywać księgi, tylko pozwolić FILLOWI
+  decydować o ścieżce. Fill bez `qty` (symulacja) → arytmetyka ułamkowa
+  nietknięta instrukcja po instrukcji, więc złoty wzorzec przechodzi na `==`.
+  Fill z `qty` (prawdziwe venue) → `cash + qty*price` i prowizja faktyczna.
+  Reparametryzacja jest ścisła (`qty = side*E/entry`, `cash = E*(1-side)`),
+  spięta testem równoważności; zmierzony rozjazd 1,8e-12 = reasocjacja floatów.
+  WERYFIKACJA PEŁNA: złoty wzorzec `==` PASS (8 przypadków), **bramka A na
+  ŻYWYM PRODZIE PASS 6/6** (22 decyzje → ±$0,01), round-trip przez księgę na
+  prawdziwym venue (`quantity_backed: true`, `qty_after: 0.0`). Suite 295
+  (było 273). Lambdy M5 bez redeployu, zip M5 hash niezmieniony.
+  🔴 ZNALEZISKO: model ułamkowy ZANIŻA koszt shorta — prowizja wyjściowa
+  liczona od wynikowego kapitału zamiast od notionalu transakcji. Dla longa
+  identyczne (equity wyjściowe = notional), dla shorta ~$0,07/$10k na trejd.
+  Nie dotyczy żywej strategii (`allow_short=False`), ale `engine` ma
+  `allow_short=True` domyślnie → dotyczy każdego przyszłego researchu shortów.
+  Przybite testem, świadomie NIE naprawione (to decyzja walidacyjna, nie bug).
+  🔴 REKOMENDACJA M6: wyłączyć prowizję w BNB. Zmierzone na venue: koszt
+  wylądował w `fees_external` poza equity, bo bez kursu BNB nie da się go
+  przeliczyć, a zgadywanie byłoby gorsze. Dopóki tak jest, koszty w live nie
+  odpowiadają backtestowi. Rabat 25% = grosze przy 1,69 round-tripa/rok.
+  Shadow-bot od teraz prowadzi heartbeat PRZEZ księgę, więc ścieżka ilościowa
+  jest ćwiczona codziennie na prawdziwych fillach, a nie tylko w testach.
+  NASTĘPNY KROK: `scenario_lab.py` (warsztat scenariuszy).
