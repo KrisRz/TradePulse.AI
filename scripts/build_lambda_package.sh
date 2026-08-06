@@ -5,11 +5,27 @@
 # + `requests` (built for manylinux/x86_64 — Lambda's platform, not macOS).
 # numpy/pandas come from the AWS managed AWSSDKPandas-Python311 layer;
 # boto3 from the Lambda runtime itself.
+#
+# Usage:
+#   scripts/build_lambda_package.sh            -> dist/paper_bot_lambda.zip
+#   scripts/build_lambda_package.sh --shadow   -> dist/shadow_bot_lambda.zip
+#
+# Why the --shadow variant exists, when the CONTENTS are identical:
+# `aws_lambda_function.paper_bot` keys its deployment off
+# `filebase64sha256(var.lambda_zip_path)`. Rewriting that file to ship shadow
+# code would change the hash and redeploy the M5 bot mid-window — forbidden
+# while the paper window is open. A separate output path leaves the M5 zip
+# byte-for-byte where it was, so `terraform plan` shows no change to it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/dist/lambda_build"
 ZIP="$ROOT/dist/paper_bot_lambda.zip"
+
+if [[ "${1:-}" == "--shadow" ]]; then
+  BUILD="$ROOT/dist/shadow_build"
+  ZIP="$ROOT/dist/shadow_bot_lambda.zip"
+fi
 
 rm -rf "$BUILD" "$ZIP"
 mkdir -p "$BUILD"

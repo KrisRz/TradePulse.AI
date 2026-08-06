@@ -97,8 +97,12 @@
   `demo.binance.com/api/...` robi 301 na **produkcyjne** `api.binance.com`.
   ZMIERZONE (a nie założone): prowizja venue **0.1%** = dokładnie `fee_rate=0.001`
   bota. Poślizg faktyczny **0.000–0.003%** vs zakładane 0.02% → model
-  KONSERWATYWNY (błąd w bezpieczną stronę). Zastrzeżenie: demo ma własny feed
-  (BTC 64 431 w chwili testu) i własny matching — to poszlaka, nie pomiar live.
+  KONSERWATYWNY (błąd w bezpieczną stronę). ⚠️ SPROSTOWANE 2026-08-06: zapis
+  „demo ma własny feed" był BŁĘDNY — zweryfikowane porównaniem demo↔prod: ticker
+  identyczny co do grosza, opens świec identyczne, closes ≤0.01 USDT różnicy.
+  Różni się KSIĘGA ZLECEŃ (te same poziomy cen, inne wolumeny). Czyli: żywe ceny
+  + osobny silnik dopasowań. Poślizg to lepsza poszlaka niż sądziliśmy, ale nadal
+  nie pomiar live. Konsekwencja: shadow-bot MOŻE karmić strategię prod-feedem.
   🔴 **NOWE ODKRYCIE → wejście do kroku 4:** prowizję pobrano w **BNB**, nie w
   USDT (konto trzyma 2 BNB). Księga modeluje fee jako ułamek kapitału w USDT —
   to dwie różne waluty. Księga ilościowa musi to rozstrzygnąć (wyłączyć BNB albo
@@ -1055,8 +1059,13 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   ZMIERZONE, NIE ZAŁOŻONE: (1) prowizja venue 0.1% = dokładnie `fee_rate=0.001`
   bota — model kosztów potwierdzony przez rzeczywistość; (2) poślizg faktyczny
   0.000–0.003% vs zakładane 0.02% → model KONSERWATYWNY, backtest zaniża wynik.
-  Zastrzeżenie: demo ma własny feed (BTC 64 431!) i własny matching → poszlaka,
-  nie pomiar live; prawdziwy poślizg dopiero w M6.
+  ⚠️ SPROSTOWANIE (jeszcze tego samego dnia): teza „demo ma własny feed" była
+  BŁĘDNA — wzięła się z założenia o poziomie rynku, nie z pomiaru. Sprawdzone:
+  ticker demo == ticker prod co do grosza (BTC naprawdę stoi 64,5k), opens świec
+  identyczne, closes różnią się o ≤0.01 USDT. Różni się natomiast KSIĘGA ZLECEŃ:
+  te same poziomy cenowe, inne wolumeny. Demo = ŻYWE CENY + osobny silnik
+  dopasowań z płynnością uczestników demo. Poślizg jest więc lepszą poszlaką,
+  niż zapisaliśmy, ale nadal nie pomiarem live (nie zjadamy prawdziwej księgi).
   🔴 ODKRYCIE → wejście do kroku 4: prowizję pobrano w **BNB**, nie w USDT
   (konto trzyma 2 BNB). Księga modeluje fee jako ułamek kapitału w USDT — to
   dwie różne waluty, i nikt tego nie widział, bo nie było kodu składającego
