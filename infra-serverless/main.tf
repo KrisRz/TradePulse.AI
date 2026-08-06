@@ -157,6 +157,26 @@ resource "aws_lambda_function" "paper_bot" {
       TRADING_TIMEFRAME   = "1d"
     }
   }
+
+  # ⚠️ M5 WINDOW GUARD — remove deliberately when the window closes (M6).
+  #
+  # `source_code_hash` is computed from a zip on the developer's disk. Rebuilding
+  # that zip for ANY reason — a new module, a dependency bump, a different
+  # machine — makes this resource look stale, and the next `terraform apply`
+  # silently redeploys the bot that is mid-measurement. That is not theoretical:
+  # on 2026-08-05 the package was rebuilt for the executor work and this stack
+  # sat one apply away from redeploying both M5 Lambdas with code that never went
+  # through deploy verification.
+  #
+  # The paper window measures a FIXED binary over 8+ weeks. Changing what runs
+  # invalidates the measurement, so during the window "no redeploy" must be a
+  # property of the configuration, not of everyone remembering.
+  #
+  # Deployed and verified: CodeSha256 r8LuxnoJgluluwOEuPP6tk5nRDrhpjNq4emap/stNq0=
+  # To deploy at M6: delete this block, rebuild, apply, re-verify the hash.
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
 }
 
 resource "aws_cloudwatch_log_group" "paper_bot" {
@@ -291,6 +311,14 @@ resource "aws_lambda_function" "status" {
       PAPER_STATE_TABLE = aws_dynamodb_table.paper_bot.name
       PAPER_STATE_PK    = "BTCUSDT_1d"
     }
+  }
+
+  # ⚠️ M5 WINDOW GUARD — same reasoning as `paper_bot` above, and it shares the
+  # same zip, so it drifts for the same reason. The status endpoint is what the
+  # fidelity gate reads when checking prod against the repo; redeploying it
+  # mid-window would change the very thing being measured against.
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
   }
 }
 

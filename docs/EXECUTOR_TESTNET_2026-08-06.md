@@ -48,11 +48,28 @@ Pierwszy realny pomiar liczby, którą bot zakładał od pierwszego dnia:
 Zakładane 0.02% jest **6–∞× ostrożniejsze** niż zmierzone. Backtest zaniża wynik,
 nie zawyża — czyli błąd jest w bezpieczną stronę.
 
-⚠️ **Zastrzeżenie, którego nie wolno pominąć:** demo ma własny silnik dopasowań
-i własny feed (w chwili testu BTC = **64 431 USDT**, gdy rynek stoi zupełnie
-gdzie indziej). Poślizg stamtąd jest **poszlaką, nie pomiarem live**. Prowizje i
-filtry są prawdziwe. Prawdziwy poślizg zmierzymy dopiero za realne pieniądze w M6
-— i po to `Reconciliation` już istnieje.
+⚠️ **Zastrzeżenie — sprecyzowane po weryfikacji (2026-08-06, korekta):**
+pierwotnie zapisaliśmy, że „demo ma własny feed". **To było błędne.** Sprawdzone
+porównaniem demo ↔ produkcja:
+
+| Co | Demo vs live |
+|---|---|
+| Ticker BTCUSDT | **identyczny** co do grosza |
+| Świece 1d (open) | **identyczne** |
+| Świece 1d (close) | różnica ≤ 0.01 USDT (~0.00002%) |
+| Świece 1d (high/low) | różnice do ~13 USDT |
+| Księga zleceń — poziomy cen | **te same** |
+| Księga zleceń — wolumeny | różne (8.2918 vs 8.2464 BTC na topie) |
+
+Czyli demo to **żywe ceny + osobny silnik dopasowań** z płynnością uczestników
+demo. Wniosek: poślizg stamtąd jest **znacznie lepszą poszlaką**, niż sądziliśmy
+— odnosi się do prawdziwych poziomów cenowych — ale **nadal nie jest pomiarem
+live**, bo nasze zlecenie nie zjada prawdziwej księgi. Prawdziwy poślizg
+zmierzymy za realne pieniądze w M6; `Reconciliation` już na to czeka.
+
+Konsekwencja projektowa: shadow-bot może karmić strategię **produkcyjnym** feedem
+i wykonywać na demo — sygnał będzie z definicji ten sam co na prodzie, a fill
+prawdziwy. Gdyby feedy się rozjeżdżały, taka konstrukcja nie miałaby sensu.
 
 ### 2.3 Odkrycie: prowizja poszła w BNB, nie w USDT
 Konto trzyma 2 BNB, więc Binance pobrał prowizję **stamtąd** (0.00005075 BNB na
