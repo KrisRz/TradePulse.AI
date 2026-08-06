@@ -47,21 +47,42 @@ Nie wolno tego kanału traktować jako szybszej drogi do M6.
 To jest to, po co kanał istnieje. Rozstrzygalna po **≥20 prawdziwych fillach**
 (przy ~12 round-tripach/rok ≈ 10 miesięcy):
 
+⚠️ **Doprecyzowane po pierwszych dwóch fillach (2026-08-06, przed startem
+harmonogramu).** Pierwotny zapis mierzył „poślizg" jako `fill / cena_referencyjna`.
+To **zlepek dwóch różnych kosztów** i próg 0,02% dla niego nie ma sensu:
+
+| | referencja | fill | „poślizg" |
+|---|---|---|---|
+| zlecenie `54508851440` | 64 446,00 | 64 458,18 | 0,0189% |
+| zlecenie `54510109086` | 64 446,00 | 64 474,17 | **0,0437%** |
+
+Ta sama referencja, dwa razy inny wynik — bo referencją jest **zamknięcie bara**,
+a zlecenie leci kilkanaście minut później. Rozkład jest teraz mierzony osobno
+(`Reconciliation.drift` i `.execution_slippage`, mark price pobierana tuż przed
+wysłaniem):
+
+```
+dryf        = mark_przy_zleceniu / zamknięcie_bara − 1    ← ruch rynku, NIE modelowany
+egzekucja   = fill / mark_przy_zleceniu − 1               ← TO modeluje `slippage`
+```
+
 | Kryterium | Próg |
 |---|---|
-| C1. Mediana zmierzonego poślizgu | ≤ 0,02% (założenie modelu) |
-| C2. 90. percentyl poślizgu | ≤ 0,05% |
+| C1. Mediana **poślizgu egzekucji** | ≤ 0,02% (założenie modelu) |
+| C2. p90 **poślizgu egzekucji** | ≤ 0,05% |
 | C3. Zlecenia odrzucone przez venue | ≤ 2% wszystkich prób |
 | C4. Fille częściowe pozostawiające niedomkniętą pozycję | 0 |
 | C5. Rozjazd księga↔venue na ilości | 0 przypadków > 1 `stepSize` |
+| **C6. Mediana dryfu decyzja→zlecenie** | **raportowana, BEZ progu** |
 
-**Skutek FAIL na C1/C2:** model kosztów zaniża rzeczywistość → backtest jest zbyt
+C6 nie ma progu celowo: dryf zależy od opóźnienia harmonogramu, nie od jakości
+egzekucji, a **backtest go w ogóle nie modeluje** (zakłada fill po cenie bara).
+Jeśli okaże się systematycznie niekorzystny, to osobne odkrycie o wierności
+backtestu i osobna decyzja — być może skrócenie opóźnienia z 10 minut.
+
+**Skutek FAIL na C1/C2:** model kosztów zaniża rzeczywistość → backtest zbyt
 optymistyczny → progi bramki B trzeba przeliczyć przy wyższej prowizji **przed**
 dopuszczeniem realnych pieniędzy.
-
-**Pierwszy pomiar (2026-08-06, zlecenie `54508851440`):** poślizg **0,0189%**
-wobec zakładanych 0,0200%. Model trafia niemal co do joty — ale to jeden fill,
-nie dowód.
 
 ## 3. Projekt
 

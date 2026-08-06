@@ -1266,3 +1266,23 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   DLQ/alarmy + osobny zip; dzieli tylko tabelę (pk `BTCUSDT_4h`) i SNS.
   Plan: 13 do dodania, 0 zmian — M5 nietknięte, zip M5 hash bez zmian.
   NASTĘPNY KROK: wgrać, zweryfikować pierwszy przebieg, potem maker orders (F7).
+- 2026-08-06 (po wdrożeniu 4h) — **Kanał 4h ŻYJE + rozdzielenie dryfu od
+  poślizgu.** Wdrożone i zweryfikowane: `tradepulse-venue-4h` Active,
+  `cron(10 0,4,8,12,16,20)` ENABLED, pierwszy przebieg z Lambdy złożył prawdziwe
+  zlecenie 54510109086 (0,0031 BTC), księga equity 199,91. Lambdy M5 nadal
+  `r8Luxno…`. Posprzątane po teście lokalnym: pozycja 0,0031 zamknięta
+  (order 54510056311), konto wróciło do 0.05000000 BTC — inaczej saldo byłoby
+  trwale przesunięte i psuło rekoncyliację księga↔venue.
+  🔴 ODKRYCIE PRZY PIERWSZYCH DWÓCH FILLACH: ta sama cena referencyjna
+  (zamknięcie bara 16:00) dała poślizg 0,0189% lokalnie i 0,0437% z Lambdy.
+  Powód: referencją jest ZAMKNIĘCIE BARA, a zlecenie leci kilkanaście minut
+  później — więc mierzyliśmy ZLEPEK dryfu rynku i prawdziwego poślizgu. Próg
+  bramki C (0,02%) był pisany dla tego drugiego, więc na zlepku byłby bez sensu.
+  Naprawione: `Reconciliation.drift` i `.execution_slippage` liczone osobno
+  (mark price pobierana tuż przed wysłaniem, `measure_drift=True` tylko tam,
+  gdzie decyzja i zlecenie są rozdzielone w czasie). Bramka C doprecyzowana:
+  C1/C2 dotyczą POŚLIZGU EGZEKUCJI, dodane C6 = mediana dryfu RAPORTOWANA BEZ
+  PROGU — bo dryf zależy od opóźnienia harmonogramu, a backtest go w ogóle nie
+  modeluje (zakłada fill po cenie bara). Jeśli okaże się systematycznie
+  niekorzystny, to osobne odkrycie o wierności backtestu.
+  Suite 313 zielonych. NASTĘPNY KROK: wgrać poprawkę (0 add, 2 change), potem F7.

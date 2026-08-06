@@ -147,15 +147,44 @@ class Reconciliation:
     order_id: str
     fill_count: int
     status: str
+    #: Market price observed immediately before submitting, when measured.
+    #: Without it, ``slippage_actual`` conflates two different costs — see below.
+    mark_at_order: Optional[float] = None
 
     @property
     def price_error(self) -> float:
         """Actual minus assumed, in quote units. Positive = worse than assumed."""
         return (self.actual_price - self.assumed_price) * self.side
 
+    @property
+    def drift(self) -> Optional[float]:
+        """Market movement between the decision and the order, signed adversely.
+
+        The strategy decides on a bar's CLOSE, but the order reaches the venue
+        minutes later at whatever the market is doing by then. That gap is a real
+        cost of live trading and the backtest does not model it — but it is not
+        slippage, and lumping the two together makes both unmeasurable.
+        """
+        if self.mark_at_order is None:
+            return None
+        return self.side * (self.mark_at_order / self.reference_price - 1.0)
+
+    @property
+    def execution_slippage(self) -> Optional[float]:
+        """Cost of crossing the book, measured from the price we could see.
+
+        THIS is the quantity ``slippage`` models in ``costs.py``, and the one
+        Gate C's threshold was written for.
+        """
+        if self.mark_at_order is None:
+            return None
+        return self.side * (self.actual_price / self.mark_at_order - 1.0)
+
     def as_dict(self) -> dict[str, Any]:
         d = self.__dict__.copy()
         d["price_error"] = self.price_error
+        d["drift"] = self.drift
+        d["execution_slippage"] = self.execution_slippage
         return d
 
 
@@ -196,6 +225,7 @@ class BinanceDemoExecutor:
         quote_fraction: float = 1.0,
         max_notional: Optional[float] = None,
         assumed_slippage: float = 0.0002,
+        measure_drift: bool = False,
         recv_window: int = 5000,
         timeout: float = 15.0,
         max_retries: int = 4,
@@ -216,6 +246,10 @@ class BinanceDemoExecutor:
         self.quote_fraction = quote_fraction
         self.max_notional = max_notional
         self.assumed_slippage = assumed_slippage
+        # Costs one extra public request per order. Off by default so nothing
+        # pays for it unnecessarily; on wherever a decision price and an order
+        # are separated in time, which is every strategy-driven channel.
+        self.measure_drift = measure_drift
         self.recv_window = recv_window
         self.timeout = timeout
         self.max_retries = max_retries
@@ -535,6 +569,8 @@ class BinanceDemoExecutor:
             "quantity": format(qty.normalize(), "f"),
             "newOrderRespType": "FULL",   # we need the individual fills
         }
+        mark_at_order = self.mark_price() if self.measure_drift else None
+
         logger.info("submitting %s %s %s", params["side"], params["quantity"], self.symbol)
         response = self._request("POST", "/api/v3/order", params, signed=True)
 
@@ -570,6 +606,7 @@ class BinanceDemoExecutor:
             order_id=str(response.get("orderId", "")),
             fill_count=fill_count,
             status=status,
+            mark_at_order=mark_at_order,
         )
         self._reconciliations.append(record)
         logger.info("filled %s @ %.2f (assumed %.2f, slippage %.5f%% vs %.5f%% assumed)",
