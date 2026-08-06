@@ -21,233 +21,117 @@
 > Nie pytaj „od czego zacząć" — odpowiedź jest tu. Wykonaj protokół i ruszaj.
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
-- **Milestone:** M0 ✅ + M1 ✅ + M2 ✅ + M3 ✅ + M4 ✅ (decyzje na danych) → **M5 BIEGNIE**.
-- **🚀 STAN DEPLOYU (sprawdzaj TU, zanim zaczniesz kombinować z `terraform apply`):**
-  ostatni deploy **2026-07-22**, obie Lambdy `CodeSha256 r8Luxno…tNq0=`.
-  Wszystko po tej dacie (PR #17–#21) to **narzędzia CLI, badania, testy i
-  dokumenty — NIC z tego nie jest uruchamiane przez Lambdę**, więc redeploy
-  jest ZBĘDNY i w oknie M5 byłby samym ryzykiem. Piny z
-  `requirements-lambda.txt` rozwiązują się dokładnie do zestawu działającego
-  na prodzie — zweryfikowane. Deployować dopiero, gdy zmieni się coś, co
-  Lambda faktycznie wykonuje (np. M6).
-  ⚠️ **AKTUALIZACJA 2026-08-05:** repo różni się od proda w WIĘCEJ niż jednym
-  pliku (doszedł `paper_trading/execution.py`, zmienił się `portfolio.py`
-  — PR #24). Stary zapis „jedyna różnica to `load_csv()`" jest NIEAKTUALNY.
-  Kod jest nadal **funkcjonalnie tożsamy** i to jest UDOWODNIONE, nie
-  zadeklarowane: złoty wzorzec (3240 barów historii, `==` na floatach) +
-  bramka A na żywym prodzie (21 barów odtwarza się do zapisanej księgi).
-  Weryfikacja bajtowa proda z 2026-08-05: 22/25 plików identycznych, 3 różnice
-  nieszkodliwe (2 puste `__init__.py` generowane przez build; `data.py` różni
-  się TYLKO wewnątrz `load_csv()`, którego ścieżka bota nie importuje —
-  sprawdzone grepem na WDROŻONEJ paczce, nie na repo).
-- **TRYB: CZEKAMY.** Okno M5 od 2026-07-16, oceny bramek ≥2026-09-10, ZERO zmian
-  strategii w oknie. Health-check 2026-07-17: wszystko zielone (scheduler, Lambda,
-  DynamoDB, SNS). Deep-audit 6 warstw zrobiony → docs/ANALIZA_6_WARSTW_2026-07-17.md
-  (werdykt: enterprise nie naprawiać; ✅D11). Deep-audit E2E 2026-07-21 →
-  docs/ANALIZA_E2E_2026-07-21.md (rdzeń solidny). Top-4 fixy M5-safe WDROŻONE
-  2026-07-22 (PR #16 zmergowany do main + `terraform apply`): dashboard MTM
-  equity (H1), heartbeat alarm+DLQ (M2), load-bearing log decyzji (M1), guard
-  min-history (M3). Zweryfikowane na żywo: obie Lambdy CodeSha256 =
-  r8Luxno...tNq0= (prod=repo), DLQ+alarm istnieją, dashboard renderuje MTM
-  equity $10k FLAT. tfstate zbackupowany → ~/TradePulse_safety/tfstate-backups.
-  OTWARTE M5-safe (jeszcze nie zrobione): **już tylko kwarantanna enterprise
-  w monolicie** (porządek w kodzie, którego nic nie uruchamia — zero pilności).
-  ✅ tfstate→S3 ZROBIONE 2026-07-28. ✅ Domena: NIE MA CO ROBIĆ — sprawdzone
-  2026-07-28 u rejestratora: `AutoRenew: true`, `TransferLock: true`, wygasa
-  2026-09-28; strefa DNS ISTNIEJE (Z04807683284XCLGPEP5H, wbrew staremu
-  zapisowi „skasowana"), delegacja NS u rejestratora wskazuje na AWS,
-  `bot.tradepulseai.co.uk` → HTTP 200. Reminder 08-24 jest zbędny; jedyne
-  realne ryzyko to nieważna karta na koncie AWS (auto-renew nie uratuje przy
-  odrzuconej płatności) — sprawdzić w Billing, nie w Terraformie. Opcjonalne prace
-  w oknie (nie dotykają strategii), KOLEJNOŚĆ: (1) ✅ ZROBIONE 2026-07-25 — dane
-  historyczne kompletne i zwalidowane (1h dociągnięty, holdout wyegzekwowany,
-  tooling w repo; branch feat/historical-data-prep, patrz §4);
-  (2) ✅ ZROBIONE 2026-07-25 — skrypt bramki gate.py (PR #18) + PRE-REJESTRACJA
-  reguły aktywności w §3 (0 trejdów ≠ FAIL, tylko INCONCLUSIVE_EXTEND);
-  zweryfikowany na prod (dzień 9: WINDOW_RUNNING); (3) ✅ ZROBIONE 2026-07-25 —
-  projekt kill-switcha max-DD pod M6 (PR #19, docs/KILL_SWITCH_DESIGN_2026-07-25.md;
-  T1 25% od szczytu M6 / T2 rozjazd 10% / T3 dzień 15%, fail-closed, manual
-  rearm; implementacja DOPIERO w M6). PR #17/#18/#19 **ZMERGOWANE** 2026-07-25.
-  (4) ✅ ZROBIONE 2026-07-28 — audyt kalibracji
-  (docs/ANALIZA_KALIBRACJI_2026-07-28.md, skrypt
-  scripts/research/calibration_audit.py): konfiguracja PRODUKCYJNA (stałe
-  EMA20/100) zmierzona PO RAZ PIERWSZY — broni się (OOS 1.00–1.14, bije B&H
-  w każdym layoucie), brak przeuczenia (in-sample ranga 28/42), przeżywa
-  0.5% fee. ⚠️ ODKRYCIE KRYTYCZNE: bramka M5 ma **1% szans** na spełnienie
-  reguły aktywności w 56 dni (strategia robi 1.69 round-tripa/rok) → BRAMKA
-  ROZDZIELONA (§3): A=wierność wykonania (rozstrzygalna teraz), B=rentowność
-  (progi bez zmian, horyzont 12–18 mies., tylko ona otwiera M6). Naprawione
-  też: paczka Lambdy nie była reprodukowalna (unpinned `requests`).
-  (5) ✅ ZROBIONE 2026-07-28 — **tfstate→S3**: bucket
-  `tradepulse-tfstate-590183672693` (versioning + SSE + block-public + deny
-  non-TLS), lock przez S3 conditional writes (`use_lockfile`, bez tabeli
-  DynamoDB), bootstrap w `scripts/bootstrap_tf_backend.sh`. Migracja
-  zweryfikowana: plan czysty PRZED i PO, `state list` = 32/32 zasoby.
-  **Lista porządków wyczerpana poza kwarantanną enterprise.**
-- **✅ KROK 3 ZROBIONY 2026-08-06 — `BinanceDemoExecutor`** (branch
-  `feat/binance-demo-executor`, docs/EXECUTOR_TESTNET_2026-08-06.md).
-  Wariant **(a)** wybrany przez usera. Ścieżka wykonawcza przejechana
-  end-to-end na PRAWDZIWYM silniku dopasowań: round-trip `orderId`
-  54495523957/54495523967, konto wróciło do 0.05000000 BTC **co do cyfry**
-  (executor nie tknął pre-fundowanych coinów), zwrot −0.1995% = sama prowizja.
-  55 testów, zero sieci w CI.
-  ⚠️ **KOREKTA PLANU:** to NIE jest `testnet.binance.vision` — nasze klucze są z
-  **Binance Demo Trading**, a testnet odpowiada na nie `-2015`. Właściwy host to
-  **`demo-api.binance.com`** (przypięty testem). Uwaga na pułapkę:
-  `demo.binance.com/api/...` robi 301 na **produkcyjne** `api.binance.com`.
-  ZMIERZONE (a nie założone): prowizja venue **0.1%** = dokładnie `fee_rate=0.001`
-  bota. Poślizg faktyczny **0.000–0.003%** vs zakładane 0.02% → model
-  KONSERWATYWNY (błąd w bezpieczną stronę). ⚠️ SPROSTOWANE 2026-08-06: zapis
-  „demo ma własny feed" był BŁĘDNY — zweryfikowane porównaniem demo↔prod: ticker
-  identyczny co do grosza, opens świec identyczne, closes ≤0.01 USDT różnicy.
-  Różni się KSIĘGA ZLECEŃ (te same poziomy cen, inne wolumeny). Czyli: żywe ceny
-  + osobny silnik dopasowań. Poślizg to lepsza poszlaka niż sądziliśmy, ale nadal
-  nie pomiar live. Konsekwencja: shadow-bot MOŻE karmić strategię prod-feedem.
-  🔴 **NOWE ODKRYCIE → wejście do kroku 4:** prowizję pobrano w **BNB**, nie w
-  USDT (konto trzyma 2 BNB). Księga modeluje fee jako ułamek kapitału w USDT —
-  to dwie różne waluty. Księga ilościowa musi to rozstrzygnąć (wyłączyć BNB albo
-  księgować po kursie). Pola `fee_asset` już to raportują.
-- **✅ SHADOW-BOT WDROŻONY 2026-08-06** (PR #26 + fix warstwy pandas):
-  `tradepulse-shadow-bot`, cron `(25 0 * * ? *)` ENABLED, własna rola/DLQ/alarmy,
-  klucze demo w SSM SecureString (Terraform ich NIE zarządza). Codzienny pełny
-  round-trip na demo → ścieżka wykonawcza nie zgnije do M6. Zweryfikowane na
-  żywo: zlecenia 54501262491/54501262493, koniec flat, drugie wywołanie tego
-  samego dnia = `already_done`, zapis pod kluczem `SHADOW_BTCUSDT_1d`.
-  🔒 **Lambdy M5 NIETKNIĘTE — potwierdzone po apply:** obie nadal
-  `r8Luxno…tNq0=`, LastModified 2026-07-22. Zasługa bezpiecznika
-  `lifecycle { ignore_changes = [filename, source_code_hash] }` dodanego do obu
-  Lambd M5, bo `terraform plan` na czystym repo pokazywał „2 to change" —
-  repo było jedno `apply` od redeployu bota w środku okna.
-  ⚠️ PUŁAPKA (kosztowała jeden nieudany deploy): każdy import z
-  `app.backend.paper_trading` odpala `__init__`, który ciągnie `bot` → pandas.
-  Rozumowanie „heartbeat nie potrzebuje pandas" jest BŁĘDNE — decyduje łańcuch
-  importów, nie graf wywołań. Shadow musi mieć warstwę pandas, tak jak `status`.
-- **✅ KROK 4 ZROBIONY 2026-08-06 — księga ilościowa**
-  (docs/QUANTITY_BOOK_2026-08-06.md). NIE przepisaliśmy księgi na ilości, bo to
-  przestawiłoby arytmetykę floatów i wymusiło przebłogosławienie złotego wzorca.
-  Zamiast tego **o ścieżce decyduje fill**: bez `qty` → ścieżka modelowana,
-  nietknięta instrukcja po instrukcji; z `qty` → ścieżka ilościowa
-  (`cash + qty*price`, prowizja faktyczna). Spięte testem równoważności —
-  zmierzony rozjazd 1,8e-12 względnie, czyli sama reasocjacja floatów.
-  DOWÓD: złoty wzorzec `==` PASS, **bramka A na żywym prodzie PASS 6/6**
-  (22 decyzje odtwarzają się ±$0,01), shadow-bot prowadzi round-trip przez
-  `PaperPortfolio` na prawdziwych fillach. Suite 295 zielonych.
-  🔴 ODKRYCIE: **model ułamkowy zaniża koszt SHORTA.** Przy zamknięciu nalicza
-  prowizję od wynikowego kapitału, giełda od notionalu transakcji — dla longa
-  to ta sama liczba, dla shorta różnica ~$0,07/$10k. Żywej strategii nie dotyczy
-  (`allow_short=False`, spot nie shortuje), ale `backtesting.engine` ma
-  `allow_short=True` DOMYŚLNIE, więc każdy research shortów niesie to
-  przybliżenie. Przybite testem, do rozstrzygnięcia przy walidacji shortów.
-  🔴 REKOMENDACJA DO M6: **wyłączyć płacenie prowizji w BNB** na koncie.
-  Zmierzone: prowizja poszła w BNB, więc `realized` prawie nie drgnął, a koszt
-  wylądował w `fees_external` poza equity — dopóki tak jest, `backtest = live`
-  nie domyka się po kosztach. Rabat 25% to ~0,025%/stronę, przy 1,69
-  round-tripa/rok grosze. Wierność modelu warta więcej.
-- **✅ WARSZTAT SCENARIUSZY ZROBIONY 2026-08-06**
-  (`scripts/research/scenario_lab.py`, docs/SCENARIO_LAB_2026-08-06.md).
-  64 próby: 4 kandydatów × 4 layouty × 4 poziomy prowizji, holdout wyegzekwowany
-  w kodzie, reguła PRE-REJESTROWANA przed uruchomieniem, kara za liczbę prób.
-  🟢 **BTC 4h PRZYJĘTY** (4/4 kryteria) — 130–190 trejdów tam, gdzie 1d robi 13–31.
-  🔴 **SPROSTOWANIE 2026-08-06: „7,2× szybszy dowód" to NIEPRAWDA.** Obalone
-  symulacją (20 000 historii): SE zannualizowanego Sharpe'a przy 4h vs 1d to
-  stosunek **1,00–1,02×**, a nie √6=2,45×. Algebra: `SE = √P·√(1/(P·T)) = √(1/T)`
-  — częstotliwość się skraca, zostaje sam CZAS KALENDARZOWY. 4h daje szybciej
-  statystyki NA TREJD (win rate, profit factor, fee drag, egzekucja), ale NIE
-  szybszy werdykt o zannualizowanym wyniku — a o to pyta bramka B.
-  Wniosek: **4h nie jest skrótem do M6.** ⚠️ ALE KRUCHY: przy 0,1% (tyle bierze giełda) bije B&H
-  4/4, przy 0,2% 3/4, przy **0,3% przegrywa 4/4** — margines to JEDEN krok
-  prowizji. Drawdown gorszy: −53…−69% vs −49% na 1d. Przewidywany haczyk
-  „7× częstotliwość = 7× fee drag" POTWIERDZONY.
-  🔴 **SHORT ODRZUCONY — intuicja była błędna.** Hipoteza „bot stał flat gdy BTC
-  spadał 12,73%, short by to zmonetyzował" NIE broni się na danych: Sharpe
-  0,63–0,87 vs 0,99–1,13 long-only, nie bije B&H w ŻADNYM layoucie, DD rośnie
-  do −59…−67%. I to ocena łagodna, bo model zaniża koszt shorta. Sprawa
-  zamknięta danymi. Nie wracamy bez NOWEJ hipotezy.
-  🟡 ETH 1d odrzucony: Sharpe 0,82–1,03 przyzwoity, ale przegrywa z B&H ETH
-  w 3/4 layoutów. Odrzucony przy TEJ strategii, nie na zawsze.
-  UCZCIWIE O DSR: wszyscy przechodzą z 1,000 — mówi „to nie artefakty
-  przeszukiwania", ale to nie DSR ich odsiał, tylko porównanie z B&H i siatka
-  prowizji. Przy większej liczbie kandydatów zacznie mieć znaczenie.
-- **✅ KANAŁ BTC 4h NA ŻYWYM VENUE — ZBUDOWANY 2026-08-06**
-  (docs/VENUE_4H_CHANNEL_2026-08-06.md). Nie zwykłe okno papierowe: księga jest
-  papierowa, ale **fille pochodzą z prawdziwego silnika dopasowań** przez
-  `BinanceDemoExecutor`. ~12 prawdziwych round-tripów/rok zamiast 1,69 — i o to
-  chodzi po sprostowaniu: poślizg, fee drag i zachowanie księgi na prawdziwym
-  fillu zbiegają się z LICZBĄ TREJDÓW, nie z czasem.
-  PIERWSZY POMIAR NA ZLECENIU ZE STRATEGII (`54508851440`): poślizg **0,0189%**
-  wobec zakładanych 0,0200% — model trafia niemal co do joty (jeden fill, nie dowód).
-  🔴 PUŁAPKA ROZBROJONA: executor śledzi pozycję W PAMIĘCI, a Lambda żyje
-  sekundy przy pozycji trzymanej tygodniami → odtworzony bot dostałby
-  `nothing to sell`, a prawdziwe coiny zostałyby na giełdzie bez kodu zdolnego
-  je zamknąć, i wyszłoby to dopiero przy pierwszym wyjściu. Lekarstwo:
-  `PaperPortfolio.qty` z kroku 4 jest persystowane, więc `attach_venue()`
-  odtwarza pozycję Z KSIĘGI (nie z salda — saldo nie odróżnia naszej pozycji od
-  0,05 BTC, którymi konto było zasilone). Zweryfikowane lokalnie.
-  PRE-REJESTROWANE PRZED STARTEM: bramka A bez zmian, bramka B te same progi i
-  ten sam horyzont co 1d (ŻADNEGO przyspieszenia), oraz nowa **bramka C —
-  wierność kosztowa** (mediana poślizgu ≤0,02%, p90 ≤0,05%, odrzucenia ≤2%,
-  zero niedomkniętych pozycji, zero rozjazdów księga↔venue) rozstrzygalna po
-  ≥20 fillach ≈ 10 miesięcy.
-  Kapitał księgi = pułap zlecenia = 200 USDT (celowo równe, inaczej księga
-  raportowałaby strategię w 99% w gotówce). Koszt: $0.
-- **NASTĘPNA AKCJA:** wgrać kanał 4h (`terraform apply tfplan`, 13 zasobów,
-  0 zmian) i zweryfikować pierwszy przebieg. Potem: **maker orders (F7)** —
-  przy 4h prowizja przestaje być szczegółem (edge ginie między 0,2% a 0,3%),
-  więc to awansuje z kosmetyki na wymóg. (Stary zapis kroku 4h — zrobiony:) — zgodnie z
-  pre-rejestrowaną regułą: osobny kanał, osobna księga, ZERO zmian w biegnącym
-  BTC 1d. To jedyna droga do werdyktu o rentowności szybciej niż w 2027.
-  Uwaga: przy 4h prowizja staje się zmienną krytyczną (edge ginie między 0,2%
-  a 0,3%), więc maker orders (F7) przestają być kosmetyką.
-  (Stary opis warsztatu — zrobiony:) — warsztat scenariuszy z
-  PRE-REJESTROWANĄ regułą decyzyjną i liczeniem prób (Deflated Sharpe), żeby
-  testowanie wielu kandydatów nie zamieniło się w wybieranie najlepszego szumu.
-  Folder `app/backend/backtesting/strategies/` już istnieje (ema_crossover,
-  rsi_mean_reversion, regime_routed) — brakuje nie folderu, tylko jednego
-  młynka, przez który przechodzi każdy kandydat. Bazę ma
-  `scripts/research/calibration_audit.py` (~90% mechaniki). Koszt: $0, M5-safe.
-  Kandydaci do zbadania jednym protokołem: BTC 4h, ETH 1d, noga SHORT.
-  (Stary zapis kroku 4 poniżej — zrobiony:) (`qty` w BTC zamiast ułamka
-  kapitału, + sprawa prowizji w BNB). To jest to, czego naprawdę potrzebuje M6.
-  UWAGA: dotyka `PaperPortfolio` → wymaga ponownego zamrożenia złotego wzorca
-  PRZED refaktorem i weryfikacji bramką A na żywym prodzie (patrz
-  „golden master discipline"). Alternatywnie równolegle (krok 3b, M5-safe):
-  research 4h/ETH — patrz „PLAN ROZWOJU" niżej.
-  Poza tym M5 — bot zbiera żywe decyzje. Otwarta decyzja:
-  hosting frontendu na tradepulseai.co.uk (domena wykupiona do 2026-09-29,
-  strefa DNS skasowana — trzeba nową + NS; pełny front wymaga backendu w
-  chmurze ~$5-25/mo, alternatywa: tylko bot-status pod subdomeną ~$0).
-  Status bota LIVE: https://xwibtclmvzlqtz2xtgrnm7l3tm0hzqbs.lambda-url.eu-west-2.on.aws/
-- **Branch:** PR #2 ZMERGOWANY do main (2026-07-16 rano, CI zielone: pytest + gitleaks).
-  Nową pracę zaczynaj z main (nowy feature branch).
-- **Ostatnio zrobione:** nocna sesja 2026-07-16 — cała SESJA A (A1–A7), M1, M2
-  (Lambda+DynamoDB+Scheduler na AWS, ~$0/mo, smoke-test OK), duża część M3.
-- **WAŻNE ODKRYCIA:** (1) konto AWS było CZYSTE — stary App Runner stack już
-  nie istniał; infra-serverless/ to jedyna żywa infra (stan TF lokalny!).
-  (2) Commit 9665f59 cofnął fixy z 596d277 (normalizacja MACD, regime override)
-  — przywrócone. (3) L5 dostawał cechy w złych jednostkach (wolumen 24h vs
-  per-bar, USD vs %) — naprawione przez ml/l5_features.py (training parity).
-  (4) Potwierdź subskrypcję SNS e-mail (alert Lambdy) — mail do krisgrzepka@gmail.com.
 
-### Protokół wznowienia (5 kroków — rób po kolei)
-1. **Przeczytaj** ten plik: sekcja `0` (cel) → `📍 STATUS TERAZ` → pierwszy
-   niezaznaczony `[ ]` w `ROADMAP SZCZEGÓŁOWA`.
-2. **Sprawdź branch:** `git -C /Applications/TradePuls branch --show-current`
-   → ma być `improvements/security-and-strategies`. Jeśli nie — przełącz.
-3. **Zweryfikuj** że cytowane `plik:linia` z danego kroku nadal istnieją
-   (kod mógł się zmienić) — grep zanim zaczniesz edytować.
-4. **Zrób** najbliższy `[ ]`. Napotkasz `❓` (punkt decyzyjny)? → analiza TU
-   i teraz, potem decyzja (patrz sekcja PUNKTY DECYZYJNE). Odhacz `[x]`.
-5. **Testy przed końcem sesji** (muszą być zielone):
+**Stan na 2026-08-06 (koniec dużej sesji — 10 PR-ów, #24–#33).**
+
+#### Gdzie jesteśmy w milestone'ach
+M0–M4 ✅ · **M5 BIEGNIE — dzień 21/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
+
+#### Co CHODZI na produkcji (4 Lambdy, wszystkie ENABLED, koszt ~$0,60/mies.)
+
+| Co | Harmonogram | Rola |
+|---|---|---|
+| `tradepulse-paper-bot` | `cron(10 0 * * ? *)` | **kanał mierzony M5** — BTC 1d, czysta symulacja. NIE DOTYKAĆ. |
+| `tradepulse-paper-bot-status` | (URL) | status/dashboard |
+| `tradepulse-shadow-bot` | `cron(25 0 * * ? *)` | heartbeat egzekucji na demo — codzienny round-trip, żeby ścieżka nie zgniła |
+| `tradepulse-venue-4h` | `cron(10 0,4,8,12,16,20)` | BTC 4h, księga papierowa z **prawdziwymi fillami** na demo + kill-switch |
+
+#### 🔒 NIENARUSZALNE W OKNIE M5
+- Obie Lambdy M5 mają `CodeSha256 = r8LuxnoJgluluwOEuPP6tk5nRDrhpjNq4emap/stNq0=`
+  (deploy 2026-07-22). **Zweryfikowane po każdym z 5 dzisiejszych `terraform apply`.**
+- Chroni je `lifecycle { ignore_changes = [filename, source_code_hash] }` w
+  `main.tf` — dodane, bo repo było JEDNO `apply` od redeployu bota w środku
+  pomiaru. 🔴 **Przy M6 ten bezpiecznik trzeba świadomie USUNĄĆ**, inaczej
+  deploy po cichu nic nie zrobi.
+- Każda nowa Lambda MUSI mieć własny zip (`build_lambda_package.sh --shadow` /
+  `--venue-4h`). Współdzielenie `var.lambda_zip_path` = redeploy M5.
+- Bramka A: **PASS 6/6** na żywym prodzie, 22 decyzje bez luk.
+
+#### Stan strategii
+Bot 1d stoi **FLAT od 2026-05-29**, 0 sygnałów przez całe okno. To poprawne
+zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
+→ spodziewany werdykt `INCONCLUSIVE_EXTEND`, realny horyzont 12–18 mies.
+
+#### 🔴 CZTERY RZECZY, KTÓRYCH NIKT NIE SZUKAŁ (wszystkie z dziś)
+1. **Mina w Terraformie** — `plan` na czystym repo chciał przedeployować obie
+   Lambdy M5. Rozbrojone (patrz wyżej).
+2. **Model ułamkowy ZANIŻA koszt shorta** — prowizję wyjściową liczy od
+   wynikowego kapitału, giełda od notionalu. Dla longa identyczne, dla shorta
+   ~$0,07/$10k. Nie dotyczy żywej strategii, ale `engine` ma `allow_short=True`
+   domyślnie → dotyczy każdego researchu shortów. Przybite testem, świadomie
+   NIE naprawione (to decyzja walidacyjna).
+3. **„4h = 7,2× szybszy dowód" było NIEPRAWDĄ** — obalone symulacją. SE
+   zannualizowanego Sharpe'a zależy od CZASU KALENDARZOWEGO, nie od
+   częstotliwości (`SE = √P·√(1/(P·T)) = √(1/T)`). 4h daje szybciej statystyki
+   NA TREJD, nie werdykt o rentowności.
+4. **Maker orders nic nie dają** — Binance VIP 0 ma maker = taker = 0,1000%, a
+   spread to 0,000016%. Wartość $0,0004/rok wobec $4,88 prowizji. NIE BUDUJEMY.
+
+#### Otwarte, świadomie odłożone
+- Prowizja na demo idzie w **BNB** i nie da się tego wyłączyć (brak strony
+  preferencji, brak `/sapi/v1/bnbBurn`, brak checkboxa). Na koncie LIVE
+  wyłączone 2026-08-06. Księga księguje to w `fees_external` poza equity —
+  celowo, bo bez kursu BNB nie da się przeliczyć.
+- Kwarantanna enterprise w monolicie — jedyny zaległy porządek M5-safe, zero pilności.
+- Hosting frontendu na tradepulseai.co.uk — domena OK do 2026-09-28, auto-renew.
+
+### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-06)
+
+**1. Bramka C — ewaluator wierności kosztowej.** Kanał 4h zbiera fille od dziś,
+ale **nic ich nie ocenia**. To dokładnie ten sam błąd, co bramka A przed lipcem:
+dane bez ewaluatora. Progi są już PRE-REJESTROWANE w
+`docs/VENUE_4H_CHANNEL_2026-08-06.md` §2 — trzeba je policzyć:
+C1 mediana poślizgu egzekucji ≤0,02%, C2 p90 ≤0,05%, C3 odrzucenia ≤2%,
+C4 zero niedomkniętych pozycji, C5 zero rozjazdów księga↔venue >1 `stepSize`,
+C6 mediana dryfu decyzja→zlecenie RAPORTOWANA BEZ PROGU.
+Wzorzec: `gate.py --fidelity`. Rozstrzygalna po ≥20 fillach ≈ 10 mies.
+
+**2. Reszta F7: stop-loss + dzienny limit straty.** Kill-switch już jest
+(T1/T2/T3, fail-closed, ręczny re-arm). Brakuje kontroli na poziomie pozycji.
+
+**3. Kwarantanna enterprise** — jak będzie nudno.
+
+⚠️ **NIE ROBIMY:** maker orderów (zmierzone, bez sensu), researchu shortów na
+BTC (odrzucony danymi), zmian w strategii 1d (unieważnia okno).
+### Protokół wznowienia (rób po kolei)
+1. **Przeczytaj** `📍 STATUS TERAZ` → `🎯 NASTĘPNA AKCJA` powyżej. Odpowiedź na
+   „od czego zacząć" jest tam — nie pytaj o nią usera.
+2. **Zacznij z `main`** (`git pull`), zrób nowy feature branch. PR dopiero na
+   końcu zadania; **user mergeuje ręcznie**, ja nie mergeuję.
+3. **Sprawdź zdrowie** przed zmianami — 4 Lambdy jedną pętlą:
    ```bash
-   cd /Applications/TradePuls && pytest \
-     app/backend/tests/test_backtesting.py \
-     app/backend/tests/test_paper_trading.py -q
+   for f in tradepulse-paper-bot tradepulse-paper-bot-status \
+            tradepulse-shadow-bot tradepulse-venue-4h; do
+     printf "%-32s " $f
+     aws lambda get-function-configuration --function-name $f \
+       --region eu-west-2 --query '[State,CodeSha256]' --output text
+   done
    ```
-   Na końcu: dopisz 1 linię do `Log sesji` + zaktualizuj `📍 STATUS TERAZ`.
+   Obie Lambdy M5 MUSZĄ mieć `r8Luxno…tNq0=`. Inna wartość = ktoś przedeployował
+   bota w oknie pomiarowym → **zatrzymaj się i powiedz userowi**.
+4. **Zweryfikuj cytowane `plik:linia`** grepem, zanim zaczniesz edytować.
+5. **Jeśli dotykasz `PaperPortfolio`** → dyscyplina złotego wzorca: zamroź
+   PRZED, `==` na floatach, bramka A na prodzie PO.
+6. **Testy przed końcem sesji** (cały suite, ~334 przypadki):
+   `.venv/bin/pytest app/backend/tests/ -q`
+7. **Na końcu:** dopisz do `Log sesji` + zaktualizuj `📍 STATUS TERAZ`
+   i `🎯 NASTĘPNA AKCJA`.
 
 ### Przydatne
-- Cały lokalny stack (backend+frontend+DynamoDB): `./start_local.sh`
-- Krok paper bota ręcznie: `python -m app.backend.paper_trading.run step`
+- Pytest: **`.venv/bin/pytest`** (globalny python NIE ma pytest)
+- Bramka A na prodzie:
+  `.venv/bin/python -m app.backend.paper_trading.gate --source dynamodb --fidelity`
+- Stan kill-switcha:
+  `.venv/bin/python -m app.backend.paper_trading.run killswitch --timeframe 4h`
+- Wymuszony heartbeat: `aws lambda invoke --function-name tradepulse-shadow-bot
+  --region eu-west-2 --cli-binary-format raw-in-base64-out
+  --payload '{"force":true}' /tmp/o.json`
+- Warsztat scenariuszy: `.venv/bin/python scripts/research/scenario_lab.py --list`
+- **Terraform:** ja robię `plan -out=tfplan`, **`apply` robi user** (mnie blokuje
+  klasyfikator uprawnień). Dawaj mu `terraform apply tfplan` — samo `apply`
+  pyta interaktywnie i wisi bez odpowiedzi.
+- Klucze demo: SSM `/tradepulse/demo/{key,secret}` (SecureString). Lokalnie
+  przez `BINANCE_DEMO_KEY`/`BINANCE_DEMO_SECRET`, **nigdy w repo** (CI: gitleaks).
 - Archiwum (modularny TF, .env): `~/TradePulse_safety/` (NIE kasować).
 
 ---
@@ -341,8 +225,8 @@ skala.
    Wyjątki: `*.env.example` i dane syntetyczne w testach jednostkowych.
 6. **Małe, odwracalne kroki.** Jeden fix = jeden commit z liczbą w opisie.
 7. **Sekrety poza git.** Rotacja: patrz M6. Nigdy nie commituj kluczy.
-8. **Branch teraz, PR na końcu.** `improvements/security-and-strategies`.
-   PR dopiero gdy M0–M3 stabilne i CI zielone.
+8. **Branch teraz, PR na końcu.** Nowy feature branch z `main` na każde
+   zadanie, PR gdy zadanie skończone i CI zielone. **User mergeuje ręcznie.**
 9. **Koszt > 0 jest wrogiem.** Każda transakcja i każdy zasób AWS kosztuje.
    Projektuj pod „1 user + cron dzienny", nie pod „always-on enterprise".
 
