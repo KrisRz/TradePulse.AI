@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-08-05**
+> Ostatnia aktualizacja: **2026-08-06**
 
 ---
 
@@ -84,22 +84,31 @@
   DynamoDB), bootstrap w `scripts/bootstrap_tf_backend.sh`. Migracja
   zweryfikowana: plan czysty PRZED i PO, `state list` = 32/32 zasoby.
   **Lista porządków wyczerpana poza kwarantanną enterprise.**
-- **NASTĘPNA AKCJA (ustalone 2026-08-05):** **krok 3 — `BinanceTestnetExecutor`.**
-  Szew wykonawczy już jest (PR #24). Teraz prawdziwe podpisane wywołania do
-  `testnet.binance.vision` (sprawdzone: żyje, BTCUSDT `TRADING`, klucze przez
-  login GitHubem): HMAC, `recvWindow`/clock skew, zaokrąglenie do `LOT_SIZE`,
-  próg `MIN_NOTIONAL`, częściowe fille, błędy API, rate limity + **rekoncyliacja
-  fill vs to, co założyła księga**. Z trybem WYMUSZANIA sygnału (`--force-signal`
-  / replay), żeby przejść ścieżkę wejście→wyjście w 5 minut zamiast czekać na
-  cross EMA. Osobny tor — NIE dotyka Lambdy M5.
-  ⚠️ OTWARTA DECYZJA PROJEKTOWA (postawiona jawnie, nie rozstrzygnięta po cichu):
-  symulacja liczy pozycje jako **ułamek kapitału** i nie zna pojęcia ilości;
-  giełda operuje na **ilościach**. Pola `qty`/`fee_paid` są w interfejsie, ale
-  księgowość ilościowa NIE jest rozwiązana. Wariant (a): testnet z prawdziwymi
-  cenami fillu, sizing dalej ułamkowy — szybko waliduje ścieżkę API, księga
-  zostaje hybrydą; (b): od razu księga ilościowa — więcej pracy, ale tego
-  naprawdę potrzebuje M6. **Rekomendacja: (a) jako krok 3, (b) jako krok 4.**
-  Równolegle (krok 3b, M5-safe): research 4h/ETH — patrz „PLAN ROZWOJU" niżej.
+- **✅ KROK 3 ZROBIONY 2026-08-06 — `BinanceDemoExecutor`** (branch
+  `feat/binance-demo-executor`, docs/EXECUTOR_TESTNET_2026-08-06.md).
+  Wariant **(a)** wybrany przez usera. Ścieżka wykonawcza przejechana
+  end-to-end na PRAWDZIWYM silniku dopasowań: round-trip `orderId`
+  54495523957/54495523967, konto wróciło do 0.05000000 BTC **co do cyfry**
+  (executor nie tknął pre-fundowanych coinów), zwrot −0.1995% = sama prowizja.
+  55 testów, zero sieci w CI.
+  ⚠️ **KOREKTA PLANU:** to NIE jest `testnet.binance.vision` — nasze klucze są z
+  **Binance Demo Trading**, a testnet odpowiada na nie `-2015`. Właściwy host to
+  **`demo-api.binance.com`** (przypięty testem). Uwaga na pułapkę:
+  `demo.binance.com/api/...` robi 301 na **produkcyjne** `api.binance.com`.
+  ZMIERZONE (a nie założone): prowizja venue **0.1%** = dokładnie `fee_rate=0.001`
+  bota. Poślizg faktyczny **0.000–0.003%** vs zakładane 0.02% → model
+  KONSERWATYWNY (błąd w bezpieczną stronę). Zastrzeżenie: demo ma własny feed
+  (BTC 64 431 w chwili testu) i własny matching — to poszlaka, nie pomiar live.
+  🔴 **NOWE ODKRYCIE → wejście do kroku 4:** prowizję pobrano w **BNB**, nie w
+  USDT (konto trzyma 2 BNB). Księga modeluje fee jako ułamek kapitału w USDT —
+  to dwie różne waluty. Księga ilościowa musi to rozstrzygnąć (wyłączyć BNB albo
+  księgować po kursie). Pola `fee_asset` już to raportują.
+- **NASTĘPNA AKCJA:** **krok 4 — księga ilościowa** (`qty` w BTC zamiast ułamka
+  kapitału, + sprawa prowizji w BNB). To jest to, czego naprawdę potrzebuje M6.
+  UWAGA: dotyka `PaperPortfolio` → wymaga ponownego zamrożenia złotego wzorca
+  PRZED refaktorem i weryfikacji bramką A na żywym prodzie (patrz
+  „golden master discipline"). Alternatywnie równolegle (krok 3b, M5-safe):
+  research 4h/ETH — patrz „PLAN ROZWOJU" niżej.
   Poza tym M5 — bot zbiera żywe decyzje. Otwarta decyzja:
   hosting frontendu na tradepulseai.co.uk (domena wykupiona do 2026-09-29,
   strefa DNS skasowana — trzeba nową + NS; pełny front wymaga backendu w
@@ -752,8 +761,12 @@ od ręki. Dlatego priorytet = testnet, nie strategia.
 
 **Kolejność:**
 1. ✅ Szew wykonawczy (PR #24, 2026-08-05)
-2. **`BinanceTestnetExecutor`** ← następny krok, szczegóły w STATUS TERAZ
-3. Księga ilościowa (`LOT_SIZE`/`MIN_NOTIONAL`/częściowe fille) — pod M6
+2. ✅ **`BinanceDemoExecutor`** (2026-08-06) — niewiadoma B ZAMKNIĘTA: bot
+   udowodnił, że umie złożyć, wypełnić i rozliczyć zlecenie na prawdziwym
+   silniku dopasowań. Szczegóły: docs/EXECUTOR_TESTNET_2026-08-06.md
+3. **Księga ilościowa** ← następny krok (qty w BTC zamiast ułamka kapitału,
+   + prowizja w BNB vs USDT); `LOT_SIZE`/`MIN_NOTIONAL`/częściowe fille już
+   obsłużone po stronie executora
 4. **Research 4h/ETH** (równolegle, M5-safe, dane gotowe i zwalidowane)
 5. Diagnostyka „flat to też wynik" w raporcie bramki
 6. Realne pieniądze — user 2026-08-05: **„nie czas jeszcze"**
@@ -1026,3 +1039,35 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   A/B, tempo dowodu, protokół researchu 4h). Realne pieniądze: **„nie czas
   jeszcze"**. NASTĘPNY KROK: `BinanceTestnetExecutor` (krok 3).
   PR #24 wypchnięty, CI leciało na koniec sesji — **user mergeuje ręcznie**.
+- 2026-08-06 — **Krok 3 ZROBIONY: `BinanceDemoExecutor` — niewiadoma B zamknięta.**
+  Bot po raz pierwszy w historii projektu ZŁOŻYŁ PRAWDZIWE ZLECENIE i rozliczył
+  je z księgą. Round-trip na żywym silniku dopasowań (orderId 54495523957 /
+  54495523967): wejście 0.00031 BTC, wyjście, konto wróciło do 0.05000000 BTC
+  **co do ostatniej cyfry** — executor sprzedał dokładnie to, co kupił, i nie
+  tknął pre-fundowanych coinów. Zwrot −0.1995% = praktycznie sama prowizja
+  round-tripu (0.1%×2), czyli księga i venue policzyły to samo.
+  KOREKTA PLANU: plan mówił `testnet.binance.vision`, ale nasze klucze są z
+  **Binance Demo Trading** — testnet odpowiada na nie `-2015`. Właściwy host:
+  **`demo-api.binance.com`** (znaleziony empirycznie: `api.demo.*` nie
+  odpowiada, `api-demo.*` daje 404). PUŁAPKA: `demo.binance.com/api/...` robi
+  301 na **produkcyjne** `api.binance.com` — naiwne sklejenie base URL z domeny
+  UI wysłałoby zlecenia na prawdziwą giełdę. Stała przypięta testem.
+  ZMIERZONE, NIE ZAŁOŻONE: (1) prowizja venue 0.1% = dokładnie `fee_rate=0.001`
+  bota — model kosztów potwierdzony przez rzeczywistość; (2) poślizg faktyczny
+  0.000–0.003% vs zakładane 0.02% → model KONSERWATYWNY, backtest zaniża wynik.
+  Zastrzeżenie: demo ma własny feed (BTC 64 431!) i własny matching → poszlaka,
+  nie pomiar live; prawdziwy poślizg dopiero w M6.
+  🔴 ODKRYCIE → wejście do kroku 4: prowizję pobrano w **BNB**, nie w USDT
+  (konto trzyma 2 BNB). Księga modeluje fee jako ułamek kapitału w USDT — to
+  dwie różne waluty, i nikt tego nie widział, bo nie było kodu składającego
+  zlecenia. `fee_asset` już to raportuje; księga ilościowa musi rozstrzygnąć.
+  OBSŁUŻONE I PRZYPIĘTE TESTAMI (55, zero sieci): HMAC nad dokładnymi bajtami
+  wire, resync przy `-1021` (raz, potem retry), `LOT_SIZE` w `Decimal` z
+  zaokrągleniem W DÓŁ, `MIN_NOTIONAL` odrzucany lokalnie (zweryfikowane na
+  żywo), VWAP przy fillach po wielu cenach, netowanie prowizji w base asset,
+  brak notacji naukowej w `quantity`, 429 z `Retry-After` vs 418 bez retry,
+  błędy biznesowe (`-2010`) od razu w górę. Cały suite: 256 zielonych (było 202).
+  Higiena: klucze tylko przez env (`from_env`), w repo `.env.example`.
+  ⚠️ Klucz LIVE użytkownika był odsłonięty w zrzucie ekranu → do rotacji.
+  NASTĘPNY KROK: krok 4 — księga ilościowa (uwaga: dotyka `PaperPortfolio`,
+  więc złoty wzorzec zamrozić PRZED refaktorem + bramka A po).
