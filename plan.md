@@ -2,12 +2,16 @@
 
 > **Po co to jest:** żeby „jutrzejszy ja / future Claude" po otwarciu tego pliku
 > wiedział DOKŁADNIE gdzie jesteśmy, gdzie zaczynamy dziś i dokąd zmierzamy.
-> To jest jedyne źródło prawdy o pracy. Plik lokalny (gitignored).
+> To jest jedyne źródło prawdy o pracy.
+> **UWAGA (sprostowanie 2026-08-05):** ten plik JEST śledzony przez git i był
+> commitowany w poprzednich sesjach (np. 0cede30, 3cc9c1e, 4c86d9e). Stary
+> zapis „plik lokalny (gitignored)" był NIEPRAWDZIWY — nie ma dla niego żadnej
+> reguły w .gitignore. Traktuj go jak każdy inny plik repo.
 >
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-07-15**
+> Ostatnia aktualizacja: **2026-08-06**
 
 ---
 
@@ -22,11 +26,20 @@
   ostatni deploy **2026-07-22**, obie Lambdy `CodeSha256 r8Luxno…tNq0=`.
   Wszystko po tej dacie (PR #17–#21) to **narzędzia CLI, badania, testy i
   dokumenty — NIC z tego nie jest uruchamiane przez Lambdę**, więc redeploy
-  jest ZBĘDNY i w oknie M5 byłby samym ryzykiem. Kod ścieżki bota =
-  funkcjonalnie identyczny z prod (jedyna różnica: `load_csv()` w data.py,
-  którego bot nie woła). Piny z `requirements-lambda.txt` rozwiązują się
-  dokładnie do zestawu działającego na prodzie — zweryfikowane. Deployować
-  dopiero, gdy zmieni się coś, co Lambda faktycznie wykonuje (np. M6).
+  jest ZBĘDNY i w oknie M5 byłby samym ryzykiem. Piny z
+  `requirements-lambda.txt` rozwiązują się dokładnie do zestawu działającego
+  na prodzie — zweryfikowane. Deployować dopiero, gdy zmieni się coś, co
+  Lambda faktycznie wykonuje (np. M6).
+  ⚠️ **AKTUALIZACJA 2026-08-05:** repo różni się od proda w WIĘCEJ niż jednym
+  pliku (doszedł `paper_trading/execution.py`, zmienił się `portfolio.py`
+  — PR #24). Stary zapis „jedyna różnica to `load_csv()`" jest NIEAKTUALNY.
+  Kod jest nadal **funkcjonalnie tożsamy** i to jest UDOWODNIONE, nie
+  zadeklarowane: złoty wzorzec (3240 barów historii, `==` na floatach) +
+  bramka A na żywym prodzie (21 barów odtwarza się do zapisanej księgi).
+  Weryfikacja bajtowa proda z 2026-08-05: 22/25 plików identycznych, 3 różnice
+  nieszkodliwe (2 puste `__init__.py` generowane przez build; `data.py` różni
+  się TYLKO wewnątrz `load_csv()`, którego ścieżka bota nie importuje —
+  sprawdzone grepem na WDROŻONEJ paczce, nie na repo).
 - **TRYB: CZEKAMY.** Okno M5 od 2026-07-16, oceny bramek ≥2026-09-10, ZERO zmian
   strategii w oknie. Health-check 2026-07-17: wszystko zielone (scheduler, Lambda,
   DynamoDB, SNS). Deep-audit 6 warstw zrobiony → docs/ANALIZA_6_WARSTW_2026-07-17.md
@@ -71,8 +84,31 @@
   DynamoDB), bootstrap w `scripts/bootstrap_tf_backend.sh`. Migracja
   zweryfikowana: plan czysty PRZED i PO, `state list` = 32/32 zasoby.
   **Lista porządków wyczerpana poza kwarantanną enterprise.**
-- **NASTĘPNA AKCJA:** zaimplementować `gate.py --fidelity` (Bramka A, M5.4)
-  PRZED 2026-09-10 — inaczej okno skończy się bez formalnego dorobku.
+- **✅ KROK 3 ZROBIONY 2026-08-06 — `BinanceDemoExecutor`** (branch
+  `feat/binance-demo-executor`, docs/EXECUTOR_TESTNET_2026-08-06.md).
+  Wariant **(a)** wybrany przez usera. Ścieżka wykonawcza przejechana
+  end-to-end na PRAWDZIWYM silniku dopasowań: round-trip `orderId`
+  54495523957/54495523967, konto wróciło do 0.05000000 BTC **co do cyfry**
+  (executor nie tknął pre-fundowanych coinów), zwrot −0.1995% = sama prowizja.
+  55 testów, zero sieci w CI.
+  ⚠️ **KOREKTA PLANU:** to NIE jest `testnet.binance.vision` — nasze klucze są z
+  **Binance Demo Trading**, a testnet odpowiada na nie `-2015`. Właściwy host to
+  **`demo-api.binance.com`** (przypięty testem). Uwaga na pułapkę:
+  `demo.binance.com/api/...` robi 301 na **produkcyjne** `api.binance.com`.
+  ZMIERZONE (a nie założone): prowizja venue **0.1%** = dokładnie `fee_rate=0.001`
+  bota. Poślizg faktyczny **0.000–0.003%** vs zakładane 0.02% → model
+  KONSERWATYWNY (błąd w bezpieczną stronę). Zastrzeżenie: demo ma własny feed
+  (BTC 64 431 w chwili testu) i własny matching — to poszlaka, nie pomiar live.
+  🔴 **NOWE ODKRYCIE → wejście do kroku 4:** prowizję pobrano w **BNB**, nie w
+  USDT (konto trzyma 2 BNB). Księga modeluje fee jako ułamek kapitału w USDT —
+  to dwie różne waluty. Księga ilościowa musi to rozstrzygnąć (wyłączyć BNB albo
+  księgować po kursie). Pola `fee_asset` już to raportują.
+- **NASTĘPNA AKCJA:** **krok 4 — księga ilościowa** (`qty` w BTC zamiast ułamka
+  kapitału, + sprawa prowizji w BNB). To jest to, czego naprawdę potrzebuje M6.
+  UWAGA: dotyka `PaperPortfolio` → wymaga ponownego zamrożenia złotego wzorca
+  PRZED refaktorem i weryfikacji bramką A na żywym prodzie (patrz
+  „golden master discipline"). Alternatywnie równolegle (krok 3b, M5-safe):
+  research 4h/ETH — patrz „PLAN ROZWOJU" niżej.
   Poza tym M5 — bot zbiera żywe decyzje. Otwarta decyzja:
   hosting frontendu na tradepulseai.co.uk (domena wykupiona do 2026-09-29,
   strefa DNS skasowana — trzeba nową + NS; pełny front wymaga backendu w
@@ -695,6 +731,77 @@ frontend się builduje. Problem = wykonanie, nie koncept.
 
 ---
 
+# PLAN ROZWOJU — jak zrobić z tego bota, który się utrzymuje (ustalone 2026-08-05)
+
+**Poprzeczka jest śmiesznie nisko i warto to sobie uświadomić.** TradePulse
+kosztuje **$0,60/mies. = $7,20/rok** (udział w strefie Route53 $0,50 + zapytania
+DNS + storage DynamoDB; Lambda ~$0). Na $10k to **0,072%/rok**. **$100 realnego
+kapitału przy 10%/rok pokrywa rachunek.** Bot nie musi być lepszy — musi być
+URUCHOMIONY na prawdziwych pieniądzach.
+*(Konto AWS płaci ~$108/mies., ale ~$88 z tego to `postra-dev` — INNA APLIKACJA,
+poza zakresem tego projektu, user wyraźnie: nie dotykamy.)*
+
+**Bot już dowiózł wartość, tylko bramka jej nie widzi.** Od ostatniego SELL
+(2026-05-29) BTC zrobił **−12,73%** (dołek −20,2%), bot był FLAT. Na $10k to
+$1 273 nieutraconych = 177 lat rachunków AWS. Bramka M5 liczy round-tripy i P&L
+**z trejdów** — za „poprawnie przeczekał zjazd" nie daje ani punktu. To zgadza
+się z charakterem strategii z audytu kalibracji: redukuje DD, wygrywa
+risk-adjusted, nie bije B&H absolutnie.
+
+**Dwie niewiadome, RÓŻNE narzędzia — to jest sedno:**
+
+| | Niewiadoma | Czym się rozwiązuje | Ile trwa |
+|---|---|---|---|
+| **A** | Czy strategia zarabia? | **Czasem** — nic tego nie przyspieszy poza kanałami | 12–18 mies. |
+| **B** | Czy bot umie poprawnie WYKONAĆ trejd? | **Giełdą testową** — dostępne od zaraz | dni |
+
+Cała uwaga szła dotąd w A. **B było nietknięte** (bot NIE MIAŁ kodu składania
+zleceń — zero, sprawdzone grepem), blokuje M6 tak samo mocno i da się je zamknąć
+od ręki. Dlatego priorytet = testnet, nie strategia.
+
+**Kolejność:**
+1. ✅ Szew wykonawczy (PR #24, 2026-08-05)
+2. ✅ **`BinanceDemoExecutor`** (2026-08-06) — niewiadoma B ZAMKNIĘTA: bot
+   udowodnił, że umie złożyć, wypełnić i rozliczyć zlecenie na prawdziwym
+   silniku dopasowań. Szczegóły: docs/EXECUTOR_TESTNET_2026-08-06.md
+3. **Księga ilościowa** ← następny krok (qty w BTC zamiast ułamka kapitału,
+   + prowizja w BNB vs USDT); `LOT_SIZE`/`MIN_NOTIONAL`/częściowe fille już
+   obsłużone po stronie executora
+4. **Research 4h/ETH** (równolegle, M5-safe, dane gotowe i zwalidowane)
+5. Diagnostyka „flat to też wynik" w raporcie bramki
+6. Realne pieniądze — user 2026-08-05: **„nie czas jeszcze"**
+
+**Tempo dowodu — dlaczego 4h w ogóle rozważamy** (szacunek z holdoutu, liczba
+round-tripów, NIE walidacja edge'u):
+
+| Instancja | Round-tripy/rok | Przyspieszenie |
+|---|---|---|
+| BTC 1d *(live)* | 1,69 | — |
+| **BTC 4h** | **12,21** | **7,2×** |
+| BTC 1h | 54,89 | 32× |
+| ETH 1d | 1,80 | +1 równoległy kanał |
+
+⚠️ HACZYK: audyt pokazał, że edge przeżywa 0,5% fee **dlatego, że** to ~20
+trejdów przez 6,5 roku — „fee drag jest strukturalnie mały". Przy 7×
+częstotliwości drag rośnie 7×. **1h prawie na pewno martwe; 4h to otwarte
+pytanie wymagające walk-forward.**
+
+**Protokół researchu 4h/ETH (żeby nie wyklikać sobie wyniku):**
+- metoda jak `scripts/research/calibration_audit.py` — walk-forward, 4 layouty,
+  holdout <2026-07-16
+- siatka: BTC 4h + ETH 1d × fee 0,1 / 0,2 / 0,3 / 0,5% na stronę
+- **reguła decyzyjna PRE-REJESTROWANA PRZED uruchomieniem**, propozycja:
+  *przyjmujemy kanał tylko jeśli OOS Sharpe ≥0,8 przy 0,2% fee w ≥3 z 4
+  layoutów ORAZ bije B&H*
+- przyjęcie kanału = **START NOWEGO OKNA papierowego dla tego kanału**, NIGDY
+  modyfikacja biegnącego BTC 1d
+
+**Granica, której nie przekraczamy:** do 2026-09-10 można dodawać do raportu
+bramki **diagnostyki** (np. wynik vs B&H, time-in-market), ale **NIE WOLNO
+ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
+
+---
+
 # Log sesji (dopisuj 1 linię na końcu każdej)
 - 2026-07-15 — Deep-review (3 agenty) + test na żywo + napisany ten master plan.
   Werdykt: koncept OK, wykonanie kruche. **Następny krok: M0 / SESJA A1 (DI
@@ -894,3 +1001,73 @@ frontend się builduje. Problem = wykonanie, nie koncept.
   „skasowana" nieaktualny), bot.tradepulseai.co.uk → 200. Reminder 08-24
   zbędny. NASTĘPNY KROK: tryb czekania do 2026-09-10; jedyny zaległy porządek
   to kwarantanna enterprise (zero pilności, nic tego nie uruchamia).
+- 2026-08-05 — **Deep health-check całej apki + otwarcie toru wykonawczego.**
+  ZDROWIE (wszystko zielone): obie Lambdy żyją, `CodeSha256 r8Luxno…tNq0=` bez
+  dryfu; scheduler ENABLED `cron(10 0 * * ? *)` z DLQ+retry 3×; 3 alarmy OK;
+  ZERO błędów w logach za 14 dni (1,6 s, 205/512 MB); 21 decyzji 07-15→08-04
+  **bez ani jednej luki**, każda ~00:10:34 UTC; bramka A **PASS na 6/6**;
+  bramka okna WINDOW_RUNNING dzień 20/56; holdout nienaruszony (CSV kończą się
+  07-15); 3 workflowy deployu poprawnie manual-only; zero sekretów w gicie.
+  WERYFIKACJA PROD↔REPO BAJTOWO (ściągnięta paczka Lambdy): 22/25 identycznych,
+  3 różnice nieszkodliwe — teza „redeploy zbędny" jest teraz UDOWODNIONA, nie
+  zadeklarowana. STRATEGIA: gap EMA −4,70% (od −7,44% na starcie okna, zawęża
+  się); **0 sygnałów buy przez całe 20 dni, 0 z 20 dni z gap>0**; ostatni BUY
+  2026-05-01, zamknięty 05-29 — 7 tygodni PRZED oknem; do crossa trzeba +4,93%
+  na EMA20. To poprawne zachowanie trend-followingu w bessie, nie awaria.
+  KOSZTY: TradePulse **$0,60/mies.**; konto płaci $108,76/lip., ale ~$88 to
+  `postra-dev` (EC2 t3.medium + RDS + ALB + VPC) — INNA APKA, user: nie dotykamy.
+  ZROBIONE: (1) **deletion protection na DynamoDB** (przez TF, plan 0/1/0,
+  zweryfikowane; PITR 35 dni < okno 56 dni, a decyzji nie da się odtworzyć);
+  (2) **warstwa Executor — PR #24** (`Order→Executor→Fill`, abstrakcja jak u
+  giełdy: BUY/SELL). Odkrycie: bot **NIE MIAŁ ŻADNEGO kodu składania zleceń** —
+  `PaperPortfolio` to czysta symulacja, więc przy przejściu na realne pieniądze
+  byłby to świeży, nigdy nieuruchomiony kod od razu z kasą na nim. Ładne
+  uproszczenie: slippage po stronie ZLECENIA zwija wejście i wyjście w jedną
+  regułę `fill = ref*(1+order_side*slip)`, tożsamą z `costs.py` we wszystkich
+  4 kombinacjach (osobno przetestowane — inaczej live odjechałoby od backtestu).
+  DOWÓD, ŻE KSIĘGA NIE DRGNĘŁA: złoty wzorzec złapany PRZED refaktorem (3240
+  barów + 1500-krokowa replika syntetyczna, `==` na floatach) + bramka A na
+  żywym prodzie. 202 testy zielone (było 126).
+  PUŁAPKI ZNALEZIONE: `build_lambda_package.sh` kopiuje TYLKO `paper_trading` +
+  `backtesting` → nowy pakiet obok zaimportowałby się lokalnie i wywalił Lambdę
+  na `ModuleNotFoundError` (dlatego executor jest w `paper_trading/`; doszedł
+  guard + test resolvera, bo guard sam miał błąd i test go złapał). `data/ml/`
+  jest CELOWO gitignorowane → złoty wzorzec musiał dostać przypadek syntetyczny
+  bez zależności od danych (arytmetyka całkowitoliczbowa, bit-odtwarzalna),
+  zweryfikowane uruchomieniem suite'u z ukrytymi danymi: zielone, 3 skipy.
+  USTALENIA STRATEGICZNE → patrz sekcja „PLAN ROZWOJU" wyżej (dwie niewiadome
+  A/B, tempo dowodu, protokół researchu 4h). Realne pieniądze: **„nie czas
+  jeszcze"**. NASTĘPNY KROK: `BinanceTestnetExecutor` (krok 3).
+  PR #24 wypchnięty, CI leciało na koniec sesji — **user mergeuje ręcznie**.
+- 2026-08-06 — **Krok 3 ZROBIONY: `BinanceDemoExecutor` — niewiadoma B zamknięta.**
+  Bot po raz pierwszy w historii projektu ZŁOŻYŁ PRAWDZIWE ZLECENIE i rozliczył
+  je z księgą. Round-trip na żywym silniku dopasowań (orderId 54495523957 /
+  54495523967): wejście 0.00031 BTC, wyjście, konto wróciło do 0.05000000 BTC
+  **co do ostatniej cyfry** — executor sprzedał dokładnie to, co kupił, i nie
+  tknął pre-fundowanych coinów. Zwrot −0.1995% = praktycznie sama prowizja
+  round-tripu (0.1%×2), czyli księga i venue policzyły to samo.
+  KOREKTA PLANU: plan mówił `testnet.binance.vision`, ale nasze klucze są z
+  **Binance Demo Trading** — testnet odpowiada na nie `-2015`. Właściwy host:
+  **`demo-api.binance.com`** (znaleziony empirycznie: `api.demo.*` nie
+  odpowiada, `api-demo.*` daje 404). PUŁAPKA: `demo.binance.com/api/...` robi
+  301 na **produkcyjne** `api.binance.com` — naiwne sklejenie base URL z domeny
+  UI wysłałoby zlecenia na prawdziwą giełdę. Stała przypięta testem.
+  ZMIERZONE, NIE ZAŁOŻONE: (1) prowizja venue 0.1% = dokładnie `fee_rate=0.001`
+  bota — model kosztów potwierdzony przez rzeczywistość; (2) poślizg faktyczny
+  0.000–0.003% vs zakładane 0.02% → model KONSERWATYWNY, backtest zaniża wynik.
+  Zastrzeżenie: demo ma własny feed (BTC 64 431!) i własny matching → poszlaka,
+  nie pomiar live; prawdziwy poślizg dopiero w M6.
+  🔴 ODKRYCIE → wejście do kroku 4: prowizję pobrano w **BNB**, nie w USDT
+  (konto trzyma 2 BNB). Księga modeluje fee jako ułamek kapitału w USDT — to
+  dwie różne waluty, i nikt tego nie widział, bo nie było kodu składającego
+  zlecenia. `fee_asset` już to raportuje; księga ilościowa musi rozstrzygnąć.
+  OBSŁUŻONE I PRZYPIĘTE TESTAMI (55, zero sieci): HMAC nad dokładnymi bajtami
+  wire, resync przy `-1021` (raz, potem retry), `LOT_SIZE` w `Decimal` z
+  zaokrągleniem W DÓŁ, `MIN_NOTIONAL` odrzucany lokalnie (zweryfikowane na
+  żywo), VWAP przy fillach po wielu cenach, netowanie prowizji w base asset,
+  brak notacji naukowej w `quantity`, 429 z `Retry-After` vs 418 bez retry,
+  błędy biznesowe (`-2010`) od razu w górę. Cały suite: 256 zielonych (było 202).
+  Higiena: klucze tylko przez env (`from_env`), w repo `.env.example`.
+  ⚠️ Klucz LIVE użytkownika był odsłonięty w zrzucie ekranu → do rotacji.
+  NASTĘPNY KROK: krok 4 — księga ilościowa (uwaga: dotyka `PaperPortfolio`,
+  więc złoty wzorzec zamrozić PRZED refaktorem + bramka A po).
