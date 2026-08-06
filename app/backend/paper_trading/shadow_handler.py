@@ -54,15 +54,29 @@ def load_credentials_from_ssm(prefix: str) -> dict:
 
 
 def handler(event, context):
+    """Run the daily heartbeat.
+
+    ``{"force": true}`` overrides the once-per-day guard. It exists for one
+    specific job: verifying a deploy immediately instead of waiting for the next
+    schedule and hoping. That is not hypothetical caution — the first deploy of
+    this function failed on an import error that every local test had passed,
+    and nothing would have surfaced it until the following morning.
+
+    EventBridge sends ``{}``, so a scheduled run can never take this path: the
+    guard against retry storms stays exactly as strong as it was.
+    """
     symbol = os.environ.get("TRADING_SYMBOL", "BTCUSDT")
     timeframe = os.environ.get("TRADING_TIMEFRAME", "1d")
     notional = float(os.environ.get("SHADOW_NOTIONAL", "10"))
     ssm_prefix = os.environ.get("SHADOW_CREDENTIALS_PATH", "/tradepulse/demo")
+    force = bool((event or {}).get("force")) if isinstance(event, dict) else False
 
     credentials = load_credentials_from_ssm(ssm_prefix)
     runner = build_shadow_runner(symbol=symbol, timeframe=timeframe,
                                  notional=notional, credentials=credentials)
-    result = runner.run_once()
+    if force:
+        logger.warning("forced run: bypassing the once-per-day guard")
+    result = runner.run_once(force=force)
 
     logger.info("shadow heartbeat: %s", json.dumps(result, default=str))
 

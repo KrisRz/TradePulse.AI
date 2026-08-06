@@ -145,6 +145,32 @@ def test_the_heartbeat_exercises_the_quantity_backed_book():
     assert book["fees_quote"] == 0.0
 
 
+def test_the_handler_only_forces_when_explicitly_asked():
+    """EventBridge sends {} — a scheduled run must never bypass the daily guard."""
+    from app.backend.paper_trading import shadow_handler
+
+    seen = []
+
+    class Runner:
+        def run_once(self, force=False):
+            seen.append(force)
+            return {"status": "ok", "flat": True}
+
+    original_build = shadow_handler.build_shadow_runner
+    original_creds = shadow_handler.load_credentials_from_ssm
+    shadow_handler.build_shadow_runner = lambda **kw: Runner()
+    shadow_handler.load_credentials_from_ssm = lambda prefix: {}
+    try:
+        shadow_handler.handler({}, None)                 # the scheduler's payload
+        shadow_handler.handler(None, None)               # a manual empty invoke
+        shadow_handler.handler({"force": True}, None)    # deliberate override
+    finally:
+        shadow_handler.build_shadow_runner = original_build
+        shadow_handler.load_credentials_from_ssm = original_creds
+
+    assert seen == [False, False, True]
+
+
 def test_the_partition_key_keeps_it_out_of_the_paper_bots_book():
     """The M5 book is untouchable; a different key is what guarantees that."""
     key = SHADOW_PK.format(symbol="BTCUSDT", timeframe="1d")
