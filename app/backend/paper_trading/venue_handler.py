@@ -42,10 +42,15 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 
 from .binance_demo import BinanceDemoExecutor
+from .killswitch import KillSwitchState, apply_halt, evaluate, observe
 from .run import build_bot
 from .shadow_handler import load_credentials_from_ssm
+
+#: Where the kill-switch state lives inside the bot's persisted state.
+KILLSWITCH_KEY = "killswitch"
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -84,6 +89,20 @@ def attach_venue(bot, executor: BinanceDemoExecutor) -> dict:
     return record
 
 
+def _execution_drag(executor: BinanceDemoExecutor,
+                    switch: KillSwitchState) -> float:
+    """Cumulative quote-currency cost of fills landing away from the model.
+
+    This is what T2 watches. It measures the plumbing — execution and costs —
+    never the strategy: a strategy that simply loses money must not trip a switch
+    meant for broken pipes.
+    """
+    drag = switch.execution_drag or 0.0
+    for rec in executor.reconciliations():
+        drag += rec.price_error * rec.qty
+    return drag
+
+
 def handler(event, context):
     symbol = os.environ.get("TRADING_SYMBOL", "BTCUSDT")
     timeframe = os.environ.get("TRADING_TIMEFRAME", "4h")
@@ -109,7 +128,44 @@ def handler(event, context):
     bot = build_bot(symbol=symbol, timeframe=timeframe, capital=capital)
     reconciliation = attach_venue(bot, executor)
 
+    # --- kill switch -------------------------------------------------------
+    # Checked on the state BEFORE this bar is reconciled, exactly as the design
+    # specifies: a switch that evaluates after trading has already happened is
+    # not a circuit breaker, it is a post-mortem.
+    switch = KillSwitchState.from_dict(bot.extra.get(KILLSWITCH_KEY))
+    mark = executor.mark_price()
+    equity_now = bot.portfolio.equity(mark)
+    drag = _execution_drag(executor, switch)
+    verdict = evaluate(switch, equity_now, execution_drag=drag)
+
+    if verdict.halt:
+        was_halted = switch.halted
+        switch = apply_halt(switch, verdict)
+        result = {
+            "status": "HALTED",
+            "reason": verdict.reason,
+            "detail": verdict.detail,
+            "equity": round(equity_now, 2),
+            "checks": verdict.checks,
+            "position": bot.portfolio.side,
+        }
+        if not was_halted and bot.portfolio.side != 0:
+            # Flatten through the ordinary path, then stop. Leaving a position
+            # open after halting would mean the switch protects the book but not
+            # the money.
+            bot.portfolio.reconcile(0, mark, datetime.now(timezone.utc).isoformat())
+            result["flattened_at"] = mark
+        bot.extra[KILLSWITCH_KEY] = switch.as_dict()
+        bot._save()
+        logger.error("KILL SWITCH: %s — %s", verdict.reason, verdict.detail)
+        result["venue"] = reconciliation
+        return result
+
     result = bot.step()
+    observe(switch, bot.portfolio.equity(mark), execution_drag=drag)
+    bot.extra[KILLSWITCH_KEY] = switch.as_dict()
+    bot._save()
+    result["killswitch"] = {"halted": False, **verdict.checks}
     result["venue"] = reconciliation
     if executor.reconciliations():
         last = executor.reconciliations()[-1]

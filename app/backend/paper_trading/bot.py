@@ -45,6 +45,11 @@ class PaperBot:
         )
         self.last_bar: Optional[str] = None
         self.last_decision: Optional[dict] = None
+        # Somewhere for a channel to persist state of its own beside the book,
+        # without every channel's concerns leaking into this class. The kill
+        # switch lives here for the venue-backed channel; the 1d bot never
+        # writes it and loading a state without it is a no-op.
+        self.extra: dict = {}
         self._load()
 
     # -- persistence ----------------------------------------------------- #
@@ -55,6 +60,7 @@ class PaperBot:
         self.portfolio = PaperPortfolio.from_dict(state["portfolio"])
         self.last_bar = state.get("last_bar")
         self.last_decision = state.get("last_decision")
+        self.extra = state.get("extra") or {}
 
     def _save(self) -> None:
         self.store.save({
@@ -64,6 +70,7 @@ class PaperBot:
             "last_bar": self.last_bar,
             "last_decision": self.last_decision,
             "portfolio": self.portfolio.to_dict(),
+            "extra": self.extra,
         })
 
     def _heal_decision_log(self) -> bool:

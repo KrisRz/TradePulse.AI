@@ -36,10 +36,40 @@ def build_bot(symbol: str = "BTCUSDT", timeframe: str = "1d",
     return PaperBot(strategy, config)
 
 
+def _killswitch_command(bot, args) -> dict:
+    """Inspect or clear a halt.
+
+    Re-arming is deliberately awkward: it needs an explicit ``--confirm`` and a
+    written reason, and it leaves an audit record. Coming back after a halt is a
+    person's decision taken while looking at the data — never a timer, never a
+    retry, never a default.
+    """
+    from .killswitch import KillSwitchState, rearm
+    from .venue_handler import KILLSWITCH_KEY
+
+    state = KillSwitchState.from_dict(bot.extra.get(KILLSWITCH_KEY))
+    if args.command == "killswitch":
+        return {"command": "killswitch", **state.as_dict()}
+
+    if not args.confirm:
+        return {"error": "re-arming needs --confirm and --note",
+                "current": state.as_dict()}
+    try:
+        equity = bot.portfolio.equity()
+        state, record = rearm(state, equity=equity, note=args.note)
+    except ValueError as exc:
+        return {"error": str(exc), "current": state.as_dict()}
+
+    bot.extra[KILLSWITCH_KEY] = state.as_dict()
+    bot._save()
+    bot.store.append_decision({"bar": f"rearm#{record['at']}", **record})
+    return {"command": "rearm", "record": record, "state": state.as_dict()}
+
+
 def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     p = argparse.ArgumentParser(description="Paper-trading bot (backtest-validated strategy).")
-    p.add_argument("command", choices=["step", "status"])
+    p.add_argument("command", choices=["step", "status", "rearm", "killswitch"])
     p.add_argument("--symbol", default="BTCUSDT")
     p.add_argument("--timeframe", default="1d")
     p.add_argument("--fast", type=int, default=20)
@@ -48,13 +78,21 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--slippage", type=float, default=0.0002)
     p.add_argument("--capital", type=float, default=10_000.0)
     p.add_argument("--state", default=None, help="Path to state JSON")
+    p.add_argument("--confirm", action="store_true",
+                   help="rearm: required, so a halt is never cleared by accident")
+    p.add_argument("--note", default="",
+                   help="rearm: why it is safe to resume (goes in the audit record)")
     args = p.parse_args(argv)
 
     bot = build_bot(symbol=args.symbol, timeframe=args.timeframe,
                     fast=args.fast, slow=args.slow, fee=args.fee,
                     slippage=args.slippage, capital=args.capital,
                     state=args.state)
-    result = bot.step() if args.command == "step" else bot.status()
+
+    if args.command in ("rearm", "killswitch"):
+        result = _killswitch_command(bot, args)
+    else:
+        result = bot.step() if args.command == "step" else bot.status()
     print(json.dumps(result, indent=2, default=str))
 
 

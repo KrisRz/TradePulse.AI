@@ -786,8 +786,20 @@ Cel: zwalidowana strategia EMA lata co dzień, zapisuje decyzje + P&L.
 ## ▶ M6 — Małe realne kwoty + PR (SESJA F, część 2)
 - [ ] **F5. Rotacja sekretów** (user): AWS key, Binance key, SECRET_KEY.
 - [ ] **F6. PR** — dopiero gdy M0–M3 stabilne, CI zielone.
-- [ ] **F7. Realne $50–100** — maker orders, stop-loss, dzienny limit straty,
-      kill-switch (live≠paper → stop). Bramka 3 z sekcji 7.
+- [ ] **F7. Realne $50–100** — Bramka 3 z sekcji 7. Części składowe:
+      - 🔴 **maker orders — ODRZUCONE 2026-08-06 na podstawie pomiaru.** Binance
+        VIP 0 nalicza maker i taker IDENTYCZNIE (0,1000%/0,1000% — sprawdzone na
+        koncie). Cała korzyść to nieprzechodzenie spreadu, a spread BTCUSDT to
+        0,01 USDT na 64 468 = 0,000016%. Wartość: **$0,0004/rok** na $200 przy
+        4h, przy prowizjach kosztujących $4,88/rok — różnica 12 000×. W zamian
+        ryzyko niewypełnienia, psujące `backtest = live`. NIE BUDUJEMY.
+      - ✅ **kill-switch ZAIMPLEMENTOWANY 2026-08-06** (`killswitch.py`), wpięty
+        w kanał 4h, sprawdzany PRZED reconcile. T1 max-DD >25%, T2 rozjazd
+        egzekucji >10%, T3 strata >15% w barze. Fail-closed, idempotentny,
+        re-arm wyłącznie ręczny (`run rearm --confirm --note`) z rekordem
+        audytowym. 27 testów wg planu z docs/KILL_SWITCH_DESIGN.
+      - [ ] stop-loss i dzienny limit straty — do M6
+      - [ ] realne pieniądze — dopiero po bramce B
 - [ ] **F8. Skalowanie** — tylko jeśli live potwierdza paper. Powoli.
 
 ---
@@ -1286,3 +1298,27 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   modeluje (zakłada fill po cenie bara). Jeśli okaże się systematycznie
   niekorzystny, to osobne odkrycie o wierności backtestu.
   Suite 313 zielonych. NASTĘPNY KROK: wgrać poprawkę (0 add, 2 change), potem F7.
+- 2026-08-06 (koniec sesji) — **F7: maker orders ODRZUCONE pomiarem,
+  kill-switch ZBUDOWANY.**
+  🔴 Zanim cokolwiek zbudowałem, zmierzyłem przesłankę maker orderów — i ona
+  nie istnieje. Binance VIP 0: maker 0,1000% = taker 0,1000%, IDENTYCZNIE.
+  Jedyna korzyść to nieprzechodzenie spreadu = 0,01 USDT na 64 468 = 0,000016%.
+  Rocznie na $200: **$0,0004** przy 4h, wobec $4,88 prowizji — różnica 12 000×.
+  A w zamian ryzyko niewypełnienia, psujące gwarancję backtest=live.
+  Zaoszczędziliśmy maszynerii stanu (składanie/monitor/timeout/anulowanie/
+  przecena/częściowe fille) dla korzyści czwartego miejsca po przecinku.
+  ✅ KILL-SWITCH: projekt z 2026-07-25 mówił „implementacja dopiero w M6", ale
+  ten sam argument, który napędził całą sesję, dotyczy go tak samo — w M6 byłby
+  to świeży, nigdy nieodpalony kod pilnujący prawdziwych pieniędzy, a kanał 4h
+  JUŻ składa prawdziwe zlecenia. Zbudowany teraz, na demo, za darmo.
+  T1 max-DD >25% od szczytu, T2 rozjazd egzekucji >10% (mierzony z
+  `price_error × qty` na fillach — plumbing, NIE strategia), T3 strata >15% w
+  jednym barze (detektor awarii). Sprawdzany PRZED reconcile; przy halcie
+  spłaszcza pozycję i staje. Fail-closed (wyjątek = HALT), idempotentny,
+  szczyt nie pełznie w trakcie haltu, re-arm wyłącznie ręczny z `--confirm`,
+  notatką i rekordem audytowym; zero auto-rearm, zero timerów.
+  `PaperBot` dostał addytywne pole `extra` na stan kanałowy — 1d go nie zapisuje.
+  Testy wg planu z docs/KILL_SWITCH_DESIGN §5: każdy trigger na granicy osobno
+  (24,9 vs 25,1 / 9,9 vs 10,1 / 14,9 vs 15,1), halt przeżywa restart, re-arm
+  resetuje szczyt, fail-closed na zepsutym stanie. Suite 334 zielonych.
+  NASTĘPNY KROK: wgrać (0 add, 1 change), potem stop-loss + dzienny limit.
