@@ -143,7 +143,32 @@
   wylądował w `fees_external` poza equity — dopóki tak jest, `backtest = live`
   nie domyka się po kosztach. Rabat 25% to ~0,025%/stronę, przy 1,69
   round-tripa/rok grosze. Wierność modelu warta więcej.
-- **NASTĘPNA AKCJA:** **`scenario_lab.py`** — warsztat scenariuszy z
+- **✅ WARSZTAT SCENARIUSZY ZROBIONY 2026-08-06**
+  (`scripts/research/scenario_lab.py`, docs/SCENARIO_LAB_2026-08-06.md).
+  64 próby: 4 kandydatów × 4 layouty × 4 poziomy prowizji, holdout wyegzekwowany
+  w kodzie, reguła PRE-REJESTROWANA przed uruchomieniem, kara za liczbę prób.
+  🟢 **BTC 4h PRZYJĘTY** (4/4 kryteria) — 130–190 trejdów tam, gdzie 1d robi
+  13–31, czyli **7,2× szybszy dowód**: werdykt o rentowności w miesiącach
+  zamiast w 12–18 mies. ⚠️ ALE KRUCHY: przy 0,1% (tyle bierze giełda) bije B&H
+  4/4, przy 0,2% 3/4, przy **0,3% przegrywa 4/4** — margines to JEDEN krok
+  prowizji. Drawdown gorszy: −53…−69% vs −49% na 1d. Przewidywany haczyk
+  „7× częstotliwość = 7× fee drag" POTWIERDZONY.
+  🔴 **SHORT ODRZUCONY — intuicja była błędna.** Hipoteza „bot stał flat gdy BTC
+  spadał 12,73%, short by to zmonetyzował" NIE broni się na danych: Sharpe
+  0,63–0,87 vs 0,99–1,13 long-only, nie bije B&H w ŻADNYM layoucie, DD rośnie
+  do −59…−67%. I to ocena łagodna, bo model zaniża koszt shorta. Sprawa
+  zamknięta danymi. Nie wracamy bez NOWEJ hipotezy.
+  🟡 ETH 1d odrzucony: Sharpe 0,82–1,03 przyzwoity, ale przegrywa z B&H ETH
+  w 3/4 layoutów. Odrzucony przy TEJ strategii, nie na zawsze.
+  UCZCIWIE O DSR: wszyscy przechodzą z 1,000 — mówi „to nie artefakty
+  przeszukiwania", ale to nie DSR ich odsiał, tylko porównanie z B&H i siatka
+  prowizji. Przy większej liczbie kandydatów zacznie mieć znaczenie.
+- **NASTĘPNA AKCJA:** **nowe okno papierowe dla BTC 4h** — zgodnie z
+  pre-rejestrowaną regułą: osobny kanał, osobna księga, ZERO zmian w biegnącym
+  BTC 1d. To jedyna droga do werdyktu o rentowności szybciej niż w 2027.
+  Uwaga: przy 4h prowizja staje się zmienną krytyczną (edge ginie między 0,2%
+  a 0,3%), więc maker orders (F7) przestają być kosmetyką.
+  (Stary opis warsztatu — zrobiony:) — warsztat scenariuszy z
   PRE-REJESTROWANĄ regułą decyzyjną i liczeniem prób (Deflated Sharpe), żeby
   testowanie wielu kandydatów nie zamieniło się w wybieranie najlepszego szumu.
   Folder `app/backend/backtesting/strategies/` już istnieje (ema_crossover,
@@ -1175,3 +1200,20 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   Shadow-bot od teraz prowadzi heartbeat PRZEZ księgę, więc ścieżka ilościowa
   jest ćwiczona codziennie na prawdziwych fillach, a nie tylko w testach.
   NASTĘPNY KROK: `scenario_lab.py` (warsztat scenariuszy).
+- 2026-08-06 (noc) — **Warsztat scenariuszy + wyłączona prowizja w BNB.**
+  `scenario_lab.py`: jeden młynek dla każdego kandydata, reguła pre-rejestrowana
+  W KODZIE i drukowana PRZED wynikami, holdout egzekwowany w `load()`, kara za
+  liczbę prób (Deflated Sharpe). Kontrolka BTC 1d odtwarza audyt kalibracji
+  (Sharpe 1,00–1,14) — czyli młynek mierzy to, co powinien.
+  WYNIKI: BTC 4h ACCEPT (kruchy — edge ginie między 0,2% a 0,3% prowizji),
+  SHORT REJECT (gorszy w każdym layoucie, DD −59…−67%), ETH 1d REJECT (nie bije
+  B&H). Szczegóły: docs/SCENARIO_LAB_2026-08-06.md.
+  BNB: **wyłączone „Use BNB to pay fees" na koncie LIVE** (było ON, 25% rabatu;
+  teraz Off — zweryfikowane w UI). ⚠️ ODKRYCIE: konto DEMO tego nie dziedziczy
+  i nie da się tam tego zmienić — brak strony preferencji (404), brak
+  `/sapi/v1/bnbBurn` (404), brak checkboxa przy formularzu. Sprawdzone
+  empirycznie: heartbeat po zmianie NADAL nalicza w BNB. Skutek: `fees_external`
+  będzie się pokazywać w logach shadow-bota i to jest OK — jego zadaniem jest
+  dowodzić ścieżki wykonawczej, nie mierzyć kosztów. Przy okazji ścieżka
+  `fees_external` jest dzięki temu ćwiczona codziennie na prodzie.
+  NASTĘPNY KROK: nowe okno papierowe dla BTC 4h.
