@@ -107,6 +107,21 @@
   USDT (konto trzyma 2 BNB). Księga modeluje fee jako ułamek kapitału w USDT —
   to dwie różne waluty. Księga ilościowa musi to rozstrzygnąć (wyłączyć BNB albo
   księgować po kursie). Pola `fee_asset` już to raportują.
+- **✅ SHADOW-BOT WDROŻONY 2026-08-06** (PR #26 + fix warstwy pandas):
+  `tradepulse-shadow-bot`, cron `(25 0 * * ? *)` ENABLED, własna rola/DLQ/alarmy,
+  klucze demo w SSM SecureString (Terraform ich NIE zarządza). Codzienny pełny
+  round-trip na demo → ścieżka wykonawcza nie zgnije do M6. Zweryfikowane na
+  żywo: zlecenia 54501262491/54501262493, koniec flat, drugie wywołanie tego
+  samego dnia = `already_done`, zapis pod kluczem `SHADOW_BTCUSDT_1d`.
+  🔒 **Lambdy M5 NIETKNIĘTE — potwierdzone po apply:** obie nadal
+  `r8Luxno…tNq0=`, LastModified 2026-07-22. Zasługa bezpiecznika
+  `lifecycle { ignore_changes = [filename, source_code_hash] }` dodanego do obu
+  Lambd M5, bo `terraform plan` na czystym repo pokazywał „2 to change" —
+  repo było jedno `apply` od redeployu bota w środku okna.
+  ⚠️ PUŁAPKA (kosztowała jeden nieudany deploy): każdy import z
+  `app.backend.paper_trading` odpala `__init__`, który ciągnie `bot` → pandas.
+  Rozumowanie „heartbeat nie potrzebuje pandas" jest BŁĘDNE — decyduje łańcuch
+  importów, nie graf wywołań. Shadow musi mieć warstwę pandas, tak jak `status`.
 - **NASTĘPNA AKCJA:** **krok 4 — księga ilościowa** (`qty` w BTC zamiast ułamka
   kapitału, + sprawa prowizji w BNB). To jest to, czego naprawdę potrzebuje M6.
   UWAGA: dotyka `PaperPortfolio` → wymaga ponownego zamrożenia złotego wzorca
@@ -1080,3 +1095,30 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   ⚠️ Klucz LIVE użytkownika był odsłonięty w zrzucie ekranu → do rotacji.
   NASTĘPNY KROK: krok 4 — księga ilościowa (uwaga: dotyka `PaperPortfolio`,
   więc złoty wzorzec zamrozić PRZED refaktorem + bramka A po).
+- 2026-08-06 (wieczór) — **Shadow-bot WDROŻONY + rozbrojona mina w Terraformie.**
+  PR #26. Codzienny heartbeat na demo (`cron(25 0 * * ? *)`), żeby ścieżka
+  wykonawcza nie zgniła między dziś a M6 — strategia robi 1,69 round-tripa/rok,
+  więc sama jej nie przećwiczy. Świadomie NIE podąża za sygnałem (stałby flat
+  miesiącami); każdy przebieg jest samowystarczalny i kończy flat.
+  🔴 NAJWAŻNIEJSZE ZNALEZISKO, niezwiązane z zadaniem: `terraform plan` na
+  CZYSTYM repo dawał „0 to add, 2 to change" — obie Lambdy M5 czekały na
+  redeploy, bo 2026-08-05 przebudowano zipa przy PR #24. Każdy `apply`
+  przedeployowałby bota w środku pomiaru kodem bez weryfikacji deployu.
+  Bezpiecznik: `ignore_changes = [filename, source_code_hash]` na obu.
+  Po apply POTWIERDZONE: obie nadal `r8Luxno…tNq0=`, LastModified 2026-07-22.
+  Shadow ma też własnego zipa (`build_lambda_package.sh --shadow`), bo dzielenie
+  `var.lambda_zip_path` znaczyłoby, że sam build zmienia hash Lambdy M5.
+  ⚠️ PUŁAPKA: pierwszy deploy padł na `Runtime.ImportModuleError: No module
+  named 'pandas'` — dałem 256 MB bez warstwy pandas, bo „heartbeat nie dotyka
+  strategii". Błąd w rozumowaniu: import `app.backend.paper_trading.cokolwiek`
+  odpala `__init__`, który importuje `bot` → pandas. Decyduje łańcuch importów,
+  nie graf wywołań. Komentarz przy Lambdzie `status` mówił to wprost.
+  Alarm `shadow-bot-errors` poprawnie wskoczył w ALARM na tym błędzie i sam
+  wróci do OK po dobie — czyli monitoring działa (prawdziwy alarm, nie fałszywka).
+  SPROSTOWANIE do wcześniejszego wpisu: „demo ma własny feed" było BŁĘDNE —
+  ticker demo == prod co do grosza, opens świec identyczne, closes ≤0.01 USDT.
+  Różni się KSIĘGA ZLECEŃ (te same ceny, inne wolumeny). Demo = żywe ceny +
+  osobny silnik dopasowań.
+  KOSZT: $0 dodatkowo (alarmy w darmowym progu 10, Lambda 1×/dzień, SSM
+  standard, SQS free tier). Suite 273 zielone.
+  NASTĘPNY KROK bez zmian: krok 4 — księga ilościowa.
