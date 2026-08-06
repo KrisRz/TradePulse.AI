@@ -9,6 +9,7 @@
 # Usage:
 #   scripts/build_lambda_package.sh            -> dist/paper_bot_lambda.zip
 #   scripts/build_lambda_package.sh --shadow   -> dist/shadow_bot_lambda.zip
+#   scripts/build_lambda_package.sh --venue-4h -> dist/venue_4h_lambda.zip
 #
 # Why the --shadow variant exists, when the CONTENTS are identical:
 # `aws_lambda_function.paper_bot` keys its deployment off
@@ -22,10 +23,16 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/dist/lambda_build"
 ZIP="$ROOT/dist/paper_bot_lambda.zip"
 
-if [[ "${1:-}" == "--shadow" ]]; then
-  BUILD="$ROOT/dist/shadow_build"
-  ZIP="$ROOT/dist/shadow_bot_lambda.zip"
-fi
+case "${1:-}" in
+  --shadow)
+    BUILD="$ROOT/dist/shadow_build"
+    ZIP="$ROOT/dist/shadow_bot_lambda.zip"
+    ;;
+  --venue-4h)
+    BUILD="$ROOT/dist/venue_4h_build"
+    ZIP="$ROOT/dist/venue_4h_lambda.zip"
+    ;;
+esac
 
 rm -rf "$BUILD" "$ZIP"
 mkdir -p "$BUILD"

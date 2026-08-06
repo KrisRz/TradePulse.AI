@@ -598,6 +598,24 @@ class BinanceDemoExecutor:
         """Base asset this executor is currently holding from its own buys."""
         return self._position_qty
 
+    def set_position(self, qty) -> None:
+        """Tell the executor what it is already holding.
+
+        The position is tracked in memory, which is fine for a process that
+        opens and closes in one breath. A strategy bot is not that: it runs as a
+        Lambda that lives for seconds, and may hold a position for weeks. Without
+        restoring this, the exit leg would fail with "nothing to sell" — the
+        position would be stranded on the venue with no code able to close it.
+
+        The book is the source of truth: ``PaperPortfolio.qty`` is persisted, so
+        the caller restores from there rather than from the account balance,
+        which cannot distinguish our position from coins the account already had.
+        """
+        value = Decimal(str(abs(float(qty))))
+        if value < 0:
+            raise ValueError(f"position must not be negative, got {qty}")
+        self._position_qty = value
+
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return (f"BinanceDemoExecutor(symbol={self.symbol}, base_url={self.base_url}, "
                 f"position={self._position_qty})")

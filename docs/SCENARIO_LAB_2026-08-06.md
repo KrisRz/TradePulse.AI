@@ -68,9 +68,36 @@ Czyli **przewidywany haczyk się potwierdził**: 7× częstotliwość to 7× fee
 a margines to jeden krok prowizji. Rabat BNB był wyłączony 2026-08-06, więc
 realna prowizja to 0,1% — mieścimy się, ale bez zapasu.
 
-**Dlaczego to i tak jest duża sprawa:** 4h robi ~130–190 trejdów na tym samym
-oknie, na którym 1d robi 13–31. To jest **7,2× szybszy dowód** — werdykt o
-rentowności w miesiącach zamiast w 12–18 miesiącach.
+### 🔴 SPROSTOWANIE (jeszcze tego samego dnia): „7,2× szybszy dowód" jest NIEPRAWDĄ
+
+Pierwotny zapis brzmiał: „4h robi ~130–190 trejdów tam, gdzie 1d robi 13–31, więc
+werdykt o rentowności przyjdzie w miesiącach zamiast w 12–18 miesiącach". **To
+było błędne** i zostało obalone symulacją (20 000 historii, prawdziwy Sharpe 1,0):
+
+| okno | SE(1d) | SE(4h) | stosunek |
+|---|---|---|---|
+| 1,8 mies. | 2,610 | 2,551 | **1,02×** |
+| 6 mies. | 1,418 | 1,404 | 1,01× |
+| 12 mies. | 0,999 | 1,002 | 1,00× |
+| 8 lat | 0,354 | 0,353 | 1,01× |
+
+Gdyby częstsze próbkowanie kupowało precyzję, stosunek rósłby do √6 = 2,45×.
+Jest **1,00×**. To wynika wprost z algebry: przy zwrotach na bar o Sharpie `s`
+i `P` barach w roku, zannualizowany Sharpe to `s·√P`, a jego błąd standardowy
+`√P · √(1/(P·T)) = √(1/T)` — **zostaje samo `T`, czyli czas kalendarzowy.**
+Częstotliwość próbkowania skraca się w ułamku.
+
+Co 4h **naprawdę** daje szybciej: statystyki **na trejd** — win rate, średnia
+wygrana/przegrana, profit factor, fee drag, jakość egzekucji. Tych jest 130–190
+zamiast 13–31 i one zbiegają się proporcjonalnie do liczby trejdów.
+
+Czego **nie** daje: szybszego werdyktu o zannualizowanym wyniku risk-adjusted,
+czyli dokładnie o to pyta bramka B. Ten potrzebuje lat kalendarzowych, niezależnie
+od interwału.
+
+**Konsekwencja dla decyzji:** 4h nie jest skrótem do M6. Zostaje sensowny jako
+kanał równoległy (mierzy koszty i egzekucję dużo lepiej, kosztuje $0), ale
+uzasadnienie „szybciej się dowiemy, czy zarabia" upada.
 
 ### ETH 1d: przyzwoity, ale nie lepszy od trzymania
 
