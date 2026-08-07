@@ -12,7 +12,18 @@
 
 ## RANKING KANDYDATÓW (dowody × wysiłek × koszty)
 
-### 1. Volatility targeting — najmocniejsze dowody, próbować pierwsze
+### 1. Volatility targeting — najmocniejsze dowody W LITERATURZE, ale…
+
+> 🔴 **KOREKTA (2026-08-07, kilka godzin po spisaniu):** vol targeting był już
+> ZMIERZONY na naszych danych w M4/F2 (2026-07-16,
+> `scripts/research/vol_targeting_study.py`, docs/M4_EDGE_VALIDATION.md §F2)
+> i **ODRZUCONY**: tnie drawdown (−64%→−31..−46%) — to potwierdza literaturę —
+> ale **pogarsza Sharpe'a w reżimie 2022+ przy każdym poziomie targetu**
+> (0,72→0,56–0,70) i podwaja obrót. Decyzja "NO sizing layer" stoi; web-research
+> jej nie unieważnia (zasada: nie relitygujemy zmierzonych decyzji). Jedyna
+> uczciwa droga powrotu: nowy wariant różniący się od zmierzonego (np. pasmo
+> bez-handlu, którego studium M4 nie miało) ORAZ przejście harnessu M4.
+> Ranking adopcji przesuwa się: ensemble EMA awansuje na #1.
 
 - Kanon: Moreira & Muir, *Volatility-Managed Portfolios*
   (https://www.nber.org/system/files/working_papers/w22208/w22208.pdf) —
