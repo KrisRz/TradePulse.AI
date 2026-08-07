@@ -47,6 +47,8 @@ Usage:
     python -m app.backend.paper_trading.gate --source dynamodb
     # Gate A — execution fidelity (queries Binance + CloudWatch, read-only)
     python -m app.backend.paper_trading.gate --source dynamodb --fidelity
+    # Gate C — cost fidelity of the 4h venue channel (durable fill/reject log)
+    python -m app.backend.paper_trading.gate --source dynamodb --cost-fidelity
     # either gate against a local paper_state file, no AWS
     python -m app.backend.paper_trading.gate --source local --fidelity --infra none
 """
@@ -602,6 +604,267 @@ FIDELITY_CHECKS = [
 ]
 
 
+# --------------------------------------------------------------------------- #
+# GATE C — cost fidelity (pre-registered 2026-08-06,
+# docs/VENUE_4H_CHANNEL_2026-08-06.md §2)
+#
+# The 4h venue channel exists to measure what execution actually costs when a
+# strategy (not a heartbeat) drives real orders: Gate A proves the machinery is
+# honest, Gate B whether the strategy earns, Gate C whether the COST MODEL the
+# backtest assumes matches the venue. A FAIL on C1/C2 means the backtest is too
+# optimistic and Gate B's thresholds must be recomputed at the higher cost
+# before real money is allowed.
+#
+# Thresholds are pre-registered; do not edit after seeing results. The gate is
+# decidable at >= GATE_C_MIN_FILLS real fills (~10 months at ~12 round trips a
+# year); before that the evaluator reports but never issues PASS/FAIL.
+# --------------------------------------------------------------------------- #
+GATE_C_MIN_FILLS = 20
+GATE_C_MAX_MEDIAN_EXEC_SLIPPAGE = 0.0002   # C1 — the book's model assumption
+GATE_C_MAX_P90_EXEC_SLIPPAGE = 0.0005      # C2
+GATE_C_MAX_REJECTION_RATE = 0.02           # C3 — share of all submissions
+
+
+@dataclass
+class CostFidelityInputs:
+    """Everything Gate C needs, straight from the durable fill/reject log."""
+    fills: list[dict]              # fill# records (Reconciliation + context)
+    rejections: list[dict]         # reject# records
+    decisions: list[dict]          # decision log, for fill-log completeness
+
+
+def _exec_slippages(fills: list[dict]) -> tuple[list[float], list[str]]:
+    """Signed execution slippage per fill; fills without a mark are unusable."""
+    values, unverifiable = [], []
+    for f in fills:
+        s = f.get("execution_slippage")
+        if s is None:
+            unverifiable.append(f"{f.get('bar')}/{f.get('order_id')}: "
+                                f"no mark_at_order — slippage not separable from drift")
+        else:
+            values.append(float(s))
+    return values, unverifiable
+
+
+def check_fill_log_completeness(inputs: CostFidelityInputs) -> dict:
+    """C0. Every trade in the decision log left a fill record.
+
+    Not one of the six pre-registered criteria, but the precondition for all of
+    them: a fill whose evidence was lost would silently shrink the sample the
+    medians are computed on. Extra fills without a decision record are fine —
+    a kill-switch flatten trades outside the decision path by design.
+    """
+    if not inputs.decisions:
+        return _result("SKIPPED", "no decision log supplied")
+    fill_bars = {str(f.get("bar")) for f in inputs.fills}
+    missing = [str(d["bar"]) for d in _sorted_decisions(inputs.decisions)
+               if d.get("action") and str(d["bar"]) not in fill_bars]
+    traded = sum(1 for d in inputs.decisions if d.get("action"))
+    if missing:
+        return _result("FAIL",
+                       f"{len(missing)} traded bar(s) have no fill record",
+                       traded_bars=traded, missing=_truncate(missing))
+    return _result("PASS",
+                   f"all {traded} traded bar(s) have fill evidence "
+                   f"({len(inputs.fills)} fill records total)",
+                   traded_bars=traded, fills=len(inputs.fills))
+
+
+def check_median_exec_slippage(inputs: CostFidelityInputs) -> dict:
+    """C1. Median execution slippage within the model's assumption."""
+    values, unverifiable = _exec_slippages(inputs.fills)
+    if not values:
+        return _result("SKIPPED", "no fill carries a separable execution slippage",
+                       unverifiable=_truncate(unverifiable))
+    med = float(pd.Series(values).median())
+    ok = med <= GATE_C_MAX_MEDIAN_EXEC_SLIPPAGE
+    return _result(
+        "PASS" if ok else "FAIL",
+        f"median execution slippage {med * 100:.4f}% over {len(values)} fill(s) "
+        f"(threshold {GATE_C_MAX_MEDIAN_EXEC_SLIPPAGE * 100:.2f}%)",
+        median=med, n=len(values), unverifiable=_truncate(unverifiable))
+
+
+def check_p90_exec_slippage(inputs: CostFidelityInputs) -> dict:
+    """C2. Tail (p90) execution slippage bounded."""
+    values, unverifiable = _exec_slippages(inputs.fills)
+    if not values:
+        return _result("SKIPPED", "no fill carries a separable execution slippage",
+                       unverifiable=_truncate(unverifiable))
+    p90 = float(pd.Series(values).quantile(0.9))
+    ok = p90 <= GATE_C_MAX_P90_EXEC_SLIPPAGE
+    return _result(
+        "PASS" if ok else "FAIL",
+        f"p90 execution slippage {p90 * 100:.4f}% over {len(values)} fill(s) "
+        f"(threshold {GATE_C_MAX_P90_EXEC_SLIPPAGE * 100:.2f}%)",
+        p90=p90, n=len(values), unverifiable=_truncate(unverifiable))
+
+
+def check_rejection_rate(inputs: CostFidelityInputs) -> dict:
+    """C3. Venue rejections as a share of all order submissions."""
+    attempts = len(inputs.fills) + len(inputs.rejections)
+    if attempts == 0:
+        return _result("SKIPPED", "no order was ever submitted")
+    rate = len(inputs.rejections) / attempts
+    ok = rate <= GATE_C_MAX_REJECTION_RATE
+    detail = (f"{len(inputs.rejections)} rejection(s) in {attempts} submission(s) "
+              f"= {rate * 100:.2f}% (threshold {GATE_C_MAX_REJECTION_RATE * 100:.0f}%)")
+    reasons = _truncate([f"{r.get('time')}: [{r.get('code')}] {r.get('message')}"
+                         for r in inputs.rejections])
+    return _result("PASS" if ok else "FAIL", detail,
+                   rate=rate, attempts=attempts, rejections=reasons)
+
+
+def check_partial_fills(inputs: CostFidelityInputs) -> dict:
+    """C4. No partial fill may leave a position unclosed."""
+    partials, unverifiable = [], []
+    for f in inputs.fills:
+        label = f"{f.get('bar')}/{f.get('order_id')}"
+        status = str(f.get("status", ""))
+        if status and status != "FILLED":
+            partials.append(f"{label}: venue status {status}")
+            continue
+        requested, executed = f.get("requested_qty"), f.get("qty")
+        step = f.get("step_size")
+        if requested is None or step is None:
+            unverifiable.append(f"{label}: requested quantity not recorded")
+        elif float(requested) - float(executed or 0.0) > float(step):
+            partials.append(f"{label}: requested {requested}, executed {executed}")
+    if partials:
+        return _result("FAIL", f"{len(partials)} fill(s) executed short of their order",
+                       partials=_truncate(partials), unverifiable=_truncate(unverifiable))
+    if not inputs.fills:
+        return _result("SKIPPED", "no fills to check")
+    detail = f"{len(inputs.fills)} fill(s) fully executed"
+    if unverifiable:
+        detail += f"; {len(unverifiable)} without a recorded requested quantity"
+    return _result("PASS", detail, checked=len(inputs.fills),
+                   unverifiable=_truncate(unverifiable))
+
+
+def check_book_venue_divergence(inputs: CostFidelityInputs) -> dict:
+    """C5. The book and the venue balance move together, within one stepSize.
+
+    Two independent tests per fill: (a) the venue's free-balance change across
+    the invocation equals the executed quantity net of any base-asset
+    commission; (b) the impossible state — the book holding more than the
+    account owns — never occurs (the exit leg could not fill).
+    """
+    divergences, unverifiable = [], []
+    checked = 0
+    for f in inputs.fills:
+        label = f"{f.get('bar')}/{f.get('order_id')}"
+        step = f.get("step_size")
+        before, after = f.get("venue_free_base_before"), f.get("venue_free_base_after")
+        if step is None or before is None or after is None:
+            unverifiable.append(f"{label}: balance snapshot not recorded")
+            continue
+        if not f.get("venue_delta_attributable", True):
+            unverifiable.append(f"{label}: multiple fills in one run — "
+                                f"balance delta not attributable")
+            continue
+        step = float(step)
+        side, qty = int(f.get("side", 0)), float(f.get("qty", 0.0))
+        base_fee = (float(f.get("fee_paid", 0.0))
+                    if str(f.get("fee_asset", "")).upper() == str(f.get("base_asset", "")).upper()
+                    else 0.0)
+        expected_delta = side * qty - (base_fee if side == 1 else 0.0)
+        actual_delta = float(after) - float(before)
+        checked += 1
+        if abs(actual_delta - expected_delta) > step:
+            divergences.append(
+                f"{label}: venue balance moved {actual_delta:+.8f}, "
+                f"fill implies {expected_delta:+.8f}")
+        book_after = f.get("book_qty_after")
+        if book_after is not None and float(book_after) > float(after) + step:
+            divergences.append(
+                f"{label}: book holds {book_after} but venue only has {after} free")
+    if divergences:
+        return _result("FAIL", f"{len(divergences)} book<->venue divergence(s) > 1 stepSize",
+                       divergences=_truncate(divergences),
+                       unverifiable=_truncate(unverifiable))
+    if checked == 0:
+        return _result("SKIPPED", "no fill carried a verifiable balance snapshot",
+                       unverifiable=_truncate(unverifiable))
+    detail = f"{checked} fill(s) reconcile with the venue balance within 1 stepSize"
+    if unverifiable:
+        detail += f"; {len(unverifiable)} unverifiable"
+    return _result("PASS", detail, checked=checked,
+                   unverifiable=_truncate(unverifiable))
+
+
+def check_decision_drift(inputs: CostFidelityInputs) -> dict:
+    """C6. Median decision->order drift — REPORTED, no threshold (pre-registered).
+
+    Drift is market movement during the scheduler's delay, not execution
+    quality, and the backtest does not model it at all. It is surfaced so a
+    systematically adverse value becomes its own discovery; it never gates.
+    """
+    values = [float(f["drift"]) for f in inputs.fills if f.get("drift") is not None]
+    if not values:
+        return _result("SKIPPED", "no fill carries a drift measurement")
+    med = float(pd.Series(values).median())
+    return _result(
+        "PASS",
+        f"median decision->order drift {med * 100:.4f}% over {len(values)} fill(s) "
+        f"— reported only, no threshold (pre-registered)",
+        median=med, n=len(values), gating=False)
+
+
+COST_FIDELITY_CHECKS = [
+    ("fill_log_completeness", check_fill_log_completeness),
+    ("c1_median_exec_slippage", check_median_exec_slippage),
+    ("c2_p90_exec_slippage", check_p90_exec_slippage),
+    ("c3_rejection_rate", check_rejection_rate),
+    ("c4_partial_fills", check_partial_fills),
+    ("c5_book_venue_divergence", check_book_venue_divergence),
+    ("c6_decision_drift", check_decision_drift),
+]
+
+
+def evaluate_cost_fidelity(inputs: CostFidelityInputs, as_of: date) -> dict:
+    """Gate C verdict. Pure — no I/O, fully testable.
+
+    Below GATE_C_MIN_FILLS the verdict is COLLECTING — the gate is not
+    decidable and no PASS/FAIL is issued (pre-registered), though criteria
+    currently failing are named so a broken pipe is visible at fill 3, not
+    fill 20. At or above the minimum: any FAIL -> FAIL, any missing evidence
+    -> INCOMPLETE, otherwise PASS.
+    """
+    criteria = {name: check(inputs) for name, check in COST_FIDELITY_CHECKS}
+    n_fills = len(inputs.fills)
+    failed = [n for n, c in criteria.items() if c["status"] == "FAIL"]
+    skipped = [n for n, c in criteria.items() if c["status"] == "SKIPPED"]
+
+    if n_fills < GATE_C_MIN_FILLS:
+        verdict = "COLLECTING"
+        reason = (f"{n_fills}/{GATE_C_MIN_FILLS} fills — gate not decidable yet"
+                  + (f"; criteria currently failing: {', '.join(failed)}" if failed else ""))
+    elif failed:
+        verdict = "FAIL"
+        reason = f"cost model does not match the venue: {', '.join(failed)}"
+    elif skipped:
+        verdict = "INCOMPLETE"
+        reason = f"evidence missing for: {', '.join(skipped)}"
+    else:
+        verdict = "PASS"
+        reason = "venue execution costs match the model the backtest assumes"
+
+    return {
+        "gate": "C — cost fidelity (4h venue channel)",
+        "as_of": str(as_of),
+        "fills": n_fills,
+        "rejections": len(inputs.rejections),
+        "min_fills": GATE_C_MIN_FILLS,
+        "criteria": criteria,
+        "verdict": verdict,
+        "verdict_reason": reason,
+        "note": ("A FAIL on C1/C2 means the backtest's cost model is too "
+                 "optimistic — Gate B thresholds must be recomputed at the "
+                 "measured cost before real money."),
+    }
+
+
 def evaluate_fidelity(inputs: FidelityInputs, as_of: date) -> dict:
     """Gate A verdict. Pure — no I/O, fully testable.
 
@@ -714,6 +977,55 @@ def load_records_local(state_path: str) -> tuple[list[dict], dict]:
     return decisions, state
 
 
+def load_cost_records_dynamodb(table_name: str,
+                               partition_key: str) -> tuple[list[dict], list[dict]]:
+    """Read-only pull of the durable fill/reject log from DynamoDB."""
+    import boto3
+    from boto3.dynamodb.conditions import Key
+
+    from .state_store import DynamoDBStateStore
+
+    table = boto3.resource("dynamodb").Table(table_name)
+
+    def _query(prefix: str) -> list[dict]:
+        items: list[dict] = []
+        kwargs: dict[str, Any] = {"KeyConditionExpression":
+                                  Key("pk").eq(partition_key)
+                                  & Key("sk").begins_with(prefix)}
+        while True:
+            resp = table.query(**kwargs)
+            items.extend(resp.get("Items", []))
+            if "LastEvaluatedKey" not in resp:
+                break
+            kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+        cleaned = []
+        for item in items:
+            rec = DynamoDBStateStore._from_ddb(item)
+            rec.pop("pk", None), rec.pop("sk", None)
+            cleaned.append(rec)
+        return cleaned
+
+    return _query("fill#"), _query("reject#")
+
+
+def load_cost_records_local(state_path: str) -> tuple[list[dict], list[dict]]:
+    from .state_store import LocalJsonStateStore
+
+    store = LocalJsonStateStore(state_path)
+
+    def _read(path) -> list[dict]:
+        records = []
+        if path.exists():
+            for line in path.read_text().splitlines():
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        return records
+
+    return _read(store.fills_path), _read(store.rejections_path)
+
+
 def load_dynamodb(table_name: str, partition_key: str) -> GateInputs:
     return _inputs_from_records(*load_records_dynamodb(table_name, partition_key))
 
@@ -810,13 +1122,30 @@ def _print_fidelity_report(report: dict) -> None:
     print(f"NOTE: {report['note']}")
 
 
+def _print_cost_fidelity_report(report: dict) -> None:
+    print(f"=== GATE C — COST FIDELITY (4h venue channel) — as of {report['as_of']} ===")
+    print(f"fills: {report['fills']}/{report['min_fills']} needed  "
+          f"rejections: {report['rejections']}")
+    mark = {"PASS": "PASS", "FAIL": "FAIL", "SKIPPED": "SKIP"}
+    for name, res in report["criteria"].items():
+        print(f"  [{mark[res['status']]}] {name}: {res['detail']}")
+        for key in ("missing", "partials", "divergences", "rejections", "unverifiable"):
+            for item in res.get(key) or []:
+                print(f"         - {item}")
+    print(f"VERDICT: {report['verdict']} — {report['verdict_reason']}")
+    print(f"NOTE: {report['note']}")
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Evaluate the M5 paper window gates.")
     p.add_argument("--source", choices=["dynamodb", "local"], default="dynamodb")
     p.add_argument("--table", default=os.environ.get("PAPER_STATE_TABLE",
                                                      "tradepulse_paper_bot"))
-    p.add_argument("--pk", default="BTCUSDT_1d")
-    p.add_argument("--state", default="paper_state/BTCUSDT_1d.json")
+    p.add_argument("--pk", default=None,
+                   help="partition key (default BTCUSDT_1d; BTCUSDT_4h "
+                        "with --cost-fidelity)")
+    p.add_argument("--state", default=None,
+                   help="local state path (default paper_state/<pk>.json)")
     p.add_argument("--tracking-error", type=float, default=None,
                    help="live-vs-paper P&L deviation fraction (M5.3), when known")
     p.add_argument("--as-of", default=None, help="ISO date (default: today UTC)")
@@ -836,10 +1165,38 @@ def main(argv: list[str] | None = None) -> None:
     g.add_argument("--function", default="tradepulse-paper-bot")
     g.add_argument("--dlq", default="tradepulse-paper-bot-scheduler-dlq")
     g.add_argument("--region", default=os.environ.get("AWS_REGION", "eu-west-2"))
+
+    c = p.add_argument_group("Gate C — cost fidelity (4h venue channel)")
+    c.add_argument("--cost-fidelity", action="store_true",
+                   help="run Gate C over the durable fill/reject log")
     args = p.parse_args(argv)
+
+    if args.pk is None:
+        args.pk = "BTCUSDT_4h" if args.cost_fidelity else "BTCUSDT_1d"
+    if args.state is None:
+        args.state = f"paper_state/{args.pk}.json"
 
     as_of = (date.fromisoformat(args.as_of) if args.as_of
              else pd.Timestamp.now(tz="UTC").date())
+
+    if args.cost_fidelity:
+        fills, rejections = (load_cost_records_dynamodb(args.table, args.pk)
+                             if args.source == "dynamodb"
+                             else load_cost_records_local(args.state))
+        try:
+            decisions, _ = (load_records_dynamodb(args.table, args.pk)
+                            if args.source == "dynamodb"
+                            else load_records_local(args.state))
+        except RuntimeError:
+            decisions = []   # no state item yet — completeness check is SKIPPED
+        report = evaluate_cost_fidelity(
+            CostFidelityInputs(fills=fills, rejections=rejections,
+                               decisions=decisions), as_of)
+        if args.json:
+            print(json.dumps(report, indent=2, default=str))
+        else:
+            _print_cost_fidelity_report(report)
+        return
 
     if args.fidelity:
         report = run_fidelity(args, as_of)

@@ -89,6 +89,52 @@ def attach_venue(bot, executor: BinanceDemoExecutor) -> dict:
     return record
 
 
+def persist_execution_evidence(bot, executor: BinanceDemoExecutor,
+                               attach_record: dict) -> list[dict]:
+    """Write this invocation's fills and rejections to the durable store.
+
+    Gate C (docs/VENUE_4H_CHANNEL_2026-08-06.md §2) is decidable after >=20
+    fills — about ten months — while the Lambda's log group keeps 30 days.
+    Evidence that only exists in CloudWatch would be gone long before the gate
+    can be evaluated, so every fill and every venue rejection becomes a
+    DynamoDB item next to the decision log.
+    """
+    recorded_at = datetime.now(timezone.utc).isoformat()
+    persisted: list[dict] = []
+    common = {
+        "symbol": executor.symbol,
+        "timeframe": os.environ.get("TRADING_TIMEFRAME", "4h"),
+        "recorded_at": recorded_at,
+    }
+
+    fills = executor.reconciliations()
+    if fills:
+        rules = executor.rules()
+        venue_free_after = float(executor.free_balance(rules.base_asset))
+        for rec in fills:
+            record = {
+                **rec.as_dict(),
+                **common,
+                "bar": rec.time,
+                "book_qty_after": float(bot.portfolio.qty),
+                "venue_free_base_before": attach_record.get("venue_free_base"),
+                "venue_free_base_after": venue_free_after,
+                "base_asset": rules.base_asset,
+                "step_size": float(rules.step_size),
+                # The before/after balance pair brackets the whole invocation,
+                # so it can only be pinned to a single fill when there was
+                # exactly one. More than one per run cannot happen for a
+                # long-only single leg, but the evaluator must not guess.
+                "venue_delta_attributable": len(fills) == 1,
+            }
+            bot.store.append_fill(record)
+            persisted.append(record)
+
+    for rej in executor.rejections():
+        bot.store.append_rejection({**rej, **common})
+    return persisted
+
+
 def _execution_drag(executor: BinanceDemoExecutor,
                     switch: KillSwitchState) -> float:
     """Cumulative quote-currency cost of fills landing away from the model.
@@ -153,7 +199,10 @@ def handler(event, context):
             # Flatten through the ordinary path, then stop. Leaving a position
             # open after halting would mean the switch protects the book but not
             # the money.
-            bot.portfolio.reconcile(0, mark, datetime.now(timezone.utc).isoformat())
+            try:
+                bot.portfolio.reconcile(0, mark, datetime.now(timezone.utc).isoformat())
+            finally:
+                persist_execution_evidence(bot, executor, reconciliation)
             result["flattened_at"] = mark
         bot.extra[KILLSWITCH_KEY] = switch.as_dict()
         bot._save()
@@ -161,7 +210,12 @@ def handler(event, context):
         result["venue"] = reconciliation
         return result
 
-    result = bot.step()
+    try:
+        result = bot.step()
+    finally:
+        # Evidence outlives the run: a fill that happened before a crash moved
+        # real coins, and a venue rejection is exactly what C3 counts.
+        persist_execution_evidence(bot, executor, reconciliation)
     observe(switch, bot.portfolio.equity(mark), execution_drag=drag)
     bot.extra[KILLSWITCH_KEY] = switch.as_dict()
     bot._save()

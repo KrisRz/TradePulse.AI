@@ -8,11 +8,19 @@ DynamoDB layout (single on-demand table):
     pk = "<symbol>_<timeframe>"            e.g. "BTCUSDT_1d"
     sk = "state"                           latest bot state (one item)
     sk = "decision#<bar>"                  one item per processed bar
+    sk = "fill#<bar>#<order_id>"           one item per real venue fill
+    sk = "reject#<recorded_at>"            one item per venue-rejected order
 
 The decision log is the raw material for the M5 gate metrics (Sharpe, max
 drawdown, profit factor, net P&L, fee drag, trade count) and for the
 live-vs-paper tracking-error check — every processed bar appends exactly
 one record with the decision, price, position, equity and cost model.
+
+The fill/reject log is the raw material for Gate C (cost fidelity,
+docs/VENUE_4H_CHANNEL_2026-08-06.md §2). It MUST be durable: the gate is
+decidable after >=20 fills (~10 months at ~12 round trips/year) while the
+Lambda's CloudWatch log group keeps 30 days — evidence living only in logs
+would evaporate long before the gate can be evaluated.
 """
 
 from __future__ import annotations
@@ -44,6 +52,24 @@ class LocalJsonStateStore:
     def append_decision(self, record: Dict[str, Any]) -> None:
         self.decisions_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.decisions_path, "a") as f:
+            f.write(json.dumps(record, default=str) + "\n")
+
+    @property
+    def fills_path(self) -> Path:
+        return self.state_path.with_suffix(".fills.jsonl")
+
+    @property
+    def rejections_path(self) -> Path:
+        return self.state_path.with_suffix(".rejections.jsonl")
+
+    def append_fill(self, record: Dict[str, Any]) -> None:
+        self.fills_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.fills_path, "a") as f:
+            f.write(json.dumps(record, default=str) + "\n")
+
+    def append_rejection(self, record: Dict[str, Any]) -> None:
+        self.rejections_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.rejections_path, "a") as f:
             f.write(json.dumps(record, default=str) + "\n")
 
     def has_decision(self, bar: str) -> bool:
@@ -109,6 +135,22 @@ class DynamoDBStateStore:
     def has_decision(self, bar: str) -> bool:
         resp = self.table.get_item(Key={"pk": self.pk, "sk": f"decision#{bar}"})
         return "Item" in resp
+
+    def append_fill(self, record: Dict[str, Any]) -> None:
+        # order_id in the key makes the put idempotent per venue order: a
+        # retried Lambda re-persisting the same fill overwrites, never dupes.
+        self.table.put_item(Item={
+            "pk": self.pk,
+            "sk": f"fill#{record.get('bar', 'unknown')}#{record.get('order_id', '?')}",
+            **self._to_ddb(record),
+        })
+
+    def append_rejection(self, record: Dict[str, Any]) -> None:
+        self.table.put_item(Item={
+            "pk": self.pk,
+            "sk": f"reject#{record.get('recorded_at', 'unknown')}",
+            **self._to_ddb(record),
+        })
 
 
 def make_state_store(state_path: str, partition_key: str):

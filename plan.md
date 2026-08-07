@@ -22,10 +22,12 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
-**Stan na 2026-08-06 (koniec dużej sesji — 10 PR-ów, #24–#33).**
+**Stan na 2026-08-07 (sesja: ewaluator bramki C + trwałość dowodów).**
 
 #### Gdzie jesteśmy w milestone'ach
-M0–M4 ✅ · **M5 BIEGNIE — dzień 21/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
+M0–M4 ✅ · **M5 BIEGNIE — dzień 22/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
+Kanał 4h: long od 2026-08-06 16:00 (entry 64 474,17, qty 0,0031), bramka C
+zbiera dowody TRWALE (DynamoDB, nie logi) — werdykt `COLLECTING 1/20 filli`.
 
 #### Co CHODZI na produkcji (4 Lambdy, wszystkie ENABLED, koszt ~$0,60/mies.)
 
@@ -75,16 +77,16 @@ zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
 - Kwarantanna enterprise w monolicie — jedyny zaległy porządek M5-safe, zero pilności.
 - Hosting frontendu na tradepulseai.co.uk — domena OK do 2026-09-28, auto-renew.
 
-### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-06)
+### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-07)
 
-**1. Bramka C — ewaluator wierności kosztowej.** Kanał 4h zbiera fille od dziś,
-ale **nic ich nie ocenia**. To dokładnie ten sam błąd, co bramka A przed lipcem:
-dane bez ewaluatora. Progi są już PRE-REJESTROWANE w
-`docs/VENUE_4H_CHANNEL_2026-08-06.md` §2 — trzeba je policzyć:
-C1 mediana poślizgu egzekucji ≤0,02%, C2 p90 ≤0,05%, C3 odrzucenia ≤2%,
-C4 zero niedomkniętych pozycji, C5 zero rozjazdów księga↔venue >1 `stepSize`,
-C6 mediana dryfu decyzja→zlecenie RAPORTOWANA BEZ PROGU.
-Wzorzec: `gate.py --fidelity`. Rozstrzygalna po ≥20 fillach ≈ 10 mies.
+**0. DEPLOY CZEKA NA USERA:** `cd infra-serverless && terraform apply tfplan`
+(1 zmiana: nowy kod venue-4h — persystencja filli + pomiar dryfu; stary
+deployed kod NIE mierzy `mark_at_order`, więc każdy fill do czasu apply będzie
+nieweryfikowalny dla C1/C2). Po apply: sprawdź shas M5 (`r8Luxno…tNq0=`).
+
+**1. ✅ ZROBIONE: Bramka C ma ewaluator** (`gate.py --cost-fidelity`) + trwałą
+persystencję filli/odrzuceń w DynamoDB + backfill pierwszego fillu.
+Werdykt: `COLLECTING 1/20`. Dalej sama zbiera — nic do roboty do ~20 filli.
 
 **2. Reszta F7: stop-loss + dzienny limit straty.** Kill-switch już jest
 (T1/T2/T3, fail-closed, ręczny re-arm). Brakuje kontroli na poziomie pozycji.
@@ -1206,3 +1208,21 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   (24,9 vs 25,1 / 9,9 vs 10,1 / 14,9 vs 15,1), halt przeżywa restart, re-arm
   resetuje szczyt, fail-closed na zepsutym stanie. Suite 334 zielonych.
   NASTĘPNY KROK: wgrać (0 add, 1 change), potem stop-loss + dzienny limit.
+
+- **2026-08-07** — 🧾 BRAMKA C MA EWALUATOR (feat/gate-c-evaluator). Odkrycie
+  sesji: fille kanału 4h żyły TYLKO w logach CloudWatch z retencją 30 dni,
+  a bramka C jest rozstrzygalna po ≥20 fillach ≈ 10 miesięcy — dowody
+  wyparowałyby ~9 miesięcy przed oceną. Zbudowane: (1) trwała persystencja
+  w DynamoDB (`fill#<bar>#<order_id>` + `reject#<recorded_at>`; zapis w
+  `finally`, przeżywa crash Lambdy; odrzucenia rejestrowane w executorze
+  tylko dla POST /api/v3/order + `requested_qty` w Reconciliation);
+  (2) ewaluator `gate.py --cost-fidelity` — C1–C6 z §2 doc-a bez zmiany
+  progów + C0 kompletność fill-logu; <20 filli = COLLECTING (bez PASS/FAIL,
+  ale łamane kryteria wymieniane z nazwy), potem FAIL > INCOMPLETE > PASS,
+  brakujący dowód = SKIPPED nigdy cichy PASS; (3) backfill pierwszego fillu
+  (54510109086) z CloudWatch — pola niemierzone przez stary handler jako
+  None (uczciwie nieweryfikowalny dla C1/C2), lokalny test 54508851440
+  celowo pominięty (spoza księgi). Werdykt na prodzie: COLLECTING 1/20.
+  Deployed venue-4h miał kod sprzed rozdzielenia dryfu → zbudowany nowy zip,
+  tfplan = dokładnie 1 zmiana (venue_4h hash), M5 nietknięte. Gate A po
+  zmianach CLI: PASS 6/6 (regresja sprawdzona). Testy: +34 nowe, suite zielony.
