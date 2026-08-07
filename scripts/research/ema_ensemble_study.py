@@ -87,6 +87,18 @@ def main() -> None:
         rows.append(metrics(net, f"EMA{col}", turn))
     print(pd.DataFrame(rows).to_string(index=False))
 
+    # Year-by-year robustness: an aggregate win hiding in one lucky year is
+    # not a win. Measured 2026-08-07: AVERAGE >= baseline in 6 of 9 years
+    # (loses 2020, 2022, 2025) — consistent-ish, modest, not a silver bullet.
+    print("\nYear-by-year Sharpe (baseline vs AVERAGE):")
+    base = simulate_weight(df, variants["EMA20/100 (baseline)"])[0]
+    avg = simulate_weight(df, variants["ensemble AVERAGE 5x"])[0]
+    for year in range(df.index[0].year + 1, df.index[-1].year + 1):
+        b, a = base.loc[str(year)], avg.loc[str(year)]
+        sb = b.mean() / b.std() * ANNUALIZE if b.std() > 0 else 0.0
+        sa = a.mean() / a.std() * ANNUALIZE if a.std() > 0 else 0.0
+        print(f"  {year}: {sb:+.2f} vs {sa:+.2f} {'<-- AVG' if sa >= sb else ''}")
+
 
 if __name__ == "__main__":
     main()
