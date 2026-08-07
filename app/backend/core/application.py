@@ -118,25 +118,40 @@ class TradePulseApplication:
             
             async def init_enterprise_engine():
                 try:
-                    logger.info("🚀 PHASE 1: Adding Enterprise Trading Engine...")
-                    
-                    # Initialize only Enterprise Trading Engine
-                    from app.backend.services.enterprise_trading_engine import EnterpriseTradingEngine
-                    enterprise_engine = EnterpriseTradingEngine()
-                    
-                    # Register in container
-                    self.container.register_singleton("enterprise_trading_engine", enterprise_engine)  # FIXED: Direct instance
-                    
-                    # Initialize with recursion protection
-                    try:
-                        await enterprise_engine.initialize()
-                        logger.info("✅ Enterprise Trading Engine initialized successfully")
-                    except RecursionError as e:
-                        logger.warning(f"⚠️ Enterprise engine recursion issue (expected): {str(e)[:100]}")
-                        logger.info("📝 Enterprise engine in safe mode - classical models only")
-                        enterprise_engine.is_initialized = True  # Mark as initialized in safe mode
-                    
-                    logger.info("✅ PHASE 1 COMPLETE: Enterprise Trading Engine ready")
+                    # QUARANTINE GATE (D11, docs/ANALIZA_6_WARSTW_2026-07-17.md):
+                    # the condemned engines (enterprise/entry/exit/learning/brain)
+                    # must not boot. Their phases are skipped and None placeholders
+                    # registered so every endpoint degrades instead of erroring.
+                    # Non-condemned services (risk, emergency, market data, day/
+                    # session engines, phase-6 services) still initialize.
+                    from app.backend.core.quarantine import ENV_FLAG, enterprise_enabled
+                    quarantined = not enterprise_enabled()
+                    if quarantined:
+                        logger.info(f"🛑 QUARANTINE ACTIVE ({ENV_FLAG}=off): "
+                                    f"phases 1/3/4-AI/7 skipped, condemned engines -> None")
+                        self.container.register_singleton("enterprise_trading_engine", lambda: None)
+                        self.container.register_singleton("entry_engine", lambda: None)
+                        self.container.register_singleton("exit_engine", lambda: None)
+                    else:
+                        logger.info("🚀 PHASE 1: Adding Enterprise Trading Engine...")
+
+                        # Initialize only Enterprise Trading Engine
+                        from app.backend.services.enterprise_trading_engine import EnterpriseTradingEngine
+                        enterprise_engine = EnterpriseTradingEngine()
+
+                        # Register in container
+                        self.container.register_singleton("enterprise_trading_engine", enterprise_engine)  # FIXED: Direct instance
+
+                        # Initialize with recursion protection
+                        try:
+                            await enterprise_engine.initialize()
+                            logger.info("✅ Enterprise Trading Engine initialized successfully")
+                        except RecursionError as e:
+                            logger.warning(f"⚠️ Enterprise engine recursion issue (expected): {str(e)[:100]}")
+                            logger.info("📝 Enterprise engine in safe mode - classical models only")
+                            enterprise_engine.is_initialized = True  # Mark as initialized in safe mode
+
+                        logger.info("✅ PHASE 1 COMPLETE: Enterprise Trading Engine ready")
                     
                     # PHASE 2: Add Day Trading Engine
                     await asyncio.sleep(2)
@@ -152,40 +167,48 @@ class TradePulseApplication:
                     logger.info("✅ PHASE 2 COMPLETE: Day Trading Engine ready for orchestration")
                     
                     # PHASE 3: Add Continuous Learning Engine
-                    await asyncio.sleep(2)
-                    logger.info("🚀 PHASE 3: Adding Continuous Learning Engine...")
-                    
-                    try:
-                        from app.backend.services.continuous_learning_engine import get_continuous_learning_engine
-                        learning_engine = await get_continuous_learning_engine()
-                        # Override placeholder with real engine
-                        self.container.register_singleton("continuous_learning_engine", lambda: learning_engine)
-                        logger.info("✅ PHASE 3 COMPLETE: Continuous Learning operational")
-                    except Exception as learning_error:
-                        logger.warning(f"⚠️ Continuous Learning failed: {learning_error}")
-                        # Keep placeholder
+                    if quarantined:
+                        logger.info("🛑 PHASE 3 SKIPPED: Continuous Learning quarantined "
+                                    "(D11: retrain NOTHING) — placeholder stays None")
+                    else:
+                        await asyncio.sleep(2)
+                        logger.info("🚀 PHASE 3: Adding Continuous Learning Engine...")
+
+                        try:
+                            from app.backend.services.continuous_learning_engine import get_continuous_learning_engine
+                            learning_engine = await get_continuous_learning_engine()
+                            # Override placeholder with real engine
+                            self.container.register_singleton("continuous_learning_engine", lambda: learning_engine)
+                            logger.info("✅ PHASE 3 COMPLETE: Continuous Learning operational")
+                        except Exception as learning_error:
+                            logger.warning(f"⚠️ Continuous Learning failed: {learning_error}")
+                            # Keep placeholder
                     
                     # PHASE 4: Add missing core services
                     await asyncio.sleep(1)
                     logger.info("🚀 PHASE 4: Adding missing core services...")
                     
                     try:
-                        # Entry Engine — is_registered, NOT get(): get() raises
-                        # KeyError before registration, which used to abort this
-                        # whole phase into the placeholder except-branch.
-                        from app.backend.services.intelligent_entry_engine import IntelligentEntryEngine
-                        if not self.container.is_registered("entry_engine"):
-                            entry_engine = IntelligentEntryEngine()
-                            await entry_engine.initialize()
-                            self.container.register_singleton("entry_engine", entry_engine)
+                        if quarantined:
+                            logger.info("🛑 PHASE 4 AI part skipped: entry/exit engines "
+                                        "quarantined — placeholders stay None")
+                        else:
+                            # Entry Engine — is_registered, NOT get(): get() raises
+                            # KeyError before registration, which used to abort this
+                            # whole phase into the placeholder except-branch.
+                            from app.backend.services.intelligent_entry_engine import IntelligentEntryEngine
+                            if not self.container.is_registered("entry_engine"):
+                                entry_engine = IntelligentEntryEngine()
+                                await entry_engine.initialize()
+                                self.container.register_singleton("entry_engine", entry_engine)
 
-                        # Exit Engine
-                        from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
-                        if not self.container.is_registered("exit_engine"):
-                            exit_engine = IntelligentExitEngine()
-                            await exit_engine.initialize()
-                            self.container.register_singleton("exit_engine", exit_engine)
-                        
+                            # Exit Engine
+                            from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
+                            if not self.container.is_registered("exit_engine"):
+                                exit_engine = IntelligentExitEngine()
+                                await exit_engine.initialize()
+                                self.container.register_singleton("exit_engine", exit_engine)
+
                         # Risk Manager
                         from app.backend.services.dynamic_risk_manager import DynamicRiskManager
                         risk_manager = DynamicRiskManager()
@@ -296,84 +319,90 @@ class TradePulseApplication:
                     except Exception as services_error:
                         logger.warning(f"⚠️ Some services failed to initialize: {services_error}")
                     
-                    # PHASE 7: Add Brain Controller (FINAL)
-                    await asyncio.sleep(1)
-                    logger.info("🚀 PHASE 7: Adding Brain Controller...")
-                    print("🔍 DEBUG: Starting Brain Controller phase...")
+                    # PHASE 7 + auto-start: Brain Controller is condemned
+                    # (a facade — its unified signal returns None; see
+                    # docs/ANALIZA_BRAIN_2026-07-17.md). Quarantined.
+                    if quarantined:
+                        logger.info("🛑 PHASE 7 SKIPPED: Brain Controller quarantined — placeholder stays None")
+                    else:
+                        # PHASE 7: Add Brain Controller (FINAL)
+                        await asyncio.sleep(1)
+                        logger.info("🚀 PHASE 7: Adding Brain Controller...")
+                        print("🔍 DEBUG: Starting Brain Controller phase...")
                     
-                    try:
-                        # Wait for DI container to be fully initialized
-                        await asyncio.sleep(2)  # Give container time to complete initialization
-                        
-                        # FORCE DI container initialization if not already done
-                        if not hasattr(self.container, '_initialized') or not self.container._initialized:
-                            logger.warning("⚠️ DI container not initialized, forcing initialization...")
-                            self.container._initialized = True
-                            logger.info("✅ DI container manually marked as initialized")
-                        else:
-                            logger.info("✅ DI container already initialized")
-                        
-                        # SIMPLIFIED Brain Controller registration - avoid complex initialization
-                        logger.info("🔄 Creating simplified Brain Controller for registration...")
-                        
-                        from app.backend.brain.brain_controller import BrainController
-                        brain_controller = BrainController()
-                        
-                        # Register immediately and FORCE initialization
-                        self.container.register_singleton("brain_controller", brain_controller)  # FIXED: Direct instance
-                        logger.info("🔧 Brain Controller registered in DI container")
-                        
-                        # 🚀 INDUSTRY STANDARD: Initialize with automatic startup
                         try:
-                            logger.info("🔄 Initializing Brain Controller with automatic startup...")
-                            await brain_controller.initialize()
-                            logger.info("✅ Brain Controller initialization completed")
-                            logger.info("🚀 AUTOMATIC STARTUP: Brain Controller will start trading automatically after warmup")
-                            
-                        except Exception as init_error:
-                            logger.error(f"❌ Brain Controller auto-initialization failed: {init_error}")
-                            # Still register it for API access
-                            logger.info("📝 Brain Controller registered but not initialized")
+                            # Wait for DI container to be fully initialized
+                            await asyncio.sleep(2)  # Give container time to complete initialization
                         
-                        logger.info("✅ PHASE 7 COMPLETE: Brain Controller registered")
-                        print("✅ DEBUG: Brain Controller registered successfully!")
-                    except Exception as brain_error:
-                        logger.warning(f"⚠️ Brain Controller failed: {brain_error}")
-                        print(f"❌ DEBUG: Brain Controller failed: {brain_error}")
-                        
-                        # Create a basic Brain Controller for API access even if initialization failed
-                        try:
-                            from app.backend.brain.brain_controller import BrainController
-                            fallback_brain = BrainController()
-                            self.container.register_singleton("brain_controller", lambda: fallback_brain)
-                            logger.info("🔄 Fallback Brain Controller registered for API access")
-                        except Exception as fallback_error:
-                            logger.error(f"❌ Fallback Brain Controller registration failed: {fallback_error}")
-                            # Keep placeholder registration
-                    
-                    logger.info("🎉 ALL PHASES COMPLETE: Full professional backend restored!")
-                    print("🎉 DEBUG: All phases completed!")
-                    
-                    # 🚀 INDUSTRY STANDARD: Auto-start Brain Controller after all phases complete
-                    await asyncio.sleep(3)  # Wait for all services to stabilize
-                    logger.info("🚀 INDUSTRY AUTO-START: Starting Brain Controller trading after all phases complete")
-                    
-                    try:
-                        brain_controller = self.container.get("brain_controller")
-                        if brain_controller and hasattr(brain_controller, 'state'):
-                            current_state = brain_controller.state.current_state.value
-                            logger.info(f"🧠 Brain Controller current state: {current_state}")
-                            
-                            if current_state == "warmup":
-                                logger.info("🚀 AUTO-START: Brain Controller ready - starting trading operations")
-                                result = await brain_controller.start_trading()
-                                logger.info(f"✅ AUTO-START RESULT: {result}")
+                            # FORCE DI container initialization if not already done
+                            if not hasattr(self.container, '_initialized') or not self.container._initialized:
+                                logger.warning("⚠️ DI container not initialized, forcing initialization...")
+                                self.container._initialized = True
+                                logger.info("✅ DI container manually marked as initialized")
                             else:
-                                logger.info(f"📝 Brain Controller in state: {current_state} - no auto-start needed")
-                        else:
-                            logger.warning("⚠️ Brain Controller not available for auto-start")
-                    except Exception as auto_start_error:
-                        logger.warning(f"⚠️ Auto-start failed: {auto_start_error}")
+                                logger.info("✅ DI container already initialized")
+                        
+                            # SIMPLIFIED Brain Controller registration - avoid complex initialization
+                            logger.info("🔄 Creating simplified Brain Controller for registration...")
+                        
+                            from app.backend.brain.brain_controller import BrainController
+                            brain_controller = BrainController()
+                        
+                            # Register immediately and FORCE initialization
+                            self.container.register_singleton("brain_controller", brain_controller)  # FIXED: Direct instance
+                            logger.info("🔧 Brain Controller registered in DI container")
+                        
+                            # 🚀 INDUSTRY STANDARD: Initialize with automatic startup
+                            try:
+                                logger.info("🔄 Initializing Brain Controller with automatic startup...")
+                                await brain_controller.initialize()
+                                logger.info("✅ Brain Controller initialization completed")
+                                logger.info("🚀 AUTOMATIC STARTUP: Brain Controller will start trading automatically after warmup")
+                            
+                            except Exception as init_error:
+                                logger.error(f"❌ Brain Controller auto-initialization failed: {init_error}")
+                                # Still register it for API access
+                                logger.info("📝 Brain Controller registered but not initialized")
+                        
+                            logger.info("✅ PHASE 7 COMPLETE: Brain Controller registered")
+                            print("✅ DEBUG: Brain Controller registered successfully!")
+                        except Exception as brain_error:
+                            logger.warning(f"⚠️ Brain Controller failed: {brain_error}")
+                            print(f"❌ DEBUG: Brain Controller failed: {brain_error}")
+                        
+                            # Create a basic Brain Controller for API access even if initialization failed
+                            try:
+                                from app.backend.brain.brain_controller import BrainController
+                                fallback_brain = BrainController()
+                                self.container.register_singleton("brain_controller", lambda: fallback_brain)
+                                logger.info("🔄 Fallback Brain Controller registered for API access")
+                            except Exception as fallback_error:
+                                logger.error(f"❌ Fallback Brain Controller registration failed: {fallback_error}")
+                                # Keep placeholder registration
+                    
+                        logger.info("🎉 ALL PHASES COMPLETE: Full professional backend restored!")
+                        print("🎉 DEBUG: All phases completed!")
+                    
+                        # 🚀 INDUSTRY STANDARD: Auto-start Brain Controller after all phases complete
+                        await asyncio.sleep(3)  # Wait for all services to stabilize
+                        logger.info("🚀 INDUSTRY AUTO-START: Starting Brain Controller trading after all phases complete")
+                    
+                        try:
+                            brain_controller = self.container.get("brain_controller")
+                            if brain_controller and hasattr(brain_controller, 'state'):
+                                current_state = brain_controller.state.current_state.value
+                                logger.info(f"🧠 Brain Controller current state: {current_state}")
+                            
+                                if current_state == "warmup":
+                                    logger.info("🚀 AUTO-START: Brain Controller ready - starting trading operations")
+                                    result = await brain_controller.start_trading()
+                                    logger.info(f"✅ AUTO-START RESULT: {result}")
+                                else:
+                                    logger.info(f"📝 Brain Controller in state: {current_state} - no auto-start needed")
+                            else:
+                                logger.warning("⚠️ Brain Controller not available for auto-start")
+                        except Exception as auto_start_error:
+                            logger.warning(f"⚠️ Auto-start failed: {auto_start_error}")
                     
                     # Final status check
                     await asyncio.sleep(1)

@@ -273,6 +273,15 @@ class ServiceContainer:
     
     async def _initialize_ai_services(self) -> None:
         """Initialize AI services with real models"""
+        from app.backend.core.quarantine import ENV_FLAG, enterprise_enabled
+        if not enterprise_enabled():
+            # QUARANTINE (D11): condemned engines register as None so callers
+            # take their existing degraded paths instead of erroring.
+            logger.info(f"🛑 QUARANTINE ACTIVE ({ENV_FLAG}=off): AI services skipped")
+            self.register_singleton("continuous_learning_engine", lambda: None)
+            self.register_singleton("entry_engine", None)
+            self.register_singleton("exit_engine", None)
+            return
         try:
             from app.backend.services.continuous_learning_engine import get_continuous_learning_engine
             from app.backend.services.intelligent_entry_engine import IntelligentEntryEngine

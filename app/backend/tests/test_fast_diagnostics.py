@@ -36,6 +36,9 @@ def test_macd_self_heal_scale():
 
 @pytest.mark.asyncio
 async def test_regime_override_on_high_vol_ratio(monkeypatch):
+    # The exit engine is quarantined (D11); this test exercises its internals
+    # deliberately, so it opts in the same way offline research would.
+    monkeypatch.setenv("ENTERPRISE_ENGINES", "on")
     from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
 
     # Stub emergency system: not halted

@@ -128,7 +128,12 @@ def require_admin_role(current_user: User = Depends(get_current_user)) -> User:
 
 # Service Dependencies
 def get_enterprise_trading_engine() -> EnterpriseTradingEngine:
-    """Get enterprise trading engine instance"""
+    """Get enterprise trading engine instance (503 while quarantined)."""
+    from app.backend.core.quarantine import enterprise_enabled, quarantine_detail
+
+    if not enterprise_enabled():
+        raise HTTPException(status_code=503,
+                            detail=quarantine_detail("EnterpriseTradingEngine"))
     return EnterpriseTradingEngine()
 
 

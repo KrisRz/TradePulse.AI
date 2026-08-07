@@ -79,6 +79,7 @@ except ImportError:
         analysis_time_ms: float
 
 # Import market data services
+from app.backend.core.quarantine import assert_enterprise_enabled
 from app.backend.services.live_market_data import (
     get_live_bitcoin_price,
     get_live_market_data,
@@ -105,6 +106,7 @@ class IntelligentExitEngine:
     """
     
     def __init__(self):
+        assert_enterprise_enabled("IntelligentExitEngine")
         self.is_initialized = False
         self.models = {}
         # Professional path resolution - works from any working directory

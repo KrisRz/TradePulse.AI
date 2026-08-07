@@ -19,7 +19,6 @@ from app.backend.utils.dependencies import get_current_user, User
 from app.backend.services import DatabaseService
 from app.backend.services import PerformanceTracker
 from app.backend.services.professional_portfolio import get_professional_portfolio
-from app.backend.services import EnterpriseTradingEngine
 from app.backend.services import model_loader
 from app.backend.services import MarketDataService
 
@@ -28,9 +27,13 @@ logger = get_logger(__name__)
 settings = get_settings()
 
 # Initialize services with proper imports
+# NOTE: the module-level EnterpriseTradingEngine that used to live here was
+# never referenced by any endpoint — importing this router just booted the
+# condemned 6-layer stack for nothing (E2E audit 2026-07-21). Removed under
+# quarantine; endpoints that need it read "enterprise_trading_engine" from the
+# DI container, which honours the same gate.
 db_service = DatabaseService()
 performance_tracker = PerformanceTracker()
-trading_engine = EnterpriseTradingEngine()
 
 async def get_portfolio_service():
     """Get professional portfolio service for admin operations"""
