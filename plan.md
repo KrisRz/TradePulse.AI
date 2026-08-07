@@ -22,12 +22,16 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
-**Stan na 2026-08-07 (sesja: ewaluator bramki C + trwałość dowodów).**
+**Stan na 2026-08-07 (dwie sesje: bramka C + kwarantanna/ML-data/F7, PR #35–#40).**
 
 #### Gdzie jesteśmy w milestone'ach
 M0–M4 ✅ · **M5 BIEGNIE — dzień 22/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
-Kanał 4h: long od 2026-08-06 16:00 (entry 64 474,17, qty 0,0031), bramka C
-zbiera dowody TRWALE (DynamoDB, nie logi) — werdykt `COLLECTING 1/20 filli`.
+Kanał 4h: long od 2026-08-06 16:00 (entry 64 474,17, qty 0,0031); bramka C
+zbiera dowody TRWALE (DynamoDB) — `COLLECTING 1/20 filli`; kill-switch + **F7**
+(stop 10% od entry, dzienny limit 10%, progi pre-rejestrowane z pomiaru).
+**Kwarantanna enterprise WYKONANA** (5 skazanych klas odmawia startu bez
+`ENTERPRISE_ENGINES=on`). Dane pod ML zebrane: funding 2020-01+, snapshot
+Coin Metrics 2026-08-07 (też w safety), metrics OI w pobieraniu.
 
 #### Co CHODZI na produkcji (4 Lambdy, wszystkie ENABLED, koszt ~$0,60/mies.)
 
@@ -77,27 +81,30 @@ zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
 - Kwarantanna enterprise w monolicie — jedyny zaległy porządek M5-safe, zero pilności.
 - Hosting frontendu na tradepulseai.co.uk — domena OK do 2026-09-28, auto-renew.
 
-### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-07)
+### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-07, po PR #35–#40)
 
 **0. DEPLOY CZEKA NA USERA:** `cd infra-serverless && terraform apply tfplan`
-(1 zmiana: nowy kod venue-4h — persystencja filli + pomiar dryfu; stary
-deployed kod NIE mierzy `mark_at_order`, więc każdy fill do czasu apply będzie
-nieweryfikowalny dla C1/C2). Po apply: sprawdź shas M5 (`r8Luxno…tNq0=`).
+(1 zmiana: venue-4h z F7 — do czasu apply Lambda gra bez stop-lossa/limitu).
+Po apply: sprawdź shas M5 (`r8Luxno…tNq0=`) i zrób smoke-invoke
+(`aws lambda invoke … tradepulse-venue-4h` → oczekiwane `skipped`).
 
-**1. ✅ ZROBIONE: Bramka C ma ewaluator** (`gate.py --cost-fidelity`) + trwałą
-persystencję filli/odrzuceń w DynamoDB + backfill pierwszego fillu.
-Werdykt: `COLLECTING 1/20`. Dalej sama zbiera — nic do roboty do ~20 filli.
+**1. Dokończyć pobieranie metrics OI** (jeśli sesja padła w trakcie:
+`python -m app.backend.backtesting.external_data --dataset metrics --symbol
+BTCUSDT --start 2020-09-01 --end 2026-08-06 --out
+data/ml/external/BTCUSDT_metrics.csv`). Potem walidacja zakresu i wpis w §4.
 
-**2. Reszta F7: stop-loss + dzienny limit straty.** Kill-switch już jest
-(T1/T2/T3, fail-closed, ręczny re-arm). Brakuje kontroli na poziomie pozycji.
+**2. (research, M5-safe)** Backlog wg dowodów w
+`docs/RESEARCH_ULEPSZEN_2026-08-07.md` **po korekcie**: vol targeting SPADŁ
+(M4/F2 już go odrzucił — patrz korekta w doc) → **#1 = ensemble prędkości
+EMA** w scenario_lab na danych sprzed holdoutu → benchmark-filtr zmienności →
+meta-labeler (pooled BTC+ETH, cechy funding/ΔOI/MVRV-Z; SOPR NIEDOSTĘPNY
+w darmowym Coin Metrics — zweryfikowane na snapshot).
 
-**3. Kwarantanna enterprise** — jak będzie nudno.
+**3. Czekanie na dane:** bramka C zbiera fille sama (~20 filli ≈ 10 mies.);
+ocena bramek A/B ≥2026-09-10; re-ocena co 28 dni.
 
-**4. (research, M5-safe, na kiedy będzie czas)** Backlog ulepszeń zbadany i
-zrankowany wg dowodów w `docs/RESEARCH_ULEPSZEN_2026-08-07.md`: vol targeting →
-ensemble EMA → benchmark-filtr zmienności → meta-labeler (pooled, cechy
-funding/ΔOI/MVRV-Z). Do zrobienia od zaraz: bulk funding+metrics z
-data.binance.vision i snapshot CSV Coin Metrics (ochrona przed rewizjami).
+⚠️ **NIE ROBIMY:** vol targetingu w wariancie zmierzonym w M4 (odrzucony),
+maker orderów, shortów na BTC, zmian strategii 1d w oknie.
 
 ⚠️ **NIE ROBIMY:** maker orderów (zmierzone, bez sensu), researchu shortów na
 BTC (odrzucony danymi), zmian w strategii 1d (unieważnia okno).
@@ -1243,3 +1250,20 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   exchange flows (rewizje=look-ahead, źródło: sam Glassnode), Fear&Greed
   (nie Granger-przyczynuje zwrotów), long/short ratio. HMM zdegradowany
   (hmmlearn martwy, ≈ próg vol, pułapka smoothed/filtered). Nic nie dotyka M5.
+- **2026-08-07c** — 🛑📥🎯 SESJA "kwarantanna → ML-data → F7" (PR #37, #38, #39).
+  KWARANTANNA (zaległość z audytu E2E): strażnik w konstruktorach 5 skazanych
+  klas (enterprise/entry/exit/learning/brain) — silniki tworzą się nawzajem
+  w metodach, więc bramkowany jest jedyny wspólny punkt; router enterprise
+  lazy+503, martwa instancja w admin usunięta, fazy bootu 1/3/4-AI/7 pomijane
+  (w tym AUTO-START tradingu brainem!); opt-in ENTERPRISE_ENGINES=on tylko do
+  researchu; +24 testy. ML-DATA: external_data.py (funding monthly 2020-01+,
+  metrics daily 2020-09+ z dedupe realnych dubli, Coin Metrics jako datowany
+  IMMUTABLE snapshot + kopia w safety); pobrane: funding 7212 settlementów
+  (same 8h, cap ±0,3%), snapshot 2009→2026-05 (MVRV ✅, SOPR BRAK w darmowym,
+  lag 2,5 mies.). ODKRYCIE: vol targeting z rankingu researchu był już
+  ODRZUCONY w M4/F2 — korekta w doc, ensemble EMA awansuje na #1. F7: pomiar
+  przesłanki PRZED progami (f7_premise.py): stop 5% odrzucony, wybrane
+  stop 10% close-evaluated (~2 hity/7,5r na 4h) + dzienny limit 10% (~1/rok);
+  semantyka = blocked_side silnika; seam target_overlay niewidoczny dla M5;
+  rekord decyzji z target + strategy_target (bramka A osądzalna); fail-closed;
+  15 testów granicznych. Suite ~430 zielony.
