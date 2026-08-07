@@ -93,6 +93,12 @@ Werdykt: `COLLECTING 1/20`. Dalej sama zbiera — nic do roboty do ~20 filli.
 
 **3. Kwarantanna enterprise** — jak będzie nudno.
 
+**4. (research, M5-safe, na kiedy będzie czas)** Backlog ulepszeń zbadany i
+zrankowany wg dowodów w `docs/RESEARCH_ULEPSZEN_2026-08-07.md`: vol targeting →
+ensemble EMA → benchmark-filtr zmienności → meta-labeler (pooled, cechy
+funding/ΔOI/MVRV-Z). Do zrobienia od zaraz: bulk funding+metrics z
+data.binance.vision i snapshot CSV Coin Metrics (ochrona przed rewizjami).
+
 ⚠️ **NIE ROBIMY:** maker orderów (zmierzone, bez sensu), researchu shortów na
 BTC (odrzucony danymi), zmian w strategii 1d (unieważnia okno).
 ### Protokół wznowienia (rób po kolei)
@@ -1226,3 +1232,14 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   Deployed venue-4h miał kod sprzed rozdzielenia dryfu → zbudowany nowy zip,
   tfplan = dokładnie 1 zmiana (venue_4h hash), M5 nietknięte. Gate A po
   zmianach CLI: PASS 6/6 (regresja sprawdzona). Testy: +34 nowe, suite zielony.
+- **2026-08-07b** — 🔬 RESEARCH ULEPSZEŃ (web/docs/GitHub, 3 równoległe kwerendy)
+  → docs/RESEARCH_ULEPSZEN_2026-08-07.md. Ranking wg dowodów: (1) vol targeting
+  (Moreira&Muir, Man Group; wersja 1-aktywowa przeżywa koszty, pasmo bez-handlu
+  = parametr krytyczny), (2) ensemble prędkości EMA, (3) meta-labeler —
+  architektura ✅D11 potwierdzona (stała reguła + inne cechy), ALE próba 15–20
+  zdarzeń wymusza pooling BTC+ETH albo najpierw benchmark z filtra zmienności;
+  mlfinlab PŁATNY → własne ~200 linii. Cechy: funding (2020-01+), ΔOI
+  (2020-09+), MVRV-Z (filtr cyklu), basis z klines. Odrzucone z dowodem:
+  exchange flows (rewizje=look-ahead, źródło: sam Glassnode), Fear&Greed
+  (nie Granger-przyczynuje zwrotów), long/short ratio. HMM zdegradowany
+  (hmmlearn martwy, ≈ próg vol, pułapka smoothed/filtered). Nic nie dotyka M5.
