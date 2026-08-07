@@ -1267,3 +1267,15 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   semantyka = blocked_side silnika; seam target_overlay niewidoczny dla M5;
   rekord decyzji z target + strategy_target (bramka A osądzalna); fail-closed;
   15 testów granicznych. Suite ~430 zielony.
+- **2026-08-07d** — 🔬 Research po deployu F7: studium ensemble EMA
+  (scripts/research/ema_ensemble_study.py, metodologia = M4/F2): AVERAGE 5
+  prędkości bije baseline w OBU epokach (0,93→0,98; 2022+ 0,72→0,79; DD
+  −37→−30) i 6/9 lat rok-po-roku — kandydat do harnessu M4, ale wymaga
+  ułamkowych pozycji w księdze, więc bez pośpiechu; MAJORITY (0/1, tani
+  w adopcji) GORSZY od baseline'u — odrzucony; szybsze membery ignorowane
+  (fitting). Licznik ML: pooling BTC+ETH = 31 zdarzeń — potwierdza
+  "benchmark-filtr najpierw, meta-labeler gdy urośnie próba". DANE KOMPLET:
+  metrics OI dociągnięte (623 170 wierszy 5-min, 2020-09-01→2026-08-06,
+  2166/2166 dni, 0 dubli; sum_open_interest 0 NaN — braki tylko w ratio
+  long/short, i tak odrzuconych); funding+metrics+snapshot Coin Metrics
+  zarchiwizowane w ~/TradePulse_safety/external_data_snapshots/.
