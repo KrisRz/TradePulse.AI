@@ -629,3 +629,44 @@ def test_drift_is_not_measured_unless_asked():
     assert rec.mark_at_order is None
     assert rec.drift is None and rec.execution_slippage is None
     assert not [p for _m, p, _q in session.requests if p == "/api/v3/ticker/price"]
+
+
+# ------------------------------------------------------- rejection recording --
+def test_a_rejected_order_is_recorded_before_the_error_propagates():
+    """Gate C's C3 counts rejections; an exception alone leaves no evidence."""
+    ex, _session = make_executor(responses={
+        "/api/v3/order": [FakeResponse(
+            {"code": -2010, "msg": "Account has insufficient balance."},
+            status_code=400)],
+    })
+    with pytest.raises(BinanceAPIError) as err:
+        ex.execute(Order(side=SELL, reference_price=64_446.0, time="t",
+                         qty=0.0031))
+
+    assert err.value.code == -2010
+    rec = ex.rejections()[-1]
+    assert rec["code"] == -2010
+    assert rec["side"] == SELL
+    assert rec["requested_qty"] == pytest.approx(0.0031)
+    assert ex.reconciliations() == []
+
+
+def test_public_get_failures_are_not_counted_as_rejections():
+    """Only a failed order POST is a rejection — a dead ticker endpoint is not."""
+    ex, _session = make_executor(responses={
+        "/api/v3/ticker/price": [FakeResponse(
+            {"code": -1000, "msg": "unknown"}, status_code=400)],
+    }, measure_drift=True)
+    with pytest.raises(BinanceAPIError):
+        ex.execute(Order(side=SELL, reference_price=64_446.0, time="t",
+                         qty=0.0031))
+    assert ex.rejections() == []
+
+
+def test_the_reconciliation_records_the_requested_quantity():
+    """C4 compares what was asked against what executed."""
+    fills = [{"price": "64474.17", "qty": "0.0031", "commission": "0",
+              "commissionAsset": "BNB"}]
+    ex, _session = make_executor(responses={"/api/v3/order": [order_response(fills)]})
+    ex.execute(Order(side=BUY, reference_price=64_446.0, time="t", qty=0.0031))
+    assert ex.reconciliations()[-1].requested_qty == pytest.approx(0.0031)

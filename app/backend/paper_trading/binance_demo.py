@@ -150,6 +150,9 @@ class Reconciliation:
     #: Market price observed immediately before submitting, when measured.
     #: Without it, ``slippage_actual`` conflates two different costs — see below.
     mark_at_order: Optional[float] = None
+    #: Quantity the order asked for, after lot-size flooring. Gate C's partial
+    #: fill criterion compares this against what actually executed.
+    requested_qty: Optional[float] = None
 
     @property
     def price_error(self) -> float:
@@ -260,6 +263,7 @@ class BinanceDemoExecutor:
         self._rules: Optional[SymbolRules] = None
         self._position_qty = Decimal("0")   # base asset acquired by OUR buys
         self._reconciliations: list[Reconciliation] = []
+        self._rejections: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------ construction --
     @classmethod
@@ -572,7 +576,22 @@ class BinanceDemoExecutor:
         mark_at_order = self.mark_price() if self.measure_drift else None
 
         logger.info("submitting %s %s %s", params["side"], params["quantity"], self.symbol)
-        response = self._request("POST", "/api/v3/order", params, signed=True)
+        try:
+            response = self._request("POST", "/api/v3/order", params, signed=True)
+        except BinanceAPIError as exc:
+            # Gate C criterion C3 counts venue rejections against submissions.
+            # Only a failed order POST is a rejection — errors from public GETs
+            # (rules, mark price) never reach this handler.
+            self._rejections.append({
+                "time": order.time,
+                "side": order.side,
+                "requested_qty": float(qty),
+                "reference_price": order.reference_price,
+                "code": exc.code,
+                "message": exc.msg,
+                "http_status": exc.http_status,
+            })
+            raise
 
         avg_price, executed_qty, fill_count = self._average_fill_price(response)
         fee_paid, fee_asset, base_fee = self._commission(response, rules.base_asset)
@@ -607,6 +626,7 @@ class BinanceDemoExecutor:
             fill_count=fill_count,
             status=status,
             mark_at_order=mark_at_order,
+            requested_qty=float(qty),
         )
         self._reconciliations.append(record)
         logger.info("filled %s @ %.2f (assumed %.2f, slippage %.5f%% vs %.5f%% assumed)",
@@ -629,6 +649,10 @@ class BinanceDemoExecutor:
     def reconciliations(self) -> list[Reconciliation]:
         """Every fill so far, against what the book assumed it would be."""
         return list(self._reconciliations)
+
+    def rejections(self) -> list[dict[str, Any]]:
+        """Every order the venue refused, with its error code — Gate C's C3."""
+        return list(self._rejections)
 
     @property
     def position_qty(self) -> Decimal:

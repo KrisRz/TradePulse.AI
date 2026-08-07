@@ -133,3 +133,26 @@ tabelę DynamoDB — pod kluczem `BTCUSDT_4h`, więc mierzona księga 1d jest
 nietykalna — oraz temat SNS.
 
 Koszt: **$0** (Lambda 6×/dzień i alarmy mieszczą się w darmowych progach).
+
+## 6. Ewaluator i trwałość dowodów (dobudowane 2026-08-07, progi NIE ruszone)
+
+Progi z §2 pozostają dokładnie takie, jak spisano. Zbudowane zostało to, czego
+brakowało, żeby dało się je kiedykolwiek policzyć:
+
+- **Trwała persystencja filli.** Retencja logów CloudWatch to 30 dni, a bramka
+  jest rozstrzygalna po ≥20 fillach ≈ 10 miesięcy — dowód żyjący tylko w logach
+  wyparowałby na długo przed oceną. Każdy fill i każde odrzucenie zlecenia
+  ląduje teraz w DynamoDB obok logu decyzji (`fill#<bar>#<order_id>`,
+  `reject#<recorded_at>`), zapisywane nawet gdy Lambda potem padnie.
+- **Ewaluator:** `python -m app.backend.paper_trading.gate --cost-fidelity`.
+  Przed 20 fillami werdykt = `COLLECTING` (bez PASS/FAIL — pre-rejestracja),
+  ale kryteria już łamane są wymieniane z nazwy; od 20 filli: FAIL > INCOMPLETE
+  > PASS. Brakujący dowód = SKIPPED, nigdy cichy PASS.
+- **Backfill:** pierwszy fill kanału (`54510109086`, BUY otwierający obecną
+  pozycję) przeniesiony z CloudWatch do DynamoDB ze wszystkimi polami, których
+  ówczesny handler nie mierzył, zapisanymi jako `None` — jest uczciwie
+  nieweryfikowalny dla C1/C2 (brak `mark_at_order`). Zlecenie `54508851440`
+  celowo NIE zostało backfillowane: to lokalny test spoza księgi kanału.
+- **C0 (warunek wstępny, nie próg):** ewaluator sprawdza też, że każdy bar
+  z akcją w logu decyzji ma rekord fillu — zgubiony fill zawęża próbę median
+  po cichu, więc musi być głośnym FAIL-em kompletności, nie dziurą.
