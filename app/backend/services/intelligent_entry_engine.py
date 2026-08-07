@@ -50,6 +50,7 @@ from enum import Enum
 
 # Import market data services
 from app.backend.services.live_market_data import get_live_bitcoin_price, get_live_market_data, get_live_orderbook_data
+from app.backend.core.quarantine import assert_enterprise_enabled
 from app.backend.utils.safe_formatting import safe_format_number, safe_format_price
 from app.backend.services.binance_hybrid_client import get_hybrid_client
 from app.backend.services.day_trading_validator import get_day_trading_validator
@@ -123,6 +124,7 @@ class IntelligentEntryEngine:
     """
     
     def __init__(self):
+        assert_enterprise_enabled("IntelligentEntryEngine")
         self.is_initialized = False
         self.models = {}
         # Professional path resolution - works from any working directory

@@ -34,7 +34,23 @@ settings = get_settings()
 # Initialize services
 market_data_service = MarketDataService()
 db_service = DatabaseService()
-enterprise_trading_engine = EnterpriseTradingEngine()
+
+# The engine is condemned (D11) and quarantined. It used to be instantiated
+# HERE, at import time — importing this router booted the 6-layer stack before
+# any request existed. Now it is created lazily and only with the opt-in flag.
+_enterprise_trading_engine: Optional[EnterpriseTradingEngine] = None
+
+
+def _engine() -> EnterpriseTradingEngine:
+    from app.backend.core.quarantine import enterprise_enabled, quarantine_detail
+
+    global _enterprise_trading_engine
+    if not enterprise_enabled():
+        raise HTTPException(status_code=503,
+                            detail=quarantine_detail("EnterpriseTradingEngine"))
+    if _enterprise_trading_engine is None:
+        _enterprise_trading_engine = EnterpriseTradingEngine()
+    return _enterprise_trading_engine
 
 
 class SignalAction(str, Enum):
@@ -188,7 +204,7 @@ async def generate_enterprise_signal(
         )
         
         # Generate enterprise signal
-        signal = await enterprise_trading_engine.generate_enterprise_signal(
+        signal = await _engine().generate_enterprise_signal(
             market_data=market_data,
             symbol=request.symbol,
             timeframe=request.timeframe
@@ -266,7 +282,7 @@ async def get_performance_metrics(
         Complete performance metrics
     """
     try:
-        metrics = await enterprise_trading_engine.get_performance_metrics()
+        metrics = await _engine().get_performance_metrics()
         
         return {
             "status": "success",
@@ -296,7 +312,7 @@ async def get_layer_performance(
         Layer performance metrics
     """
     try:
-        metrics = await enterprise_trading_engine.get_performance_metrics()
+        metrics = await _engine().get_performance_metrics()
         layer_performance = metrics.get('layer_performance', {})
         
         return {
@@ -329,7 +345,7 @@ async def get_risk_metrics(
         Risk metrics
     """
     try:
-        risk_manager = enterprise_trading_engine.risk_manager
+        risk_manager = _engine().risk_manager
         risk_metrics = await risk_manager.get_risk_metrics()
         
         return {
@@ -362,7 +378,7 @@ async def start_ab_test(
         A/B test information
     """
     try:
-        test_id = await enterprise_trading_engine.start_ab_test(
+        test_id = await _engine().start_ab_test(
             test_name=request.test_name,
             strategies=request.strategies
         )
@@ -399,7 +415,7 @@ async def get_ab_test_results(
         A/B test results
     """
     try:
-        results = await enterprise_trading_engine.get_ab_test_results(test_id)
+        results = await _engine().get_ab_test_results(test_id)
         
         return {
             "status": "success",
@@ -425,10 +441,10 @@ async def enterprise_health_check() -> Dict[str, Any]:
     """
     try:
         # Check if enterprise engine is initialized
-        is_initialized = enterprise_trading_engine.is_initialized
+        is_initialized = _engine().is_initialized
         
         # Get basic metrics
-        metrics = await enterprise_trading_engine.get_performance_metrics()
+        metrics = await _engine().get_performance_metrics()
         
         return {
             "status": "healthy" if is_initialized else "initializing",
@@ -451,8 +467,8 @@ async def enterprise_health_check() -> Dict[str, Any]:
 async def reload_enterprise_models(_: User = Depends(require_admin_role)) -> Dict[str, Any]:
     """Hot-reload enterprise AI models and metadata."""
     try:
-        await enterprise_trading_engine.initialize()
-        info = await enterprise_trading_engine.reload_models()
+        await _engine().initialize()
+        info = await _engine().reload_models()
         return {"status": "success", "data": info}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model reload failed: {e}")

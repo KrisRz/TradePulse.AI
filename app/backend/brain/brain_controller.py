@@ -38,6 +38,7 @@ from .brain_events import (
 # Import existing services (NO CHANGES TO SERVICES)
 # Note: Engines are now accessed via DI Container, no direct imports needed
 from app.backend.services.intelligent_exit_engine import IntelligentExitEngine
+from app.backend.core.quarantine import assert_enterprise_enabled
 from app.backend.services.dynamic_risk_manager import DynamicRiskManager
 from app.backend.services.emergency_controls import EmergencyControlSystem
 from app.backend.services.professional_portfolio import get_professional_portfolio, PositionType
@@ -70,6 +71,7 @@ class BrainController:
     """
     
     def __init__(self):
+        assert_enterprise_enabled("BrainController")
         self.state = create_initial_brain_state()
         self.event_bus = get_event_bus()
         

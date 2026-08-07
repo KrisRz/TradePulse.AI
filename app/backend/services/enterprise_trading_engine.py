@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pickle
 from app.backend.core.feature_schema import FEATURE_COLUMNS, make_X_live, predict_lgbm_safe, predict_rf_safe, log_schema_info
+from app.backend.core.quarantine import assert_enterprise_enabled
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timezone
@@ -46,6 +47,7 @@ class EnterpriseTradingEngine:
     """Professional 6-Layer AI Trading Engine with Real Market Data"""
     
     def __init__(self):
+        assert_enterprise_enabled("EnterpriseTradingEngine")
         self.is_initialized = False
         self.models = {}
         # Professional path resolution - works from any working directory

@@ -31,6 +31,7 @@ import statistics
 from pathlib import Path
 
 from app.backend.core.database import get_database_client
+from app.backend.core.quarantine import assert_enterprise_enabled
 from app.backend.core.runtime_config import runtime_config_store
 from app.backend.core.config import get_settings
 from app.backend.utils.model_io import prepare_features_for_prediction, validate_model_features
@@ -94,6 +95,7 @@ class ContinuousLearningEngine:
     """
     
     def __init__(self):
+        assert_enterprise_enabled("ContinuousLearningEngine")
         self.db_client = get_database_client()
         self.settings = get_settings()
         self.auto_optimization_enabled = True
