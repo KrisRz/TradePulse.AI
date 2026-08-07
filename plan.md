@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-08-06**
+> Ostatnia aktualizacja: **2026-08-07**
 
 ---
 
@@ -22,7 +22,7 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
-**Stan na 2026-08-07 (dwie sesje: bramka C + kwarantanna/ML-data/F7, PR #35–#40).**
+**Stan na 2026-08-07 (trzy sesje: bramka C · kwarantanna/ML-data/F7 · alarmy+F5+M3b, PR #35–#44).**
 
 #### Gdzie jesteśmy w milestone'ach
 M0–M4 ✅ · **M5 BIEGNIE — dzień 22/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
@@ -31,9 +31,10 @@ zbiera dowody TRWALE (DynamoDB) — `COLLECTING 1/20 filli`; kill-switch + **F7*
 (stop 10% od entry, dzienny limit 10%, progi pre-rejestrowane z pomiaru).
 **Kwarantanna enterprise WYKONANA** (5 skazanych klas odmawia startu bez
 `ENTERPRISE_ENGINES=on`). Dane pod ML zebrane: funding 2020-01+, snapshot
-Coin Metrics 2026-08-07 (też w safety), metrics OI w pobieraniu.
+Coin Metrics 2026-08-07 (też w safety), metrics OI **dociągnięte** (623 170
+wierszy, 2166/2166 dni). Alarmy shadow/venue naprawione (PR #43) — patrz niżej.
 
-#### Co CHODZI na produkcji (4 Lambdy, wszystkie ENABLED, koszt ~$0,60/mies.)
+#### Co CHODZI na produkcji (4 Lambdy, wszystkie ENABLED, koszt ~$0,80/mies.)
 
 | Co | Harmonogram | Rola |
 |---|---|---|
@@ -44,7 +45,8 @@ Coin Metrics 2026-08-07 (też w safety), metrics OI w pobieraniu.
 
 #### 🔒 NIENARUSZALNE W OKNIE M5
 - Obie Lambdy M5 mają `CodeSha256 = r8LuxnoJgluluwOEuPP6tk5nRDrhpjNq4emap/stNq0=`
-  (deploy 2026-07-22). **Zweryfikowane po każdym z 5 dzisiejszych `terraform apply`.**
+  (deploy 2026-07-22). **Zweryfikowane po każdym z 6 `terraform apply` 2026-08-07**
+  (ostatni: alarmy, PR #43 — plan dotykał WYŁĄCZNIE `aws_cloudwatch_metric_alarm`).
 - Chroni je `lifecycle { ignore_changes = [filename, source_code_hash] }` w
   `main.tf` — dodane, bo repo było JEDNO `apply` od redeployu bota w środku
   pomiaru. 🔴 **Przy M6 ten bezpiecznik trzeba świadomie USUNĄĆ**, inaczej
@@ -58,7 +60,7 @@ Bot 1d stoi **FLAT od 2026-05-29**, 0 sygnałów przez całe okno. To poprawne
 zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
 → spodziewany werdykt `INCONCLUSIVE_EXTEND`, realny horyzont 12–18 mies.
 
-#### 🔴 CZTERY RZECZY, KTÓRYCH NIKT NIE SZUKAŁ (wszystkie z dziś)
+#### 🔴 CZTERY RZECZY, KTÓRYCH NIKT NIE SZUKAŁ (z 2026-08-06)
 1. **Mina w Terraformie** — `plan` na czystym repo chciał przedeployować obie
    Lambdy M5. Rozbrojone (patrz wyżej).
 2. **Model ułamkowy ZANIŻA koszt shorta** — prowizję wyjściową liczy od
@@ -78,10 +80,17 @@ zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
   preferencji, brak `/sapi/v1/bnbBurn`, brak checkboxa). Na koncie LIVE
   wyłączone 2026-08-06. Księga księguje to w `fees_external` poza equity —
   celowo, bo bez kursu BNB nie da się przeliczyć.
-- Kwarantanna enterprise w monolicie — jedyny zaległy porządek M5-safe, zero pilności.
+- ~~Kwarantanna enterprise w monolicie~~ — **WYKONANA 2026-08-07**.
+- **M3b (odchudzanie monolitu) ZAMKNIĘTE jako nieaktualne** 2026-08-07: produkcja
+  to 3 961 linii bez ŻADNEGO powiązania z 39 184 liniami `services/`+`brain/`.
+  Kasowanie tych 39 tys. świadomie odrzucone (zabrałoby furtkę `ENTERPRISE_ENGINES=on`).
+- 🔴 **BLOCKER M6: klucz Binance z prawem handlu wymaga STAŁEGO IP**, a Lambda
+  go nie ma. NAT GW ~$400/rok wobec budżetu $9,60/rok. Pełna analiza wariantów
+  w ramce w sekcji M6. PIERWSZY krok = zmierzyć, czy polityka faktycznie gryzie.
+- 🔑 Klucz LIVE `TradePulseAI` jest **read-only** — do skasowania (higiena, nie pilne).
 - Hosting frontendu na tradepulseai.co.uk — domena OK do 2026-09-28, auto-renew.
 
-### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-07, po PR #35–#40)
+### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-07, po PR #35–#44)
 
 **0. ✅ WSZYSTKO Z 2026-08-07 WDROŻONE I ZWERYFIKOWANE E2E** (deploy F7 zrobiony,
 dane ML komplet, audyt E2E przeszedł: suite zielony, bramka A PASS, C
@@ -821,9 +830,10 @@ frontend się builduje. Problem = wykonanie, nie koncept.
 # PLAN ROZWOJU — jak zrobić z tego bota, który się utrzymuje (ustalone 2026-08-05)
 
 **Poprzeczka jest śmiesznie nisko i warto to sobie uświadomić.** TradePulse
-kosztuje **$0,60/mies. = $7,20/rok** (udział w strefie Route53 $0,50 + zapytania
-DNS + storage DynamoDB; Lambda ~$0). Na $10k to **0,072%/rok**. **$100 realnego
-kapitału przy 10%/rok pokrywa rachunek.** Bot nie musi być lepszy — musi być
+kosztuje **$0,80/mies. = $9,60/rok** (udział w strefie Route53 $0,50 + zapytania
+DNS + storage DynamoDB + 2 nowe alarmy z 2026-08-07 po $0,10; Lambda ~$0; było
+$7,20/rok przed PR #43). Na $10k to **0,096%/rok**. **$100 realnego
+kapitału przy 10%/rok nadal pokrywa rachunek.** Bot nie musi być lepszy — musi być
 URUCHOMIONY na prawdziwych pieniądzach.
 *(Konto AWS płaci ~$108/mies., ale ~$88 z tego to `postra-dev` — INNA APLIKACJA,
 poza zakresem tego projektu, user wyraźnie: nie dotykamy.)*
