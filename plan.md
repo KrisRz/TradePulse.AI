@@ -87,16 +87,17 @@ zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
 dane ML komplet, audyt E2E przeszedł: suite zielony, bramka A PASS, C
 COLLECTING 1/20, heartbeat OK, DLQ puste, harmonogramy ENABLED).
 
-**1. ✅ ZROBIONE 2026-08-07** — pierwszy żywy przebieg F7 (16:10 UTC, bar 12:00)
-potwierdzony: `held`, zero eventów „position risk", 0 błędów. Alarm
-`shadow-bot-errors` rozpoznany jako echo (patrz log 2026-08-07f) i naprawiona
-kadencja wszystkich alarmów shadow/venue.
-🔴 **JEDYNE, CO ZOSTAŁO: user musi zrobić `terraform apply tfplan`**
-w `infra-serverless/` (2 add / 4 change / 0 destroy, same alarmy). Po apply
-sprawdź `aws cloudwatch describe-alarms --region eu-west-2` — spodziewane:
-`shadow-bot-errors` sam wróci do OK (błąd wypada z okna 2026-08-07 20:22 UTC),
-oba `-no-invocation` w OK, nic w ALARM. Gdyby `shadow-bot-errors` świecił po
-apply — to NOWY błąd, nie echo starego.
+**1. ✅ ZROBIONE 2026-08-07** — F7 potwierdzony na żywo (16:10 UTC, bar 12:00:
+`held`, zero eventów „position risk", 0 błędów). Alarmy shadow/venue naprawione
+i **zaapplikowane** (PR #43): `shadow-bot-errors` zgasł sam **78 s po apply**
+zamiast wisieć do jutra — dokładnie to, po co była zmiana. F5 i M3b zamknięte
+(patrz niżej). Jedyny otwarty drobiazg: `shadow-bot-no-invocation` był
+`INSUFFICIENT_DATA` tuż po utworzeniu (Lambda istnieje od 2026-08-06 20:22,
+alarm potrzebuje 25 h historii) — **sprawdź, czy przeszedł w OK**, jednym
+`aws cloudwatch describe-alarms --region eu-west-2`.
+
+🔴 **JEDYNA RZECZ DO ZROBIENIA PRZEZ USERA: skasować klucz Binance LIVE**
+w API Management (patrz F5 / `SECURITY.md`). Nic od niego nie zależy.
 
 **2. (research, M5-safe)** Backlog wg dowodów w
 `docs/RESEARCH_ULEPSZEN_2026-08-07.md` **po korekcie**: vol targeting SPADŁ
@@ -652,14 +653,41 @@ Cel: zwalidowana strategia EMA lata co dzień, zapisuje decyzje + P&L.
 - [x] **C6. Martwe pliki** `logger.ts`, `token-utils.ts` — podłącz/usuń.
 - **Done gdy:** admin chroniony, zero 404 w UI, jeden klient API, dashboard żyje.
 
-## ▶ M3b — Odchudzenie / Faza 2 (SESJA D)  🟡 (może iść równolegle)
-- [ ] **D1. Persistence 3×** → jeden (`enhanced_market_persistence` +
-      `market_data_persistence` + `market_data_persistence_service`).
-- [ ] **D2. Emergency 2×** → jeden.
+## ▶ M3b — Odchudzenie / Faza 2 (SESJA D)  ✅ ZAMKNIĘTE 2026-08-07
+
+> **Dlaczego zamknięte bez robienia D1/D2 — pomiar, nie opinia.** Premisa tego
+> milestone'u („mamy 3× persistence i 2× emergency, trzeba scalić") padła DWA
+> RAZY po tym, jak go zapisano, a plan po prostu za tym nie nadążył:
+> **2026-07-17** audyt 6 warstw skazał stos enterprise („unfixable, retrain
+> NOTHING"), **2026-08-07** kwarantanna sprawiła, że 5 skazanych klas odmawia
+> konstrukcji. Zmierzone 2026-08-07:
+>
+> | co | linii |
+> |---|---|
+> | `paper_trading` — PRODUKCJA, 4 Lambdy | **3 961** |
+> | `services/` + `brain/` — nigdzie nie wdrożone | **39 184** |
+>
+> `paper_trading` używa WYŁĄCZNIE importów względnych — zero powiązań z
+> `services/`, `brain/`, `emergency`, `persistence`. Konsumenci D1/D2 to
+> dokładnie skazany stos: `enhanced_market_persistence` ← `brain_controller`
+> (skazany); `emergency_controls` ← `brain_controller` + `intelligent_exit_engine`
+> (oba skazane). Czyli D1+D2 = ~2 940 linii refactoru wewnątrz 39 tys. linii
+> kodu, którego produkcja nigdy nie wykonuje, częściowo w służbie klas już
+> skazanych. Zero wpływu na bota, na bezpieczeństwo i na którąkolwiek bramkę.
+>
+> **Kwarantanna już osiągnęła cel bezpieczeństwa** (skazany kod nie startuje),
+> więc kasowanie tych 39 tys. linii też nie jest pilne — a dodatkowo skasowałoby
+> furtkę `ENTERPRISE_ENGINES=on`, którą kwarantanna świadomie zostawiła na
+> offline'owy research. Opcja pozostaje otwarta, gdyby repo miało realnie schudnąć.
+
+- ~~**D1. Persistence 3× → jeden**~~ — **OBSOLETE** (patrz ramka wyżej).
+- ~~**D2. Emergency 2× → jeden**~~ — **OBSOLETE** (patrz ramka wyżej).
 - [x] **D3. Ciche `except Exception`** (L5 `:1509,1514`, L4 `:1429` → 0.3/0.5)
       → loguj/podnoś krytyczne.
-- [ ] **D4. Legacy testy** `test_fast_diagnostics.py` — napraw/oznacz.
-- [ ] **D5. Usuń „TEMPORARILY SKIP VALIDATION"** (`lifespan.py:76-83`).
+- [x] **D4. Legacy testy** `test_fast_diagnostics.py` — **już zielone**:
+      zweryfikowane 2026-08-07, `5 passed`, nic nie było do naprawy.
+- [x] **D5. Usuń „TEMPORARILY SKIP VALIDATION"** — **już nie istnieje**:
+      `lifespan.py` nie ma w repo, stringa nie ma w `app/` (grep 2026-08-07).
 
 ## ▶ M4 — Więcej edge: ML jako filtr (SESJA F, część 1)
 - [x] **F1. ML filtr nad EMA** — 6-warstwowy mózg jako filtr confidence nad
@@ -690,7 +718,45 @@ Cel: zwalidowana strategia EMA lata co dzień, zapisuje decyzje + P&L.
       2026-07-28, 31 testów, zweryfikowane na żywym prodzie.
 
 ## ▶ M6 — Małe realne kwoty + PR (SESJA F, część 2)
-- [ ] **F5. Rotacja sekretów** (user): AWS key, Binance key, SECRET_KEY.
+> ### 🔴 BLOCKER M6 ZNALEZIONY 2026-08-07: klucz z prawem handlu wymaga STAŁEGO IP
+>
+> **Skąd:** własny komunikat Binance na stronie API Management konta LIVE —
+> *„if the IP is unrestricted and any permission other than Reading is enabled,
+> this API key will be deleted"*. Czyli klucz M6 (Spot Trading = on) **musi**
+> mieć whitelistę IP, inaczej Binance sam go skasuje.
+>
+> **Dlaczego to problem:** Lambda bez VPC wychodzi z puli DYNAMICZNYCH adresów
+> AWS — nie ma czego wpisać na whitelistę. Dziś nieszkodliwe (demo), ale przy
+> M6 dotyczyłoby kanału z prawdziwą kasą.
+>
+> **Warianty i koszt** (cennik do potwierdzenia w dniu decyzji — poniżej rząd
+> wielkości; budżet bota to dziś **$9,60/rok**):
+>
+> | wariant | koszt/rok | uwagi |
+> |---|---|---|
+> | NAT Gateway + EIP | **~$400** | ~$0,045–0,05/h. **40× budżet — odpada** |
+> | instancja NAT (`t4g.nano`) + EIP | ~$37 | tanio, ale własny host do utrzymania |
+> | mały always-on host robi tylko wywołanie giełdy | ~$42 | zmienia architekturę: to już nie Lambda |
+>
+> **NAJPIERW ZMIERZYĆ, POTEM BUDOWAĆ** (zasada z 2026-08-06): zanim
+> przebudujemy architekturę pod ten komunikat, sprawdzić **czy i kiedy** ta
+> polityka faktycznie gryzie — czy Binance kasuje klucz natychmiast, po N dniach,
+> czy dopiero przy użyciu. Możliwe, że problem jest mniejszy niż komunikat
+> sugeruje. To jest PIERWSZY krok F7, nie ostatni.
+>
+> **Czego NIE robić teraz:** nie zakładać klucza LIVE „na zapas" — leżałby
+> nieużywany 12–18 mies., a Binance i tak może go w tym czasie usunąć.
+
+- [~] **F5. Rotacja sekretów** — zweryfikowane 2026-08-07, szczegóły w `SECURITY.md`:
+      **AWS ✅** (zrotowany 2026-07-16, wyciekły `…UDYJX5PC` skasowany 2026-08-07;
+      ostatnie użycie 2025-12-27; produkcja i tak nie używa statycznych kluczy —
+      4 Lambdy chodzą na rolach IAM). **SECRET_KEY ✅ nie ma czego rotować**
+      (monolit nigdzie nie wdrożony, brak lokalnego `.env`, prod odmawia startu
+      ze słabym kluczem). 🔴 **ZOSTAJE: klucz Binance LIVE** z `development.env`
+      (`ENABLE_LIVE_TRADING=true`) — kopia siedzi w historii gita, tylko user
+      może go skasować w API Management. Nic od niego nie zależy: bot czyta
+      klucze DEMO z SSM, a `get_parameters` leci przy KAŻDYM wywołaniu bez
+      cache'u, więc rotacja propaguje się na następnym przebiegu.
 - [ ] **F6. PR** — dopiero gdy M0–M3 stabilne, CI zielone.
 - [ ] **F7. Realne $50–100** — Bramka 3 z sekcji 7. Części składowe:
       - 🔴 **maker orders — ODRZUCONE 2026-08-06 na podstawie pomiaru.** Binance
@@ -1316,3 +1382,44 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   Plan: 2 add / 4 change / 0 destroy, **wyłącznie `aws_cloudwatch_metric_alarm`**
   — zero zasobów Lambda, M5 nietknięte (zweryfikowane na JSON planu). Koszt
   +$2,40/rok (2 alarmy × $0,10/mies.), budżet $7,20 → $9,60/rok.
+  **Po apply (17:40:41): `shadow-bot-errors` → OK o 17:41:59, czyli 78 s
+  później** — stary ALARM zgasł sam zamiast wisieć do jutra, naprawa działa.
+  `venue-4h-no-invocation` → OK; `shadow-bot-no-invocation` INSUFFICIENT_DATA
+  (potrzebuje 25 h historii, Lambda żyje od 08-06 20:22) — do potwierdzenia.
+  sha M5 po apply: `r8Luxno…tNq0=`, LastModified nadal 2026-07-22. ✅
+- **2026-08-07g** — 🔐 F5 + 🧹 M3b, oba zamknięte POMIAREM zamiast roboty.
+  **F5:** AWS był już zrotowany 2026-07-16 (dzień po Fazie 0) — wyciekły
+  `AKIA…UDYJX5PC` (user `Kris`) Inactive, ostatnie użycie 2025-12-27,
+  **skasowany dziś**; produkcja i tak nie używa statycznych kluczy (4 Lambdy na
+  rolach IAM). SECRET_KEY: **nie ma czego rotować** — monolit nigdzie nie
+  wdrożony, brak lokalnego `.env`, prod odmawia startu ze słabym kluczem.
+  Zostaje TYLKO klucz Binance LIVE (akcja usera). Gitleaks w CI przechodzi na
+  każdym pushu. `SECURITY.md` przepisany na stan zweryfikowany (dokument
+  twierdził, że nic nie zrobione). ⚠️ Klasyfikator zablokował odczyt wartości
+  sekretów z historii gita — słusznie, nie obchodzono tego; nazwy są w
+  SECURITY.md i to wystarczyło.
+  **M3b:** premisa obalona pomiarem — `paper_trading` (produkcja) ma **3 961
+  linii** i WYŁĄCZNIE importy względne, `services/`+`brain/` **39 184 linie**
+  i zero powiązań z produkcją; konsumenci D1/D2 to skazany stos enterprise
+  (`brain_controller`, `intelligent_exit_engine`). D1/D2 → OBSOLETE, D4 już
+  zielone (`5 passed`), D5 już nie istnieje (`lifespan.py` nie ma w repo).
+  Kasowanie 39 tys. linii ODRZUCONE: kwarantanna już osiągnęła cel
+  bezpieczeństwa, a kasowanie zabrałoby furtkę `ENTERPRISE_ENGINES=on` na
+  offline'owy research. Suite 406 zielony.
+- **2026-08-07h** — 🔎 Klucz Binance LIVE obejrzany (screenshoty od usera,
+  świadomie BEZ automatyzacji przeglądarki na koncie z prawdziwymi środkami).
+  KOREKTA oceny z SECURITY.md: konto LIVE ma jeden klucz `TradePulseAI` i jest
+  **read-only** — zaznaczone tylko `Enable Reading`, a Spot/Margin Trading,
+  Withdrawals, Universal Transfer, Margin Loan i Prediction Trading są WYŁĄCZONE.
+  `ENABLE_LIVE_TRADING=true` z `development.env` było flagą APLIKACJI, nigdy
+  uprawnieniem Binance — aplikacja miała ustawione „handluj" kluczem, który nie
+  miał do tego prawa. Realny promień rażenia = odczyt sald/pozycji/historii,
+  **żadne środki nie mogły się ruszyć**. Wyciek prywatności, nie pieniędzy →
+  skasowanie to higiena, nie gaszenie pożaru. Nie dało się potwierdzić, czy to
+  TEN wyciekły klucz (klasyfikator blokuje odczyt wartości z historii gita,
+  nie obchodzono tego) — przy read-only ta odpowiedź niewiele zmienia.
+  🔴 **Przy okazji ZNALEZIONY BLOCKER M6** (patrz ramka w M6): własny komunikat
+  Binance mówi, że klucz z jakimkolwiek uprawnieniem poza Reading i bez
+  whitelisty IP ZOSTANIE SKASOWANY — a Lambda nie ma stałego IP. NAT Gateway
+  ~$400/rok wobec budżetu $9,60/rok. Pierwszy krok: ZMIERZYĆ, czy polityka
+  faktycznie gryzie, zanim cokolwiek przebudujemy.
