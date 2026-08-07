@@ -44,6 +44,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
+from . import position_risk
 from .binance_demo import BinanceDemoExecutor
 from .killswitch import KillSwitchState, apply_halt, evaluate, observe
 from .run import build_bot
@@ -51,6 +52,8 @@ from .shadow_handler import load_credentials_from_ssm
 
 #: Where the kill-switch state lives inside the bot's persisted state.
 KILLSWITCH_KEY = "killswitch"
+#: Where the F7 position-risk state lives (docs/F7_POSITION_RISK_2026-08-07.md).
+POSITION_RISK_KEY = "position_risk"
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -210,12 +213,35 @@ def handler(event, context):
         result["venue"] = reconciliation
         return result
 
+    # --- F7 position risk (stop-loss + daily loss limit) -------------------
+    # Runs AFTER the kill switch (which halts everything) and INSIDE the
+    # ordinary step: the overlay sees the strategy's target before the book
+    # reconciles it. State mutates in bot.extra, so bot.step()'s _save()
+    # persists it atomically with last_bar. Fail-closed: an overlay exception
+    # kills the run before any trade.
+    risk_state = position_risk.PositionRiskState.from_dict(
+        bot.extra.get(POSITION_RISK_KEY))
+    # Events describe THIS run only; without this a skipped (already-processed)
+    # bar would echo the previous run's events into the result.
+    risk_state.last_events = []
+
+    def overlay(target, portfolio, price, bar_time):
+        allowed = position_risk.apply(risk_state, target, portfolio, price, bar_time)
+        bot.extra[POSITION_RISK_KEY] = risk_state.as_dict()
+        for event in risk_state.last_events:
+            logger.warning("position risk: %s", event)
+        return allowed
+
+    bot.target_overlay = overlay
+
     try:
         result = bot.step()
     finally:
         # Evidence outlives the run: a fill that happened before a crash moved
         # real coins, and a venue rejection is exactly what C3 counts.
         persist_execution_evidence(bot, executor, reconciliation)
+    if risk_state.last_events:
+        result["position_risk"] = risk_state.last_events
     observe(switch, bot.portfolio.equity(mark), execution_drag=drag)
     bot.extra[KILLSWITCH_KEY] = switch.as_dict()
     bot._save()

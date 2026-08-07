@@ -50,6 +50,12 @@ class PaperBot:
         # switch lives here for the venue-backed channel; the 1d bot never
         # writes it and loading a state without it is a no-op.
         self.extra: dict = {}
+        # Optional risk seam: called with (target, portfolio, price, bar_time)
+        # AFTER the strategy decides and BEFORE the book reconciles, returning
+        # the target the book is allowed to trade (F7 position risk on the
+        # venue channel). None — the M5 1d path — means the strategy's word
+        # is final, exactly as before this seam existed.
+        self.target_overlay = None
         self._load()
 
     # -- persistence ----------------------------------------------------- #
@@ -106,7 +112,11 @@ class PaperBot:
                 out["decision_backfilled"] = True
             return out
 
-        target = int(self.strategy.target_positions(df).iloc[-1])
+        strategy_target = int(self.strategy.target_positions(df).iloc[-1])
+        target = strategy_target
+        if self.target_overlay is not None:
+            target = int(self.target_overlay(target, self.portfolio,
+                                             latest_price, latest_time))
         action = self.portfolio.reconcile(target, latest_price, latest_time)
 
         status = {
@@ -144,6 +154,11 @@ class PaperBot:
             "fee_rate": self.config.fee_rate,
             "slippage": self.config.slippage,
         }
+        # ``target`` is what the book actually reconciled (criterion 5 replays
+        # it); when a risk overlay overrode the strategy, keep the strategy's
+        # own word too so signal parity (criterion 2) can still be judged.
+        if target != strategy_target:
+            record["strategy_target"] = strategy_target
         self.last_bar = latest_time
         self.last_decision = record
         self._save()
