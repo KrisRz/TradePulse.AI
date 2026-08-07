@@ -83,15 +83,18 @@ zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
 
 ### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-07, po PR #35–#40)
 
-**0. DEPLOY CZEKA NA USERA:** `cd infra-serverless && terraform apply tfplan`
-(1 zmiana: venue-4h z F7 — do czasu apply Lambda gra bez stop-lossa/limitu).
-Po apply: sprawdź shas M5 (`r8Luxno…tNq0=`) i zrób smoke-invoke
-(`aws lambda invoke … tradepulse-venue-4h` → oczekiwane `skipped`).
+**0. ✅ WSZYSTKO Z 2026-08-07 WDROŻONE I ZWERYFIKOWANE E2E** (deploy F7 zrobiony,
+dane ML komplet, audyt E2E przeszedł: suite zielony, bramka A PASS, C
+COLLECTING 1/20, heartbeat OK, DLQ puste, harmonogramy ENABLED).
 
-**1. Dokończyć pobieranie metrics OI** (jeśli sesja padła w trakcie:
-`python -m app.backend.backtesting.external_data --dataset metrics --symbol
-BTCUSDT --start 2020-09-01 --end 2026-08-06 --out
-data/ml/external/BTCUSDT_metrics.csv`). Potem walidacja zakresu i wpis w §4.
+**1. Na start następnej sesji — jedno sprawdzenie (2 min):** pierwszy ŻYWY
+przebieg F7 był o 16:10 UTC 2026-08-07 (bar 12:00) — sprawdź logi:
+`aws logs filter-log-events --log-group-name /aws/lambda/tradepulse-venue-4h
+--region eu-west-2 --filter-pattern '"position risk"' …` — brak eventów przy
+pozycji +6% od entry = poprawne milczenie; błąd Lambdy = problem. Przy okazji:
+alarm `tradepulse-shadow-bot-errors` wyzerowany ręcznie po audycie (jednorazowy
+ImportModuleError z 2026-08-06 13:31, warstwa pandas dopięta, heartbeat 00:25
+przeszedł) — jeśli znów świeci, to NOWY błąd, nie echo starego.
 
 **2. (research, M5-safe)** Backlog wg dowodów w
 `docs/RESEARCH_ULEPSZEN_2026-08-07.md` **po korekcie**: vol targeting SPADŁ
@@ -136,8 +139,10 @@ BTC (odrzucony danymi), zmian w strategii 1d (unieważnia okno).
 - Pytest: **`.venv/bin/pytest`** (globalny python NIE ma pytest)
 - Bramka A na prodzie:
   `.venv/bin/python -m app.backend.paper_trading.gate --source dynamodb --fidelity`
-- Stan kill-switcha:
-  `.venv/bin/python -m app.backend.paper_trading.run killswitch --timeframe 4h`
+- Stan kill-switcha (⚠️ bez `PAPER_STATE_BACKEND=dynamodb` czyta LOKALNY,
+  pusty stan — pułapka znaleziona w audycie E2E 2026-08-07):
+  `PAPER_STATE_BACKEND=dynamodb AWS_DEFAULT_REGION=eu-west-2
+  .venv/bin/python -m app.backend.paper_trading.run killswitch --timeframe 4h`
 - Wymuszony heartbeat: `aws lambda invoke --function-name tradepulse-shadow-bot
   --region eu-west-2 --cli-binary-format raw-in-base64-out
   --payload '{"force":true}' /tmp/o.json`
@@ -1279,3 +1284,13 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   2166/2166 dni, 0 dubli; sum_open_interest 0 NaN — braki tylko w ratio
   long/short, i tak odrzuconych); funding+metrics+snapshot Coin Metrics
   zarchiwizowane w ~/TradePulse_safety/external_data_snapshots/.
+- **2026-08-07e** — ✅ AUDYT E2E po sesji: suite zielony; 4 Lambdy Active
+  (M5 sha nietknięte); harmonogramy 3/3 ENABLED; DLQ 3/3 puste; 1d bar
+  2026-08-06 przetworzony; shadow heartbeat perfekcyjny; 4h long equity
+  201,72; bramka A PASS 6/6 na prodzie; C COLLECTING 1/20; kill-switch
+  nie-halted (peak 202,33). Znaleziska: (1) alarm shadow-errors = echo
+  jednorazowego ImportModuleError z 2026-08-06 13:31 (ręczny invoke w trakcie
+  deployu przed dopięciem warstwy pandas) — wyzerowany ręcznie z opisem;
+  (2) CLI killswitch bez PAPER_STATE_BACKEND=dynamodb czyta lokalny pusty
+  stan — dopisane do „Przydatne". Do potwierdzenia na starcie następnej
+  sesji: pierwszy żywy przebieg F7 (16:10 UTC, bar 12:00).
