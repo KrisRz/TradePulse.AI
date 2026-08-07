@@ -205,13 +205,19 @@ resource "aws_scheduler_schedule" "venue_4h" {
 # ------------------------------------------------------------------- Alarms --
 # This channel places real orders and can HOLD a position for weeks. A silent
 # failure between the entry and the exit would strand it, so errors must be loud.
+#
+# The period is 300, not one 4h bar: CloudWatch evaluates once per period, so a
+# bar-long window would leave the alarm already lit when the NEXT bar fails, and
+# a state that does not transition sends no mail — consecutive failures, the
+# case that actually strands a position, would mail once. See the longer note in
+# shadow.tf.
 resource "aws_cloudwatch_metric_alarm" "venue_4h_errors" {
   alarm_name          = "${local.venue_4h_function_name}-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "Errors"
   namespace           = "AWS/Lambda"
-  period              = 14400 # one 4h bar
+  period              = 300
   statistic           = "Sum"
   threshold           = 0
   treat_missing_data  = "notBreaching"
@@ -224,13 +230,40 @@ resource "aws_cloudwatch_metric_alarm" "venue_4h_errors" {
   alarm_actions     = [aws_sns_topic.alerts.arn]
 }
 
+# The failure this channel cannot afford is the one no Errors datapoint reports:
+# the schedule stops firing while a real position is open, so nothing ever
+# evaluates the exit and the position sits at the venue indefinitely. Bars run
+# 6x/day at :10, so between two runs at most three hourly buckets are empty
+# (01:00, 02:00, 03:00 between the 00:10 and 04:10 runs) — five consecutive
+# empty buckets cannot happen unless a bar was genuinely missed.
+resource "aws_cloudwatch_metric_alarm" "venue_4h_heartbeat" {
+  alarm_name          = "${local.venue_4h_function_name}-no-invocation"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 5
+  datapoints_to_alarm = 5
+  metric_name         = "Invocations"
+  namespace           = "AWS/Lambda"
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.venue_4h.function_name
+  }
+
+  alarm_description = "4h venue channel missed a bar — the schedule is not firing while a position may be open."
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+}
+
 resource "aws_cloudwatch_metric_alarm" "venue_4h_dlq" {
   alarm_name          = "${local.venue_4h_function_name}-dlq"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateNumberOfMessagesVisible"
   namespace           = "AWS/SQS"
-  period              = 14400
+  period              = 300
   statistic           = "Maximum"
   threshold           = 0
   treat_missing_data  = "notBreaching"
