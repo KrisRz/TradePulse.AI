@@ -219,13 +219,23 @@ resource "aws_scheduler_schedule" "shadow_daily" {
 # ------------------------------------------------------------------- Alarms --
 # The whole point is to learn that execution broke. A silent failure here would
 # defeat the exercise, so any error mails the same address as the M5 alarms.
+#
+# The period is 300, NOT the daily invocation interval. A period as long as the
+# schedule looks natural and is a trap: CloudWatch evaluates a metric alarm once
+# per period, so a day-long window (a) delays the mail by up to a day and (b) —
+# the real damage — leaves the alarm already in ALARM when the NEXT day's run
+# fails, and a state that does not transition sends no mail. A heartbeat broken
+# for a week would mail exactly once, indistinguishable from a one-off. With a
+# short window the idle buckets carry no datapoint, notBreaching returns the
+# alarm to OK within minutes, and every new failure is its own transition and
+# its own mail. Lit-for-24h is not the durable record anyway — the logs are.
 resource "aws_cloudwatch_metric_alarm" "shadow_errors" {
   alarm_name          = "${local.shadow_function_name}-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "Errors"
   namespace           = "AWS/Lambda"
-  period              = 86400
+  period              = 300
   statistic           = "Sum"
   threshold           = 0
   treat_missing_data  = "notBreaching"
@@ -238,13 +248,42 @@ resource "aws_cloudwatch_metric_alarm" "shadow_errors" {
   alarm_actions     = [aws_sns_topic.alerts.arn]
 }
 
+# An Errors alarm cannot see a heartbeat that stopped being invoked at all — a
+# disabled schedule or a broken scheduler role emits no Errors datapoint, it
+# emits nothing. The heartbeat exists so the execution path cannot rot
+# unnoticed; a heartbeat that silently stops running defeats it exactly like a
+# failing one. Same shape as the paper bot's alarm in main.tf: Lambda publishes
+# no Invocations datapoint in idle hours, so missing data must count as
+# breaching, and 25 consecutive empty hourly buckets mean the 00:25 UTC run did
+# not happen (that invocation always lands inside a 25h window).
+resource "aws_cloudwatch_metric_alarm" "shadow_heartbeat" {
+  alarm_name          = "${local.shadow_function_name}-no-invocation"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 25
+  datapoints_to_alarm = 25
+  metric_name         = "Invocations"
+  namespace           = "AWS/Lambda"
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.shadow_bot.function_name
+  }
+
+  alarm_description = "Shadow heartbeat has not run for >24h — the execution path is no longer being exercised."
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+}
+
 resource "aws_cloudwatch_metric_alarm" "shadow_scheduler_dlq" {
   alarm_name          = "${local.shadow_function_name}-dlq"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateNumberOfMessagesVisible"
   namespace           = "AWS/SQS"
-  period              = 86400
+  period              = 300
   statistic           = "Maximum"
   threshold           = 0
   treat_missing_data  = "notBreaching"

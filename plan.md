@@ -87,14 +87,16 @@ zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
 dane ML komplet, audyt E2E przeszedł: suite zielony, bramka A PASS, C
 COLLECTING 1/20, heartbeat OK, DLQ puste, harmonogramy ENABLED).
 
-**1. Na start następnej sesji — jedno sprawdzenie (2 min):** pierwszy ŻYWY
-przebieg F7 był o 16:10 UTC 2026-08-07 (bar 12:00) — sprawdź logi:
-`aws logs filter-log-events --log-group-name /aws/lambda/tradepulse-venue-4h
---region eu-west-2 --filter-pattern '"position risk"' …` — brak eventów przy
-pozycji +6% od entry = poprawne milczenie; błąd Lambdy = problem. Przy okazji:
-alarm `tradepulse-shadow-bot-errors` wyzerowany ręcznie po audycie (jednorazowy
-ImportModuleError z 2026-08-06 13:31, warstwa pandas dopięta, heartbeat 00:25
-przeszedł) — jeśli znów świeci, to NOWY błąd, nie echo starego.
+**1. ✅ ZROBIONE 2026-08-07** — pierwszy żywy przebieg F7 (16:10 UTC, bar 12:00)
+potwierdzony: `held`, zero eventów „position risk", 0 błędów. Alarm
+`shadow-bot-errors` rozpoznany jako echo (patrz log 2026-08-07f) i naprawiona
+kadencja wszystkich alarmów shadow/venue.
+🔴 **JEDYNE, CO ZOSTAŁO: user musi zrobić `terraform apply tfplan`**
+w `infra-serverless/` (2 add / 4 change / 0 destroy, same alarmy). Po apply
+sprawdź `aws cloudwatch describe-alarms --region eu-west-2` — spodziewane:
+`shadow-bot-errors` sam wróci do OK (błąd wypada z okna 2026-08-07 20:22 UTC),
+oba `-no-invocation` w OK, nic w ALARM. Gdyby `shadow-bot-errors` świecił po
+apply — to NOWY błąd, nie echo starego.
 
 **2. (research, M5-safe)** Backlog wg dowodów w
 `docs/RESEARCH_ULEPSZEN_2026-08-07.md` **po korekcie**: vol targeting SPADŁ
@@ -1294,3 +1296,23 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   (2) CLI killswitch bez PAPER_STATE_BACKEND=dynamodb czyta lokalny pusty
   stan — dopisane do „Przydatne". Do potwierdzenia na starcie następnej
   sesji: pierwszy żywy przebieg F7 (16:10 UTC, bar 12:00).
+- **2026-08-07f** — ✅ F7 ZWERYFIKOWANY NA ŻYWO + 🔔 naprawa kadencji alarmów.
+  Przebieg 16:10 UTC (bar 12:00): `status: held`, ZERO eventów „position risk"
+  = poprawne milczenie, equity 201,36 (+0,68%), killswitch czysty, 0 błędów.
+  Mail z alarmu `shadow-bot-errors` (13:39 UTC) = ECHO, nie nowa awaria:
+  jedyny błąd tej Lambdy to ImportModuleError z **2026-08-06 20:22:33**
+  (nie 13:31 — korekta wpisu 2026-08-07e); ręczne zerowanie o 13:37:49 padło
+  za wcześnie o ~7h, bo `period=86400` to okno KROCZĄCE — CloudWatch przeliczył
+  99 s później, błąd wciąż w oknie, powrót do ALARM. WADA, którą to odsłoniło:
+  CloudWatch ewaluuje alarm RAZ NA PERIOD, więc okno = interwał harmonogramu
+  znaczy, że przy awarii dzień po dniu alarm już świeci, a stan bez TRANZYCJI
+  nie wysyła maila — heartbeat zepsuty tydzień mailuje raz, nieodróżnialnie
+  od jednorazówki. Naprawa (`shadow.tf`, `venue_4h.tf`): errors+DLQ 86400/14400
+  → **300** (idle bucket bez datapointu + notBreaching = powrót do OK w minuty,
+  każda nowa awaria = własna tranzycja = własny mail) + DWA nowe alarmy
+  `-no-invocation` wg wzorca z `main.tf` (Errors nie widzi harmonogramu, który
+  przestał odpalać: shadow 25×3600 breaching; venue-4h 5×3600 — między barami
+  max 3 puste kubełki, więc 5 = realnie zgubiony bar przy OTWARTEJ pozycji).
+  Plan: 2 add / 4 change / 0 destroy, **wyłącznie `aws_cloudwatch_metric_alarm`**
+  — zero zasobów Lambda, M5 nietknięte (zweryfikowane na JSON planu). Koszt
+  +$2,40/rok (2 alarmy × $0,10/mies.), budżet $7,20 → $9,60/rok.
