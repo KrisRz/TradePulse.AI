@@ -1,20 +1,19 @@
 /* TradePulse.AI — page behaviour
-   Reads the bot's own status endpoint and renders what it says.
+   Reads the system's own read-only status API and renders what it says.
    Nothing on this page is hard-coded market data. */
 (function () {
   'use strict';
 
-  var STATUS_API = 'https://bot.tradepulseai.co.uk/?format=json';
-  var LIVE_SINCE = Date.UTC(2026, 6, 16);      // 2026-07-16, first paper bar
+  var STATUS_API = '/api/state';          // same-origin, behind CloudFront
   var REFRESH_MS = 5 * 60 * 1000;
 
   var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var nf2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   var $ = function (id) { return document.getElementById(id); };
 
-  /* ── bot status ─────────────────────────────────────────── */
-  var POS = { '1': 'LONG', '0': 'FLAT', '-1': 'SHORT' };
+  var venue = null;   // kept so the live price can re-mark equity between polls
 
+  /* ── helpers ────────────────────────────────────────────── */
   function relTime(iso) {
     var t = Date.parse(String(iso).replace(' ', 'T'));
     if (isNaN(t)) return '';
@@ -26,46 +25,107 @@
     return Math.round(h / 24) + 'd ago';
   }
 
-  function actionOf(d) {
-    if (!d.action) return 'HOLD';
-    var to = +d.action.to, from = +d.action.from;
-    if (to > from) return 'BUY';
-    if (to < from) return 'SELL';
-    return 'HOLD';
+  function bps(x) {
+    // slippage is a fraction; basis points read better than five decimals
+    return (x * 10000).toFixed(1) + ' bps';
   }
 
-  function renderState(data) {
-    var posN = String(parseInt(data.position, 10) || 0);
+  /* ── the executing bot ──────────────────────────────────── */
+  function renderVenue(v) {
+    venue = v;
+
     var posEl = $('mPosition');
     if (posEl) {
-      posEl.textContent = POS[posN] || '?';
-      posEl.setAttribute('data-pos', posN === '1' ? 'long' : posN === '-1' ? 'short' : 'flat');
+      posEl.textContent = v.position_label || '—';
+      posEl.setAttribute('data-pos',
+        v.position > 0 ? 'long' : v.position < 0 ? 'short' : 'flat');
     }
-    if ($('mEquity')) $('mEquity').textContent = '$' + nf2.format(+data.equity || 0);
+    if ($('mEntry')) {
+      $('mEntry').textContent = v.entry_fill ? '$' + nf2.format(v.entry_fill) : '—';
+    }
+    if ($('mOrder')) {
+      var id = (window.TP_LAST_ORDER || '');
+      $('mOrder').textContent = id ? '#' + id : '—';
+    }
+    if ($('mKill')) {
+      var halted = v.killswitch && v.killswitch.halted;
+      $('mKill').textContent = halted ? 'HALTED' : 'armed';
+      $('mKill').style.color = halted ? 'var(--down)' : 'var(--up)';
+    }
+    if ($('stateAge')) $('stateAge').textContent = 'updated ' + relTime(v.updated_at);
 
-    var ret = +data.total_return_pct || 0;
-    if ($('mReturn')) {
-      $('mReturn').textContent = (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%';
-      $('mReturn').style.color = ret > 0 ? 'var(--up)' : ret < 0 ? 'var(--down)' : '';
-    }
-    if ($('mDaysLive')) {
-      $('mDaysLive').textContent = String(Math.max(0, Math.floor((Date.now() - LIVE_SINCE) / 86400000)));
-    }
-    if ($('stateAge')) $('stateAge').textContent = 'updated ' + relTime(data.updated_at);
-
-    if (window.TP && data.trades) window.TP.setTrades(data.trades);
+    markEquity(null);
   }
 
+  // Equity is (cash + qty × price). Marking it to the live price rather than
+  // the last close is the difference between a number and a live number.
+  function markEquity(livePrice) {
+    if (!venue || !$('mEquity')) return;
+    var px = livePrice || venue.last_price;
+    if (!px) return;
+
+    var eq = (venue.cash || 0) + (venue.qty || 0) * px;
+    var initial = venue.initial_capital || 0;
+    $('mEquity').textContent = '$' + nf2.format(eq);
+
+    var ret = initial ? (eq / initial - 1) * 100 : 0;
+    $('mEquity').style.color = ret > 0 ? 'var(--up)' : ret < 0 ? 'var(--down)' : '';
+  }
+
+  window.TP_MARK = markEquity;   // chart.js calls this on every price tick
+
+  /* ── execution quality ──────────────────────────────────── */
+  function renderExecution(fills, gate) {
+    if (!fills || !fills.length) return;
+    var f = fills[0];
+    window.TP_LAST_ORDER = f.order_id;
+
+    if ($('slipAssumed')) $('slipAssumed').textContent = bps(f.slippage_assumed || 0);
+    if ($('slipActual')) $('slipActual').textContent = bps(f.slippage_actual || 0);
+
+    if ($('slipRatio') && f.slippage_assumed) {
+      var ratio = (f.slippage_actual / f.slippage_assumed);
+      $('slipRatio').textContent = ratio.toFixed(1) + '× the assumption';
+    }
+    if ($('gateCount')) {
+      $('gateCount').textContent = gate.collected + ' of ' + gate.required + ' fills collected';
+    }
+
+    var body = $('fillsBody');
+    if (!body) return;
+    body.textContent = '';
+    fills.forEach(function (x) {
+      var tr = document.createElement('tr');
+      [
+        x.order_id,
+        String(x.time || '').slice(0, 16),
+        x.qty,
+        x.assumed_price ? '$' + nf2.format(x.assumed_price) : '—',
+        x.actual_price ? '$' + nf2.format(x.actual_price) : '—',
+        bps(x.slippage_actual || 0)
+      ].forEach(function (val, i) {
+        var cell = document.createElement(i === 0 ? 'th' : 'td');
+        if (i === 0) cell.setAttribute('scope', 'row');
+        cell.textContent = val;
+        tr.appendChild(cell);
+      });
+      body.appendChild(tr);
+    });
+    var wrap = $('fillsWrap');
+    if (wrap) wrap.hidden = false;
+  }
+
+  /* ── decision tape ──────────────────────────────────────── */
   function renderTape(decisions) {
     var run = $('tapeRun');
     if (!run || !decisions || !decisions.length) return;
 
     var cells = decisions.slice().reverse().map(function (d) {
-      var act = actionOf(d);
-      var day = String(d.bar || '').slice(0, 10);
+      var act = d.action || 'HOLD';
+      var when = String(d.bar || '').slice(0, 16);
       var px = +d.price;
       return '<span class="tape__cell">' +
-        '<span class="tape__date">' + day + '</span>' +
+        '<span class="tape__date">' + when + '</span>' +
         '<span class="tape__px">' + (isFinite(px) ? nf2.format(px) : '—') + '</span>' +
         '<span class="tape__act" data-a="' + act + '">' + act + '</span>' +
         '</span>';
@@ -77,9 +137,11 @@
   function loadStatus() {
     fetch(STATUS_API, { cache: 'no-store' })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function (data) {
-        renderState(data);
-        renderTape(data.recent_decisions);
+      .then(function (d) {
+        renderExecution(d.fills, d.gate || {});
+        if (d.venue) renderVenue(d.venue);
+        renderTape(d.decisions);
+        if (window.TP && d.fills) window.TP.setFills(d.fills);
       })
       .catch(function () {
         if ($('stateAge')) $('stateAge').textContent = 'status unreachable';

@@ -7,7 +7,7 @@
 <meta name="description" content="An autonomous BTC trading bot running on AWS serverless since July 2026. Live decisions, real architecture, and every rejected upgrade on the record.">
 <meta name="theme-color" content="#080B0F">
 <meta property="og:title" content="TradePulse.AI — trading on evidence, not on vibes">
-<meta property="og:description" content="Autonomous EMA-crossover bot on AWS serverless. 4 Lambdas, 59 Terraform resources, $0.60/month. 8 upgrades tested, 8 rejected by measurement.">
+<meta property="og:description" content="Autonomous EMA-crossover bot on AWS serverless. Live position on a demo venue, measured execution slippage, and every rejected upgrade on the record.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tradepulseai.co.uk/">
 
@@ -40,6 +40,7 @@
 
     <nav class="rail__nav" aria-label="Sections">
       <a href="#chart">Live</a>
+      <a href="#execution">Execution</a>
       <a href="#stack">Stack</a>
       <a href="#loop">Loop</a>
       <a href="#evidence">Evidence</a>
@@ -69,11 +70,11 @@
       </h1>
 
       <p class="hero__lede">
-        A trend-following bot that decides once a day, executes on its own, and
-        reports what it did. Every proposed improvement gets pre-registered,
-        measured out-of-sample, and usually thrown away. Eight have been tested.
-        Eight were rejected. It still runs the boring strategy — that is the one
-        the evidence supports.
+        A trend-following system that decides on its own schedule, sends its own
+        orders to an exchange, and writes down what came back. Every proposed
+        improvement gets pre-registered, measured out-of-sample, and usually
+        thrown away. Eight have been tested. Eight were rejected. It still runs
+        the boring strategy — that is the one the evidence supports.
       </p>
 
       <div class="hero__cta">
@@ -82,9 +83,9 @@
       </div>
     </div>
 
-    <aside class="panel hero__panel" aria-label="Live bot state">
+    <aside class="panel hero__panel" aria-label="Live state of the executing bot">
       <div class="panel__bar">
-        <span class="panel__title">BOT STATE</span>
+        <span class="panel__title">EXECUTING BOT · 4H</span>
         <span class="panel__meta" id="stateAge">—</span>
       </div>
 
@@ -94,27 +95,27 @@
           <dd class="readout__pos" id="mPosition">—</dd>
         </div>
         <div class="readout__row">
-          <dt>Paper equity</dt>
+          <dt>Entry fill</dt>
+          <dd data-tabular id="mEntry">—</dd>
+        </div>
+        <div class="readout__row">
+          <dt>Equity <span class="unit">live mark</span></dt>
           <dd data-tabular id="mEquity">—</dd>
         </div>
         <div class="readout__row">
-          <dt>Return</dt>
-          <dd data-tabular id="mReturn">—</dd>
+          <dt>Order on venue</dt>
+          <dd data-tabular id="mOrder">—</dd>
         </div>
         <div class="readout__row">
-          <dt>Days live</dt>
-          <dd data-tabular id="mDaysLive">—</dd>
-        </div>
-        <div class="readout__row">
-          <dt>Cost to operate</dt>
-          <dd data-tabular>$0.60<span class="unit">/mo</span></dd>
+          <dt>Killswitch</dt>
+          <dd id="mKill">—</dd>
         </div>
       </dl>
 
       <p class="panel__note">
-        Paper account on the Binance demo venue. No real capital is at risk —
-        the bot is serving a pre-registered evaluation window that closes
-        2026-09-10.
+        Orders go to the Binance <strong>demo</strong> venue — real API, real
+        order ids, no real money. The position above is open right now; equity
+        is marked to the live price, not to the last close.
       </p>
     </aside>
   </div>
@@ -126,9 +127,10 @@
     <div>
       <h2 class="sec-h">The tape, live</h2>
       <p class="sec-sub">
-        Daily candles streaming from Binance. The two moving averages are the
-        bot's entire opinion of the market: when the fast one crosses the slow
-        one at a bar close, it acts.
+        Four-hour candles streaming from Binance — the same bars the executing
+        bot decides on. The two moving averages are its entire opinion of the
+        market: when the fast one crosses the slow one at a bar close, it sends
+        an order.
       </p>
     </div>
     <ul class="legend" aria-label="Chart legend">
@@ -141,14 +143,14 @@
 
   <figure class="chart-frame">
     <div class="chart-frame__bar">
-      <span class="chart-frame__label">BTCUSDT · 1D · binance</span>
+      <span class="chart-frame__label">BTCUSDT · 4H · binance</span>
       <span class="chart-frame__label chart-frame__label--r" id="chartStatus">loading…</span>
     </div>
     <div id="chartHost" class="chart-host" role="img"
-         aria-label="Live daily candlestick chart of BTCUSDT with EMA 20 and EMA 100 overlays and markers where the bot entered or exited."></div>
+         aria-label="Live four-hour candlestick chart of BTCUSDT with EMA 20 and EMA 100 overlays and markers where the bot filled orders on the venue."></div>
     <figcaption class="chart-cap" id="chartCap">
-      Markers appear where the bot actually entered or exited. It is flat right
-      now, so there are none — a bot with nothing to do should do nothing.
+      Markers are placed from the venue fill log — the price the exchange
+      actually gave the bot, not the price it hoped for.
     </figcaption>
   </figure>
 </section>
@@ -160,10 +162,78 @@
   <div class="tape__edge tape__edge--r" aria-hidden="true"></div>
 </section>
 
+<!-- ══ EXECUTION ══ -->
+<section class="sec" id="execution">
+  <header class="sec-head reveal">
+    <p class="eyebrow">02 — WHERE THEORY MEETS THE EXCHANGE</p>
+    <h2 class="sec-h sec-h--big">The bot was wrong<br>about its own costs</h2>
+    <p class="sec-sub sec-sub--wide">
+      A backtest assumes a price. A venue gives you one. The gap between them
+      decides whether a strategy that works on paper survives contact with a
+      real order book, so the system measures it on every fill instead of
+      trusting the assumption.
+    </p>
+  </header>
+
+  <div class="slip reveal">
+    <div class="slip__pair">
+      <div class="slip__box">
+        <span class="slip__k">Assumed slippage</span>
+        <span class="slip__v" id="slipAssumed">—</span>
+        <span class="slip__n">what the backtest charged itself</span>
+      </div>
+      <div class="slip__arrow" aria-hidden="true">→</div>
+      <div class="slip__box slip__box--hot">
+        <span class="slip__k">Measured on the venue</span>
+        <span class="slip__v" id="slipActual">—</span>
+        <span class="slip__n" id="slipRatio">from the durable fill log</span>
+      </div>
+    </div>
+    <p class="slip__caveat">
+      <strong id="gateCount">—</strong> — the execution gate needs twenty
+      observed fills before this number means anything. One fill is an anecdote,
+      and the page says so rather than rounding it up into a conclusion.
+    </p>
+  </div>
+
+  <ul class="tiles tiles--three">
+    <li class="tile reveal">
+      <span class="tile__l">Durable fill log</span>
+      <p>Every order the venue accepts is written append-only with its id, the
+      requested quantity, the price that came back and the fee actually charged.
+      Nothing is reconstructed after the fact.</p>
+    </li>
+    <li class="tile reveal">
+      <span class="tile__l">Killswitch</span>
+      <p>Tracks peak equity and halts the bot on a drawdown it cannot explain.
+      Currently armed and not tripped — the panel above reads its real state.</p>
+    </li>
+    <li class="tile reveal">
+      <span class="tile__l">Position risk</span>
+      <p>A per-trade stop and a daily loss limit, both pre-registered from
+      measurement rather than picked to look good, block new entries once hit.</p>
+    </li>
+  </ul>
+
+  <div class="table-wrap reveal" id="fillsWrap" hidden>
+    <table class="ev ev--fills">
+      <caption class="sr-only">Orders filled on the Binance demo venue</caption>
+      <thead>
+        <tr>
+          <th scope="col">Order id</th><th scope="col">When</th>
+          <th scope="col">Qty</th><th scope="col">Assumed</th>
+          <th scope="col">Filled at</th><th scope="col">Slippage</th>
+        </tr>
+      </thead>
+      <tbody id="fillsBody"></tbody>
+    </table>
+  </div>
+</section>
+
 <!-- ══ STACK ══ -->
 <section class="sec" id="stack">
   <header class="sec-head reveal">
-    <p class="eyebrow">02 — WHAT IT RUNS ON</p>
+    <p class="eyebrow">03 — WHAT IT RUNS ON</p>
     <h2 class="sec-h sec-h--big">No servers, no babysitting</h2>
     <p class="sec-sub sec-sub--wide">
       The whole system is four Lambda functions on a schedule, one DynamoDB
@@ -171,6 +241,32 @@
       in Terraform end to end, so it can be destroyed and rebuilt from nothing.
     </p>
   </header>
+
+  <ul class="bots reveal">
+    <li class="bot">
+      <span class="bot__tag bot__tag--hot">executes</span>
+      <h3>Venue bot · 4h</h3>
+      <p>Sends real orders to the Binance demo venue and records what came back.
+      This is the one in the panel at the top of the page.</p>
+    </li>
+    <li class="bot">
+      <span class="bot__tag">simulates</span>
+      <h3>Paper bot · 1d</h3>
+      <p>Runs the same strategy as pure accounting, touching no exchange at all.
+      It answers "is the strategy right", uncontaminated by execution.</p>
+    </li>
+    <li class="bot">
+      <span class="bot__tag">measures</span>
+      <h3>Shadow bot · 1d</h3>
+      <p>Puts a token quantity in and straight back out each day. Not trading —
+      an instrument for measuring what the venue does to an order.</p>
+    </li>
+  </ul>
+
+  <p class="bots__note reveal">
+    Splitting them is the whole trick: when the numbers disagree, the difference
+    is execution cost, and it is measured rather than argued about.
+  </p>
 
   <div class="arch reveal" aria-hidden="true">
     <svg class="arch__svg" viewBox="0 0 900 390" preserveAspectRatio="xMidYMid meet" focusable="false">
@@ -259,9 +355,11 @@
       <p>Tests, secret scanning, and separate deploys for backend, infra and site.</p>
     </li>
     <li class="tile reveal tile--money">
-      <span class="tile__n"><span class="tile__pre">$</span><span data-count="0.60" data-dec="2">0</span></span>
-      <span class="tile__l">Per month, all in</span>
-      <p>The bot costs about $7 a year to operate. That number is the reason the design looks like this.</p>
+      <span class="tile__n"><span class="tile__pre">$</span><span data-count="1.35" data-dec="2">0</span></span>
+      <span class="tile__l">Per month, everything</span>
+      <p>Lambda $0.00, CloudFront $0.00, CloudWatch $0.00 — checked against the
+      actual bill. The whole cost is $0.50 of DNS and $0.75 of domain. Compute
+      rounds to nothing, which is the point of the design.</p>
     </li>
   </ul>
 </section>
@@ -269,7 +367,7 @@
 <!-- ══ LOOP ══ -->
 <section class="sec sec--alt" id="loop">
   <header class="sec-head reveal">
-    <p class="eyebrow">03 — HOW ONE DECISION HAPPENS</p>
+    <p class="eyebrow">04 — HOW ONE DECISION HAPPENS</p>
     <h2 class="sec-h sec-h--big">Seven steps, once a day</h2>
     <p class="sec-sub sec-sub--wide">
       This is a real sequence, and the order is the whole point: the bot never
@@ -319,7 +417,7 @@
 <!-- ══ EVIDENCE ══ -->
 <section class="sec" id="evidence">
   <header class="sec-head reveal">
-    <p class="eyebrow">04 — THE PART NOBODY PUTS ON A PORTFOLIO</p>
+    <p class="eyebrow">05 — THE PART NOBODY PUTS ON A PORTFOLIO</p>
     <h2 class="sec-h sec-h--big">Eight upgrades tested.<br>Eight rejected.</h2>
     <p class="sec-sub sec-sub--wide">
       Each of these was a good idea with real literature behind it. Each was
