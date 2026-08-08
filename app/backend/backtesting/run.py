@@ -91,7 +91,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--timeframe", default="1h", help="Comma-separated, e.g. '15m,1h,4h'")
     p.add_argument("--start", default=None, help="ISO date, inclusive")
     p.add_argument("--end", default=None, help="ISO date, inclusive")
-    p.add_argument("--fee", type=float, default=0.001, help="Fee rate per side (0.001 = 0.1%)")
+    p.add_argument("--fee", type=float, default=0.001, help="Fee rate per side (0.001 = 0.1%%)")
     p.add_argument("--slippage", type=float, default=0.0002)
     p.add_argument("--sl", type=float, default=None, help="Stop-loss fraction, e.g. 0.01")
     p.add_argument("--tp", type=float, default=None, help="Take-profit fraction, e.g. 0.02")

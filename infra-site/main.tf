@@ -9,9 +9,16 @@
 terraform {
   required_version = ">= 1.10"
   required_providers {
+    # 6.x specifically for `invoked_via_function_url` on aws_lambda_permission,
+    # which 5.x cannot express. Safe to run ahead of infra-serverless here
+    # because this root owns no M5 resources.
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
+    }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
     }
   }
 
@@ -228,6 +235,31 @@ resource "aws_cloudfront_distribution" "site" {
     domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
     origin_id                = "site-s3"
     origin_access_control_id = aws_cloudfront_origin_access_control.site.id
+  }
+
+  origin {
+    domain_name = local.status_lambda_host
+    origin_id   = "status-lambda"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  # The bot state API, same-origin under /api/* so the page's CSP stays
+  # `connect-src 'self'` for it.
+  ordered_cache_behavior {
+    path_pattern             = "/api/*"
+    target_origin_id         = "status-lambda"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = aws_cloudfront_cache_policy.api_short.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
   default_cache_behavior {

@@ -22,13 +22,32 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
-**Stan na 2026-08-08 (sesja: weryfikacja produ + research OOS ensemble → REJECT).**
-Prod zweryfikowany na żywo 2026-08-08: 3 boty chodzą, wszystkie alarmy OK
-(w tym `shadow-bot-no-invocation` dojrzał), bramka C = 1 rekord FILLED w
-DynamoDB. **Jesteśmy w trybie: czekamy i zbieramy dane.**
+**Stan na 2026-08-08 (sesja: FRONTEND PORTFOLIO — strona live + README).**
+Kanał badawczy bez zmian od poprzedniej sesji (cheap queue wyczerpana,
+meta-labeler odrzucony). Ta sesja **nie dotknęła M5** — cała praca poszła
+w warstwę prezentacji, świadomie w odseparowanym roocie Terraform.
+
+Zrobione 2026-08-08 (PR #54 zmergowany, **PR #55 OTWARTY, CI zielone**):
+- **`https://tradepulseai.co.uk` LIVE** (apex + www) — statyczna strona
+  portfolio: żywy wykres 4h z Binance, EMA20/100, markery z logu fillów,
+  panel realnej pozycji bota giełdowego, sekcja egzekucji, tabela 8
+  odrzuconych ulepszeń. Źródło `web/`, deploy `./scripts/deploy_site.sh`
+  **z korzenia repo**.
+- **Nowa Lambda `tradepulse-site-status`** (read-only, `infra-site/lambda/`)
+  serwuje `/api/state` spod tej samej domeny → CSP zostaje `connect-src 'self'`.
+  Cache 60 s na brzegu ogranicza origin do ~1/min (rachunek nie może wystrzelić).
+- **README przepisany** — stary reklamował 6-warstwowy mózg ML jako serce
+  systemu (jest w kwarantannie od 2026-07-17) i powtarzał wycofaną notę
+  „edge dies >0.3% fees". Poprawione też Sharpe na OOS 1,00–1,14 vs B&H
+  0,81–1,00. Przy okazji naprawiony `backtesting.run --help` (crash na
+  niezescape'owanym `%` w argparse).
+- Koszt zaktualizowany na uczciwe **$1,35/mies.** ($0,50 strefa + $0,75 domena;
+  Lambda/CloudFront/CloudWatch = $0,00 wg realnej faktury).
+
+**Jesteśmy dalej w trybie: czekamy i zbieramy dane.**
 
 #### Gdzie jesteśmy w milestone'ach
-M0–M4 ✅ · **M5 BIEGNIE — dzień 22/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
+M0–M4 ✅ · **M5 BIEGNIE — dzień 23/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
 Kanał 4h: long od 2026-08-06 16:00 (entry 64 474,17, qty 0,0031); bramka C
 zbiera dowody TRWALE (DynamoDB) — `COLLECTING 1/20 filli`; kill-switch + **F7**
 (stop 10% od entry, dzienny limit 10%, progi pre-rejestrowane z pomiaru).
@@ -37,7 +56,7 @@ zbiera dowody TRWALE (DynamoDB) — `COLLECTING 1/20 filli`; kill-switch + **F7*
 Coin Metrics 2026-08-07 (też w safety), metrics OI **dociągnięte** (623 170
 wierszy, 2166/2166 dni). Alarmy shadow/venue naprawione (PR #43) — patrz niżej.
 
-#### Co CHODZI na produkcji (4 Lambdy, wszystkie ENABLED, koszt ~$0,80/mies.)
+#### Co CHODZI na produkcji (5 Lambd, wszystkie ENABLED, koszt $1,35/mies. all-in)
 
 | Co | Harmonogram | Rola |
 |---|---|---|
@@ -45,6 +64,7 @@ wierszy, 2166/2166 dni). Alarmy shadow/venue naprawione (PR #43) — patrz niże
 | `tradepulse-paper-bot-status` | (URL) | status/dashboard |
 | `tradepulse-shadow-bot` | `cron(25 0 * * ? *)` | heartbeat egzekucji na demo — codzienny round-trip, żeby ścieżka nie zgniła |
 | `tradepulse-venue-4h` | `cron(10 0,4,8,12,16,20)` | BTC 4h, księga papierowa z **prawdziwymi fillami** na demo + kill-switch |
+| `tradepulse-site-status` | (URL, za CloudFront) | **NIE-M5**, dodana 2026-08-08 — read-only `/api/state` dla strony. Własny root `infra-site/`, IAM = tylko `GetItem`/`Query` na tabeli. Zmiana tutaj NIE dotyka M5. |
 
 #### 🔒 NIENARUSZALNE W OKNIE M5
 - Obie Lambdy M5 mają `CodeSha256 = r8LuxnoJgluluwOEuPP6tk5nRDrhpjNq4emap/stNq0=`
@@ -57,6 +77,14 @@ wierszy, 2166/2166 dni). Alarmy shadow/venue naprawione (PR #43) — patrz niże
 - Każda nowa Lambda MUSI mieć własny zip (`build_lambda_package.sh --shadow` /
   `--venue-4h`). Współdzielenie `var.lambda_zip_path` = redeploy M5.
 - Bramka A: **PASS 6/6** na żywym prodzie, 22 decyzje bez luk.
+- 🆕 **DWA ROOTY TERRAFORM (2026-08-08).** `infra-serverless/` = M5, zamrożone.
+  `infra-site/` = strona + jej API, własny klucz stanu, **zero zasobów M5** —
+  `apply` tam fizycznie nie może zaplanować zmiany na Lambdach bota. To jest
+  mocniejsze niż `ignore_changes`. **Nie łączyć rootów.** Efekt uboczny, który
+  się opłacił: `infra-site/` mógł przejść na AWS provider 6.x (potrzebny dla
+  `invoked_via_function_url`) bez ryzyka dla zamrożonego stacku, zero dryfu.
+  Strefa Route53 zostaje własnością `infra-serverless/`, w `infra-site/`
+  czytana data source'em.
 
 #### Stan strategii
 Bot 1d stoi **FLAT od 2026-05-29**, 0 sygnałów przez całe okno. To poprawne
@@ -92,7 +120,9 @@ zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
   w ramce w sekcji M6. PIERWSZY krok = zmierzyć, czy polityka faktycznie gryzie.
 - ~~🔑 Klucz LIVE `TradePulseAI` do skasowania~~ — **SKASOWANY 2026-08-08**
   przez usera; konto LIVE bez kluczy, demo (SSM) nietknięte, boty grają.
-- Hosting frontendu na tradepulseai.co.uk — domena OK do 2026-09-28, auto-renew.
+- ~~Hosting frontendu na tradepulseai.co.uk~~ — **ZROBIONE 2026-08-08**, apex
+  + www live (S3 + CloudFront + ACM, root `infra-site/`). Domena auto-renew do
+  2026-09-28 ($9/rok — TA POZYCJA JEST W koszcie $1,35/mies., nie zapomnieć).
 
 ### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-07, po PR #35–#44)
 
@@ -151,6 +181,19 @@ czekania/zbierania do oceny bramek ≥2026-09-10.**
 
 **3. Czekanie na dane:** bramka C zbiera fille sama (~20 filli ≈ 10 mies.);
 ocena bramek A/B ≥2026-09-10; re-ocena co 28 dni.
+
+**4. ✅ FRONTEND PORTFOLIO — ZROBIONE 2026-08-08** (PR #54 zmergowany,
+**PR #55 czeka na merge usera**, CI zielone). `tradepulseai.co.uk` live.
+Otwarte drobiazgi na później, żadne nie pilne:
+- 🔴 **Liczby na stronie to publiczne DEKLARACJE, nie ozdoby.** Zdezaktualizują
+  się same: poślizg „2,0 → 4,4 bps / 1 of 20 fills" (zmieni się przy każdym
+  nowym fillu bramki C), 5 Lambd, 82 zasoby Terraform, 9 alarmów, $1,35/mies.
+  **Przy każdej zmianie infry sprawdzić `web/index.html`.**
+- Mobile zweryfikowany na 390 px (brak przewijania poziomego; taśma, tabele
+  i diagram przewijają się wewnątrz kontenerów — tak ma być).
+- Sekcja „three bots" i diagram architektury pokazują 4 Lambdy M5; nowa
+  `tradepulse-site-status` jest świadomie pominięta w diagramie jako
+  szczegół prezentacji.
 
 ⚠️ **NIE ROBIMY:** vol targetingu w wariancie zmierzonym w M4 (odrzucony),
 ensemble prędkości EMA (odrzucony OOS 2026-08-08), maker orderów (zmierzone,

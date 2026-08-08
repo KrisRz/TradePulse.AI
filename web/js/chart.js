@@ -1,13 +1,14 @@
 /* TradePulse.AI — live chart
-   Daily BTCUSDT candles from Binance REST, kept current over a websocket.
-   EMA 20 / EMA 100 are computed here from the same closed candles the bot
-   uses, so the lines on screen are the lines it actually decides on. */
+   Four-hour BTCUSDT candles from Binance REST, kept current over a websocket.
+   The interval matches the bot that actually executes, so the EMA 20 / EMA 100
+   computed here are the lines it decides on and the fill markers land on the
+   exact bar the order went out. */
 (function () {
   'use strict';
 
   var SYMBOL = 'BTCUSDT';
-  var REST = 'https://api.binance.com/api/v3/klines?symbol=' + SYMBOL + '&interval=1d&limit=260';
-  var WS = 'wss://stream.binance.com:9443/stream?streams=btcusdt@kline_1d/btcusdt@ticker';
+  var REST = 'https://api.binance.com/api/v3/klines?symbol=' + SYMBOL + '&interval=4h&limit=400';
+  var WS = 'wss://stream.binance.com:9443/stream?streams=btcusdt@kline_4h/btcusdt@ticker';
 
   var C = {
     up: '#00A99C', down: '#F61C30',
@@ -71,7 +72,7 @@
       },
       grid: { vertLines: { color: C.grid }, horzLines: { color: C.grid } },
       rightPriceScale: { borderColor: C.border, scaleMargins: { top: 0.14, bottom: 0.14 } },
-      timeScale: { borderColor: C.border, rightOffset: 5, barSpacing: 7, fixLeftEdge: true },
+      timeScale: { borderColor: C.border, rightOffset: 14, barSpacing: 7, fixLeftEdge: true },
       crosshair: {
         mode: LightweightCharts.CrosshairMode.Normal,
         vertLine: { color: C.lo, width: 1, style: 3, labelBackgroundColor: C.ema20 },
@@ -96,10 +97,17 @@
         chart.applyOptions({ width: host.clientWidth, height: host.clientHeight });
         // The bar spacing fitContent picked belongs to the old width, so refit —
         // otherwise the candles sit in a narrow strip with dead space beside them.
-        if (bars.length) chart.timeScale().fitContent();
+        if (bars.length) fitWithPadding();
       }).observe(host);
     }
     return true;
+  }
+
+  // All bars, plus empty space on the right so a marker label near the last
+  // bar has somewhere to render instead of being cut off by the price scale.
+  function fitWithPadding() {
+    if (!chart || !bars.length) return;
+    chart.timeScale().setVisibleLogicalRange({ from: 0, to: bars.length + 12 });
   }
 
   /* ── history ────────────────────────────────────────────── */
@@ -121,7 +129,7 @@
         // fit once the browser has settled the real element width
         requestAnimationFrame(function () {
           chart.applyOptions({ width: host.clientWidth, height: host.clientHeight });
-          chart.timeScale().fitContent();
+          fitWithPadding();
         });
         setStatus(bars.length + ' bars');
         paintPrice(bars[bars.length - 1].close, null);
@@ -138,6 +146,7 @@
     }
     lastPrice = price;
     lastEl.textContent = nf.format(price);
+    if (window.TP_MARK) window.TP_MARK(price);
     if (changePct !== null && changePct !== undefined && chgEl) {
       var v = +changePct;
       chgEl.textContent = (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
@@ -206,32 +215,33 @@
   function toBarTime(iso) {
     var ms = Date.parse(String(iso).replace(' ', 'T'));
     if (isNaN(ms)) return null;
-    return Math.floor(ms / 86400000) * 86400;   // snap to the UTC daily bar
+    return Math.floor(ms / 14400000) * 14400;   // snap to the 4-hour bar
   }
 
   window.TP = {
-    setTrades: function (trades) {
-      if (!candles || !trades || !trades.length) return;
-      var marks = [];
-      trades.forEach(function (t) {
-        var isLong = (+t.side || 1) > 0;
-        var a = toBarTime(t.entry_time), b = toBarTime(t.exit_time);
-        if (a) marks.push({
-          time: a, position: 'belowBar', color: C.up, shape: 'arrowUp',
-          text: (isLong ? 'BUY ' : 'SELL ') + nf.format(+t.entry_price)
-        });
-        if (b) marks.push({
-          time: b, position: 'aboveBar',
-          color: (+t.net_return >= 0 ? C.up : C.down), shape: 'arrowDown',
-          text: 'EXIT ' + nf.format(+t.exit_price) + ' · ' + ((+t.net_return) * 100).toFixed(2) + '%'
-        });
-      });
-      marks.sort(function (x, y) { return x.time - y.time; });
+    setFills: function (fills) {
+      if (!candles || !fills || !fills.length) return;
+      var marks = fills.map(function (f) {
+        var t = toBarTime(f.time);
+        if (!t) return null;
+        var buy = (+f.side || 1) > 0;
+        return {
+          time: t,
+          position: buy ? 'belowBar' : 'aboveBar',
+          color: buy ? C.up : C.down,
+          shape: buy ? 'arrowUp' : 'arrowDown',
+          text: buy ? 'BUY' : 'SELL'
+        };
+      }).filter(Boolean);
+
+      if (!marks.length) return;
+      marks.sort(function (a, b) { return a.time - b.time; });
       candles.setMarkers(marks);
+
       if (capEl) {
-        capEl.textContent = 'Markers show where the bot actually entered and exited — ' +
-          trades.length + ' closed ' + (trades.length === 1 ? 'trade' : 'trades') +
-          ' on the paper account.';
+        capEl.textContent = 'Marked from the venue fill log: ' + marks.length +
+          (marks.length === 1 ? ' order' : ' orders') +
+          ' the exchange actually filled, at the price it actually gave.';
       }
     }
   };
