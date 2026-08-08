@@ -127,10 +127,18 @@ win rate 36%, mediana hold ~60 d → embargo!). Meta-labeler ODBLOKOWANY.
 `data/ml/events_features.csv`, doc EVENT_FEATURES_2026-08-08.md): 128
 zdarzeń × 12 cech (5 per-aktywo + 7 rynkowych z BTC jako proxy cyklu),
 dyscyplina point-in-time (shift +1 d dla serii dziennych, kroczące okna,
-braki NIE imputowane; komplet 91/128). **NASTĘPNY KROK = model wg D11**:
-purged split po wspólnym czasie + embargo ≥60 d + leave-one-asset-out,
-metryka P&L nie accuracy, poprzeczka = czyste EMA20/100 na harnessie M4.
-SOPR NIEDOSTĘPNY w darmowym Coin Metrics.
+braki NIE imputowane; komplet 91/128). ✅ **PROJEKT MODELU PRE-REJESTROWANY
+2026-08-08** po 3 kwerendach źródłowych → **`docs/METALABELER_DESIGN_
+2026-08-08.md` — implementować DOKŁADNIE wg niego, nie renegocjować**:
+purged 5-fold w blokach kalendarzowych wspólnych dla 8 rynków, purge po
+faktycznych [entry,exit], **embargo 30 d** (h≈1%·T; horyzont etykiety
+załatwia purging, NIE embargo — wcześniejszy zapis „≥60 d" był błędny),
+logit L2 (XGBoost tylko benchmark), 5 cech wybranych domenowo + wskaźnik
+braków, wagi próbek |net_return|, tłumienie 0,5–1,5× zamiast bramki 0/1,
+diagnostyka top-5 wygranych, dziennik prób (budżet: dziesiątki na całe
+życie projektu). Uczciwa prognoza z literatury: najpewniej wyjdzie
+„zostajemy przy EMA" — i to też jest wynik. SOPR NIEDOSTĘPNY w darmowym
+Coin Metrics.
 
 **3. Czekanie na dane:** bramka C zbiera fille sama (~20 filli ≈ 10 mies.);
 ocena bramek A/B ≥2026-09-10; re-ocena co 28 dni.
@@ -1522,3 +1530,19 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   PRZED liczeniem. Doc: docs/EVENT_FEATURES_2026-08-08.md. Krok 2 (model,
   celowo OSOBNA sesja): purged split po wspólnym czasie, embargo ≥60 d,
   leave-one-asset-out, metryka P&L/Sharpe, bar = czyste EMA20/100 na M4.
+- **2026-08-08f** — 📐 PROJEKT META-LABELERA PRE-REJESTROWANY po analizie
+  kanonu (3 równoległe kwerendy: splity · mały-N klasyfikator · praktyka
+  meta-labelingu; źródła pierwotne z URL-ami w doc). Kluczowe ustalenia:
+  (1) embargo = 30 d wg h≈1%·T, NIE 60 — horyzont etykiety załatwia
+  purging (korekta wcześniejszego zapisu); (2) EPV 46/12=3,8 → logit L2
+  z silnym shrinkage, cechy cięte do 5 domenowo PRZED etykietami
+  (mvrv_z, funding_cum30, vol_pctl_1y, btc_trend_gap, dd_from_1y_high
+  + wskaźnik braków; wykluczone m.in. trend_gap własny — zero information
+  advantage); (3) zero korekt balansu klas, zero CalibratedClassifierCV;
+  (4) wagi próbek |net_return| + tłumienie 0,5–1,5× zamiast bramki 0/1
+  (pułapka ogona trend-followingu); (5) budżet prób z MinBTL = dziesiątki
+  na całe życie, dziennik prób w doc; (6) uczciwa prognoza: brak
+  opublikowanego pozytywu przy N≈128, dwie pełne ewaluacje po Sharpie
+  negatywne → najpewniej „zostajemy przy EMA". Doc:
+  docs/METALABELER_DESIGN_2026-08-08.md. Implementacja = następna sesja,
+  DOKŁADNIE wg doc.
