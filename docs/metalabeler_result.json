@@ -1,0 +1,21 @@
+{
+  "trial_1_logit": {
+    "sharpe_diff": 0.002382529904390751,
+    "chosen_C": [
+      0.01,
+      0.01,
+      0.01,
+      0.01
+    ],
+    "cpcv_path_wins": 4,
+    "top5_red_flags": 5
+  },
+  "trial_2_xgb": {
+    "sharpe_diff": 0.0017201860707392325
+  },
+  "verdict": {
+    "pooled OOF: attenuated Sharpe > plain": true,
+    "CPCV: attenuated wins >=3/5 paths": true
+  },
+  "accepted": true
+}

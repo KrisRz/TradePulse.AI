@@ -136,9 +136,18 @@ załatwia purging, NIE embargo — wcześniejszy zapis „≥60 d" był błędny
 logit L2 (XGBoost tylko benchmark), 5 cech wybranych domenowo + wskaźnik
 braków, wagi próbek |net_return|, tłumienie 0,5–1,5× zamiast bramki 0/1,
 diagnostyka top-5 wygranych, dziennik prób (budżet: dziesiątki na całe
-życie projektu). Uczciwa prognoza z literatury: najpewniej wyjdzie
-„zostajemy przy EMA" — i to też jest wynik. SOPR NIEDOSTĘPNY w darmowym
-Coin Metrics.
+życie projektu). 🔴 **WYKONANE 2026-08-08, próby #1–#2: REJECT W TREŚCI**
+(doc METALABELER_RESULTS_2026-08-08.md): mechaniczny PASS 2/2 okazał się
+artefaktem jednostajnej dźwigni — rho(p,win)=−0,01, 0/128 zdarzeń realnie
+stłumionych, top-5 wygranych 5/5 czerwonych flag, C=0,01 wszędzie. Cechy
+nie niosą wykrywalnego sygnału przy N=128 — prognoza literatury
+potwierdzona. **Zostajemy przy czystym EMA20/100 (pretendent #8).**
+Reguła werdyktu skorygowana osobnym commitem (od próby #3: wymagana
+dyskryminacja + realne tłumienie + zero flag). Powrót do tematu tylko
+przy ~2× większej próbie (szersze uniwersum/czas) albo cechach z nową
+hipotezą (np. funding per-aktywo). SOPR NIEDOSTĘPNY w darmowym Coin
+Metrics. **Research: brak tanich otwartych pozycji — pełny tryb
+czekania/zbierania do oceny bramek ≥2026-09-10.**
 
 **3. Czekanie na dane:** bramka C zbiera fille sama (~20 filli ≈ 10 mies.);
 ocena bramek A/B ≥2026-09-10; re-ocena co 28 dni.
@@ -1546,3 +1555,21 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   negatywne → najpewniej „zostajemy przy EMA". Doc:
   docs/METALABELER_DESIGN_2026-08-08.md. Implementacja = następna sesja,
   DOKŁADNIE wg doc.
+- **2026-08-08g** — 🔬 META-LABELER WYKONANY (próby #1–#2) → **REJECT
+  W TREŚCI**. Implementacja 1:1 wg pre-rejestracji (`metalabeler.py`):
+  purged 4-fold (guard z 5 zadziałał: trening<90), embargo 30 d, nested
+  C→0,01 we WSZYSTKICH foldach (max shrinkage = dane same mówią „pusto"),
+  wagi |ret|, sizing 0,5–1,5×, LOAO, CPCV(6,2), XGB benchmark. Mechaniczna
+  reguła przeszła 2/2 (+0,002 Sharpe; CPCV 4/5) — ale diagnostyka obnażyła
+  artefakt: WSZYSTKIE p∈[0,60;0,95] → 0/128 stłumionych (pasmo = dźwignia
+  1,3×, bo wagi |ret| windują ważony base rate do ~0,85 przy sizingu
+  centrowanym na 0,5 — niespójność §2↔§3 projektu), rho(p,net_ret)=0,04
+  (p=0,67), rho(p,win)=−0,01 (p=0,90) = ZERO dyskryminacji, top-5
+  wygranych 5/5 flag (rangi 0,01–0,14), LOAO 3/8, XGB identycznie.
+  Werdykt treściowy: cechy nie niosą sygnału przy N=128; żaden sizing nie
+  naprawia zerowej dyskryminacji. Zgodne z prognozą §0 projektu. Reguła
+  skorygowana OSOBNYM commitem (od #3: Spearman>0 p<0,10, ≥10% zdarzeń
+  <1×, flaga=auto-REJECT). Dziennik prób: 2/kilkadziesiąt zużyte. Docs:
+  METALABELER_RESULTS_2026-08-08.md. **EMA20/100 odparło pretendenta #8 —
+  wszystkie sensowne ścieżki ulepszeń ZMIERZONE I ZAMKNIĘTE; projekt w
+  czystym trybie zbierania danych do ≥2026-09-10.**
