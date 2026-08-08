@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TradePulse.AI — an autonomous trading system that runs on evidence</title>
+<meta name="description" content="An autonomous BTC trading bot running on AWS serverless since July 2026. Live decisions, real architecture, and every rejected upgrade on the record.">
+<meta name="theme-color" content="#080B0F">
+<meta property="og:title" content="TradePulse.AI — trading on evidence, not on vibes">
+<meta property="og:description" content="Autonomous EMA-crossover bot on AWS serverless. 4 Lambdas, 59 Terraform resources, $0.60/month. 8 upgrades tested, 8 rejected by measurement.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tradepulseai.co.uk/">
+
+<link rel="preload" href="fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/plex-mono-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preconnect" href="https://api.binance.com">
+<link rel="preconnect" href="https://bot.tradepulseai.co.uk">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23080B0F'/><path d='M3 20 L9 20 L12 11 L16 25 L20 16 L23 20 L29 20' fill='none' stroke='%23FFB000' stroke-width='2.5' stroke-linejoin='round' stroke-linecap='round'/></svg>">
+</head>
+<body>
+
+<a class="skip-link" href="#chart">Skip to the live chart</a>
+
+<!-- ══ RAIL ══ -->
+<header class="rail" id="rail">
+  <div class="rail__in">
+    <a class="rail__brand" href="#top">
+      <svg class="rail__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <path d="M3 20 L9 20 L12 11 L16 25 L20 16 L23 20 L29 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>
+      <span>TRADEPULSE<span class="rail__dim">.AI</span></span>
+    </a>
+
+    <div class="rail__price" aria-live="off">
+      <span class="rail__sym">BTCUSDT</span>
+      <span class="rail__last" id="railLast" data-tabular>—</span>
+      <span class="rail__chg" id="railChg">—</span>
+    </div>
+
+    <nav class="rail__nav" aria-label="Sections">
+      <a href="#chart">Live</a>
+      <a href="#stack">Stack</a>
+      <a href="#loop">Loop</a>
+      <a href="#evidence">Evidence</a>
+      <a class="rail__ext" href="https://github.com/KrisRz/TradePulse.AI" rel="noopener">Source ↗</a>
+    </nav>
+
+    <div class="rail__status">
+      <span class="dot" id="wsDot" data-state="wait"></span>
+      <span id="wsLabel">connecting</span>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ══ HERO ══ -->
+<section class="hero">
+  <div class="hero__grid">
+
+    <div class="hero__lead">
+      <p class="eyebrow" data-scramble>AUTONOMOUS SYSTEM · AWS eu-west-2 · LIVE SINCE 2026-07-16</p>
+
+      <h1 class="hero__h1">
+        <span class="line"><span>Trading on</span></span>
+        <span class="line"><span>evidence,</span></span>
+        <span class="line"><span>not <em>vibes</em>.</span></span>
+      </h1>
+
+      <p class="hero__lede">
+        A trend-following bot that decides once a day, executes on its own, and
+        reports what it did. Every proposed improvement gets pre-registered,
+        measured out-of-sample, and usually thrown away. Eight have been tested.
+        Eight were rejected. It still runs the boring strategy — that is the one
+        the evidence supports.
+      </p>
+
+      <div class="hero__cta">
+        <a class="btn btn--primary" href="#chart">Watch it decide</a>
+        <a class="btn" href="https://bot.tradepulseai.co.uk/?format=json" rel="noopener">Raw status API ↗</a>
+      </div>
+    </div>
+
+    <aside class="panel hero__panel" aria-label="Live bot state">
+      <div class="panel__bar">
+        <span class="panel__title">BOT STATE</span>
+        <span class="panel__meta" id="stateAge">—</span>
+      </div>
+
+      <dl class="readout">
+        <div class="readout__row readout__row--wide">
+          <dt>Position</dt>
+          <dd class="readout__pos" id="mPosition">—</dd>
+        </div>
+        <div class="readout__row">
+          <dt>Paper equity</dt>
+          <dd data-tabular id="mEquity">—</dd>
+        </div>
+        <div class="readout__row">
+          <dt>Return</dt>
+          <dd data-tabular id="mReturn">—</dd>
+        </div>
+        <div class="readout__row">
+          <dt>Days live</dt>
+          <dd data-tabular id="mDaysLive">—</dd>
+        </div>
+        <div class="readout__row">
+          <dt>Cost to operate</dt>
+          <dd data-tabular>$0.60<span class="unit">/mo</span></dd>
+        </div>
+      </dl>
+
+      <p class="panel__note">
+        Paper account on the Binance demo venue. No real capital is at risk —
+        the bot is serving a pre-registered evaluation window that closes
+        2026-09-10.
+      </p>
+    </aside>
+  </div>
+</section>
+
+<!-- ══ CHART ══ -->
+<section class="chart-sec" id="chart">
+  <div class="chart-head">
+    <div>
+      <h2 class="sec-h">The tape, live</h2>
+      <p class="sec-sub">
+        Daily candles streaming from Binance. The two moving averages are the
+        bot's entire opinion of the market: when the fast one crosses the slow
+        one at a bar close, it acts.
+      </p>
+    </div>
+    <ul class="legend" aria-label="Chart legend">
+      <li><i class="swatch swatch--ema20"></i>EMA 20 · fast</li>
+      <li><i class="swatch swatch--ema100"></i>EMA 100 · slow</li>
+      <li><i class="swatch swatch--up"></i>up</li>
+      <li><i class="swatch swatch--down"></i>down</li>
+    </ul>
+  </div>
+
+  <figure class="chart-frame">
+    <div class="chart-frame__bar">
+      <span class="chart-frame__label">BTCUSDT · 1D · binance</span>
+      <span class="chart-frame__label chart-frame__label--r" id="chartStatus">loading…</span>
+    </div>
+    <div id="chartHost" class="chart-host" role="img"
+         aria-label="Live daily candlestick chart of BTCUSDT with EMA 20 and EMA 100 overlays and markers where the bot entered or exited."></div>
+    <figcaption class="chart-cap" id="chartCap">
+      Markers appear where the bot actually entered or exited. It is flat right
+      now, so there are none — a bot with nothing to do should do nothing.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ══ TAPE ══ -->
+<section class="tape" aria-label="Recent bot decisions">
+  <div class="tape__edge tape__edge--l" aria-hidden="true"></div>
+  <div class="tape__track" id="tapeTrack"><div class="tape__run" id="tapeRun"></div></div>
+  <div class="tape__edge tape__edge--r" aria-hidden="true"></div>
+</section>
+
+<!-- ══ STACK ══ -->
+<section class="sec" id="stack">
+  <header class="sec-head reveal">
+    <p class="eyebrow">02 — WHAT IT RUNS ON</p>
+    <h2 class="sec-h sec-h--big">No servers, no babysitting</h2>
+    <p class="sec-sub sec-sub--wide">
+      The whole system is four Lambda functions on a schedule, one DynamoDB
+      table, and enough alarms that it tells me before I notice. It is defined
+      in Terraform end to end, so it can be destroyed and rebuilt from nothing.
+    </p>
+  </header>
+
+  <div class="arch reveal" aria-hidden="true">
+    <svg class="arch__svg" viewBox="0 0 900 390" preserveAspectRatio="xMidYMid meet" focusable="false">
+      <!-- wires: the happy path runs left→right, then down to the edge -->
+      <g class="arch__wires" fill="none" stroke-linecap="round">
+        <path class="wire" d="M180 74 H320"/>
+        <path class="wire" d="M500 74 H640"/>
+        <path class="wire" d="M410 98 V170"/>
+        <path class="wire" d="M110 98 V170"/>
+        <path class="wire" d="M455 98 V140 H725 V170"/>
+        <path class="wire" d="M410 236 V300"/>
+        <path class="wire" d="M500 324 H640"/>
+      </g>
+      <g class="arch__pulses" fill="none" stroke-linecap="round">
+        <path class="pulse pulse--1" pathLength="100" d="M180 74 H320"/>
+        <path class="pulse pulse--2" pathLength="100" d="M500 74 H640"/>
+        <path class="pulse pulse--3" pathLength="100" d="M410 98 V170"/>
+        <path class="pulse pulse--4" pathLength="100" d="M410 236 V300"/>
+        <path class="pulse pulse--5" pathLength="100" d="M500 324 H640"/>
+      </g>
+
+      <!-- nodes -->
+      <g class="arch__nodes">
+        <g class="node" transform="translate(40,50)">
+          <rect width="140" height="48" rx="3"/>
+          <text x="14" y="20">EventBridge</text><text x="14" y="36" class="t2">3 schedules</text>
+        </g>
+        <g class="node node--hot" transform="translate(320,50)">
+          <rect width="180" height="48" rx="3"/>
+          <text x="14" y="20">λ paper-bot</text><text x="14" y="36" class="t2">decides at bar close</text>
+        </g>
+        <g class="node" transform="translate(640,50)">
+          <rect width="180" height="48" rx="3"/>
+          <text x="14" y="20">Binance demo</text><text x="14" y="36" class="t2">order + fill</text>
+        </g>
+
+        <g class="node" transform="translate(40,170)">
+          <rect width="140" height="48" rx="3"/>
+          <text x="14" y="20">SQS · DLQ</text><text x="14" y="36" class="t2">3 queues</text>
+        </g>
+        <g class="node node--hot" transform="translate(320,170)">
+          <rect width="180" height="66" rx="3"/>
+          <text x="14" y="22">DynamoDB</text><text x="14" y="38" class="t2">single table</text><text x="14" y="54" class="t2">append-only fills</text>
+        </g>
+        <g class="node" transform="translate(640,170)">
+          <rect width="180" height="48" rx="3"/>
+          <text x="14" y="20">CloudWatch</text><text x="14" y="36" class="t2">9 alarms → SNS → me</text>
+        </g>
+
+        <g class="node" transform="translate(320,300)">
+          <rect width="180" height="48" rx="3"/>
+          <text x="14" y="20">λ status</text><text x="14" y="36" class="t2">JSON + HTML</text>
+        </g>
+        <g class="node node--edge" transform="translate(640,300)">
+          <rect width="180" height="48" rx="3"/>
+          <text x="14" y="20">CloudFront</text><text x="14" y="36" class="t2">this page</text>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+  <ul class="tiles">
+    <li class="tile reveal">
+      <span class="tile__n" data-count="4">0</span>
+      <span class="tile__l">Lambda functions</span>
+      <p>Paper bot, 4-hour venue bot, shadow bot, status endpoint. Nothing else is running.</p>
+    </li>
+    <li class="tile reveal">
+      <span class="tile__n" data-count="59">0</span>
+      <span class="tile__l">Terraform resources</span>
+      <p>Every queue, alarm, role and DNS record is code. Remote state in S3.</p>
+    </li>
+    <li class="tile reveal">
+      <span class="tile__n" data-count="9">0</span>
+      <span class="tile__l">CloudWatch alarms</span>
+      <p>Errors, silence and dead letters each page me by email. Silence is the one that matters.</p>
+    </li>
+    <li class="tile reveal">
+      <span class="tile__n" data-count="1">0</span>
+      <span class="tile__l">DynamoDB table</span>
+      <p>Single-table design. State, decisions and an append-only fill log share one key space.</p>
+    </li>
+    <li class="tile reveal">
+      <span class="tile__n" data-count="5">0</span>
+      <span class="tile__l">CI workflows</span>
+      <p>Tests, secret scanning, and separate deploys for backend, infra and site.</p>
+    </li>
+    <li class="tile reveal tile--money">
+      <span class="tile__n"><span class="tile__pre">$</span><span data-count="0.60" data-dec="2">0</span></span>
+      <span class="tile__l">Per month, all in</span>
+      <p>The bot costs about $7 a year to operate. That number is the reason the design looks like this.</p>
+    </li>
+  </ul>
+</section>
+
+<!-- ══ LOOP ══ -->
+<section class="sec sec--alt" id="loop">
+  <header class="sec-head reveal">
+    <p class="eyebrow">03 — HOW ONE DECISION HAPPENS</p>
+    <h2 class="sec-h sec-h--big">Seven steps, once a day</h2>
+    <p class="sec-sub sec-sub--wide">
+      This is a real sequence, and the order is the whole point: the bot never
+      sees a price that has not finished forming.
+    </p>
+  </header>
+
+  <ol class="steps">
+    <li class="step reveal">
+      <span class="step__n">01</span>
+      <h3>The bar closes</h3>
+      <p>00:00 UTC. EventBridge Scheduler fires the Lambda ten minutes later, not at the boundary — exchanges are late sometimes.</p>
+    </li>
+    <li class="step reveal">
+      <span class="step__n">02</span>
+      <h3>Only closed candles are read</h3>
+      <p>The in-progress bar is dropped before anything is computed. Reading it is how a backtest quietly starts cheating.</p>
+    </li>
+    <li class="step reveal">
+      <span class="step__n">03</span>
+      <h3>EMA 20 against EMA 100</h3>
+      <p>Fast above slow means hold long; fast below means stand aside. That is the entire signal.</p>
+    </li>
+    <li class="step reveal">
+      <span class="step__n">04</span>
+      <h3>Compare with durable state</h3>
+      <p>The target is checked against what DynamoDB says the bot is actually holding, not against what it thinks it did last time.</p>
+    </li>
+    <li class="step reveal">
+      <span class="step__n">05</span>
+      <h3>Act, if anything changed</h3>
+      <p>An order goes to the Binance demo venue, and the fill comes back with a price and an order id. Both are written down.</p>
+    </li>
+    <li class="step reveal">
+      <span class="step__n">06</span>
+      <h3>Write the row, then publish</h3>
+      <p>Decision, price, position and equity are persisted. The status Lambda serves them; this page reads them.</p>
+    </li>
+    <li class="step reveal">
+      <span class="step__n">07</span>
+      <h3>If it goes quiet, it says so</h3>
+      <p>A missing invocation raises an alarm, the same as an error would. A bot that dies silently is worse than one that loses money.</p>
+    </li>
+  </ol>
+</section>
+
+<!-- ══ EVIDENCE ══ -->
+<section class="sec" id="evidence">
+  <header class="sec-head reveal">
+    <p class="eyebrow">04 — THE PART NOBODY PUTS ON A PORTFOLIO</p>
+    <h2 class="sec-h sec-h--big">Eight upgrades tested.<br>Eight rejected.</h2>
+    <p class="sec-sub sec-sub--wide">
+      Each of these was a good idea with real literature behind it. Each was
+      pre-registered — the pass criteria written down before the result was
+      known — and each failed honestly out of sample. Keeping the list is
+      cheaper than relearning it.
+    </p>
+  </header>
+
+  <div class="table-wrap reveal">
+    <table class="ev">
+      <caption class="sr-only">Proposed strategy upgrades and the measured reason each was rejected</caption>
+      <thead>
+        <tr><th scope="col">Candidate</th><th scope="col">The idea</th><th scope="col">Why it died</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Volatility targeting</th>
+          <td>Scale exposure inversely to recent variance.</td>
+          <td>Cuts drawdown exactly as the literature promises, but Sharpe drops at <em>every</em> target level in the 2022+ regime, and turnover doubles.</td>
+        </tr>
+        <tr>
+          <th scope="row">EMA speed ensemble</th>
+          <td>Blend several EMA pairs so no single parameter choice can be lucky.</td>
+          <td>Passed the screen, then failed the honest harness: three of four pre-specified checks rejected it.</td>
+        </tr>
+        <tr>
+          <th scope="row">Regime filter <span class="mult">×3</span></th>
+          <td>Only take the signal when a 200-day trend agrees.</td>
+          <td>All three variants cut Sharpe. The one that did improve drawdown still cost about 0.05 Sharpe to get it.</td>
+        </tr>
+        <tr>
+          <th scope="row">Mean reversion <span class="mult">×4</span></th>
+          <td>Buy the dip instead of following the trend.</td>
+          <td>Sharpe 0.29–0.57 on daily bars against roughly 1.0 for plain EMA. On hourly bars: −1.3 to −3.8, and −100% return everywhere.</td>
+        </tr>
+        <tr>
+          <th scope="row">4-hour timeframe</th>
+          <td>More bars should mean a faster verdict on whether this works.</td>
+          <td>More bars, not more independent information. The proof does not arrive sooner.</td>
+        </tr>
+        <tr>
+          <th scope="row">Short leg</th>
+          <td>Trade the downside too instead of sitting in cash.</td>
+          <td>Loses money net of costs. Standing aside beat being clever.</td>
+        </tr>
+        <tr>
+          <th scope="row">Maker-only orders</th>
+          <td>Post limit orders and save the taker fee.</td>
+          <td>Worth nothing at this size and cadence — and the fee model understated short-side costs, which is its own lesson.</td>
+        </tr>
+        <tr class="ev__last">
+          <th scope="row">Meta-labeler</th>
+          <td>A model on top of the strategy, sizing each trade by predicted quality.</td>
+          <td>Zero discrimination: correlation with outcomes −0.01. Not one of 128 events was actually attenuated — the "filter" was a flat 1.3× leverage in disguise, and the five biggest winners all landed at the bottom of its ranking.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="ev__foot reveal">
+    The strategy running today is the one from day one. That is not stubbornness —
+    it is the only candidate that has not yet failed a test.
+  </p>
+</section>
+
+<!-- ══ CLOSE ══ -->
+<section class="close">
+  <div class="close__in reveal">
+    <h2 class="sec-h sec-h--big">Built and operated by one person</h2>
+    <p class="close__p">
+      Infrastructure, strategy research, execution layer and this page.
+      If you want the details, the code and the write-ups are public.
+    </p>
+    <div class="hero__cta">
+      <a class="btn btn--primary" href="https://github.com/KrisRz/TradePulse.AI" rel="noopener">Read the source ↗</a>
+      <a class="btn" href="https://bot.tradepulseai.co.uk/" rel="noopener">Plain status page ↗</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="foot__in">
+    <span>TRADEPULSE.AI</span>
+    <span class="foot__mid">Paper trading. Not investment advice.</span>
+    <span>Krzysztof Rzepka · <a href="https://github.com/KrisRz" rel="noopener">github.com/KrisRz</a></span>
+  </div>
+</footer>
+
+<script src="vendor/lightweight-charts.standalone.production.js" defer></script>
+<script src="js/chart.js" defer></script>
+<script src="js/main.js" defer></script>
+</body>
+</html>
