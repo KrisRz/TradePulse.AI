@@ -79,7 +79,7 @@
 
       <div class="hero__cta">
         <a class="btn btn--primary" href="#chart">Watch it decide</a>
-        <a class="btn" href="https://bot.tradepulseai.co.uk/?format=json" rel="noopener">Raw status API ↗</a>
+        <a class="btn" href="/api/state" rel="noopener">Raw status API ↗</a>
       </div>
     </div>
 
@@ -330,14 +330,15 @@
 
   <ul class="tiles">
     <li class="tile reveal">
-      <span class="tile__n" data-count="4">0</span>
+      <span class="tile__n" data-count="5">0</span>
       <span class="tile__l">Lambda functions</span>
-      <p>Paper bot, 4-hour venue bot, shadow bot, status endpoint. Nothing else is running.</p>
+      <p>Venue bot, paper bot, shadow bot, and two read-only status endpoints. Nothing else is running.</p>
     </li>
     <li class="tile reveal">
-      <span class="tile__n" data-count="59">0</span>
+      <span class="tile__n" data-count="82">0</span>
       <span class="tile__l">Terraform resources</span>
-      <p>Every queue, alarm, role and DNS record is code. Remote state in S3.</p>
+      <p>Every queue, alarm, role and DNS record is code, across two independent
+      roots. Remote state in S3.</p>
     </li>
     <li class="tile reveal">
       <span class="tile__n" data-count="9">0</span>
@@ -368,7 +369,7 @@
 <section class="sec sec--alt" id="loop">
   <header class="sec-head reveal">
     <p class="eyebrow">04 — HOW ONE DECISION HAPPENS</p>
-    <h2 class="sec-h sec-h--big">Seven steps, once a day</h2>
+    <h2 class="sec-h sec-h--big">Seven steps,<br>every four hours</h2>
     <p class="sec-sub sec-sub--wide">
       This is a real sequence, and the order is the whole point: the bot never
       sees a price that has not finished forming.
@@ -379,7 +380,7 @@
     <li class="step reveal">
       <span class="step__n">01</span>
       <h3>The bar closes</h3>
-      <p>00:00 UTC. EventBridge Scheduler fires the Lambda ten minutes later, not at the boundary — exchanges are late sometimes.</p>
+      <p>00:00, 04:00, 08:00 UTC and so on. EventBridge Scheduler fires the Lambda ten minutes after the close, not at the boundary — exchanges are late sometimes.</p>
     </li>
     <li class="step reveal">
       <span class="step__n">02</span>
