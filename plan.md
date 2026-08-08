@@ -90,7 +90,8 @@ zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
 - 🔴 **BLOCKER M6: klucz Binance z prawem handlu wymaga STAŁEGO IP**, a Lambda
   go nie ma. NAT GW ~$400/rok wobec budżetu $9,60/rok. Pełna analiza wariantów
   w ramce w sekcji M6. PIERWSZY krok = zmierzyć, czy polityka faktycznie gryzie.
-- 🔑 Klucz LIVE `TradePulseAI` jest **read-only** — do skasowania (higiena, nie pilne).
+- ~~🔑 Klucz LIVE `TradePulseAI` do skasowania~~ — **SKASOWANY 2026-08-08**
+  przez usera; konto LIVE bez kluczy, demo (SSM) nietknięte, boty grają.
 - Hosting frontendu na tradepulseai.co.uk — domena OK do 2026-09-28, auto-renew.
 
 ### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-07, po PR #35–#44)
@@ -106,8 +107,11 @@ zamiast wisieć do jutra — dokładnie to, po co była zmiana. F5 i M3b zamkni�
 (patrz niżej). ✅ 2026-08-08: `shadow-bot-no-invocation` dojrzał i przeszedł
 w OK (2026-08-07 18:09) — wszystkie 9 alarmów TradePulse w OK, DLQ puste.
 
-🔴 **JEDYNA RZECZ DO ZROBIENIA PRZEZ USERA: skasować klucz Binance LIVE**
-w API Management (patrz F5 / `SECURITY.md`). Nic od niego nie zależy.
+✅ **2026-08-08: klucz Binance LIVE `TradePulseAI` SKASOWANY przez usera.**
+Konto LIVE ma teraz zero kluczy. Boty grają dalej — używają WYŁĄCZNIE pary
+demo z SSM (`/tradepulse/demo/key`+`secret`), zweryfikowane po skasowaniu
+(venue-4h `held`, equity 201,51, killswitch czysty). Lista akcji usera PUSTA.
+Nowy klucz LIVE dopiero przy M6 (i tam czeka znany blocker stałego IP).
 
 **2. (research, M5-safe)** Backlog wg dowodów w
 `docs/RESEARCH_ULEPSZEN_2026-08-07.md` **po DRUGIEJ korekcie (2026-08-08)**:
@@ -1452,4 +1456,7 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   2 gorzej). Werdykt: `docs/ENSEMBLE_OOS_2026-08-08.md` + korekta w
   RESEARCH_ULEPSZEN. Konsekwencje: pozycji ułamkowych NIE budujemy (jedyny
   powód odpadł); kolejka researchu: #1 benchmark-filtr zmienności przez ten
-  sam rygor OOS. EMA20/100 przeżyło piątego pretendenta.
+  sam rygor OOS. EMA20/100 przeżyło piątego pretendenta. DOMKNIĘCIE SESJI:
+  PR #46 zmergowany; user SKASOWAŁ klucz LIVE `TradePulseAI` → konto LIVE
+  bez kluczy, boty grają dalej na parze demo z SSM (zweryfikowane po
+  skasowaniu). Lista akcji usera PUSTA — pełny tryb czekania do ~2026-09-10.
