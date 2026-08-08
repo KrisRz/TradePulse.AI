@@ -122,10 +122,15 @@ kosztuje ~0,05 Sharpe'a — zapisany jako przyszła CECHA, nie bramka).
 **Poprzeczka dla meta-labelera = czyste EMA20/100.** 🔓 **PRÓG PRÓBY
 OSIĄGNIĘTY 2026-08-08**: pooling 8 majorsów (uniwersum wg reguły, bez
 cherry-pickingu) = **128 zdarzeń > 100** (doc POOLED_EVENTS_2026-08-08.md;
-win rate 36%, mediana hold ~60 d → embargo!). Meta-labeler ODBLOKOWANY —
-następna sesja researchu: tabela cech per zdarzenie → model wg
-pre-rejestracji D11 → musi pobić czyste EMA na harnessie M4. SOPR
-NIEDOSTĘPNY w darmowym Coin Metrics.
+win rate 36%, mediana hold ~60 d → embargo!). Meta-labeler ODBLOKOWANY.
+✅ **Tabela cech GOTOWA 2026-08-08** (`event_feature_table.py` →
+`data/ml/events_features.csv`, doc EVENT_FEATURES_2026-08-08.md): 128
+zdarzeń × 12 cech (5 per-aktywo + 7 rynkowych z BTC jako proxy cyklu),
+dyscyplina point-in-time (shift +1 d dla serii dziennych, kroczące okna,
+braki NIE imputowane; komplet 91/128). **NASTĘPNY KROK = model wg D11**:
+purged split po wspólnym czasie + embargo ≥60 d + leave-one-asset-out,
+metryka P&L nie accuracy, poprzeczka = czyste EMA20/100 na harnessie M4.
+SOPR NIEDOSTĘPNY w darmowym Coin Metrics.
 
 **3. Czekanie na dane:** bramka C zbiera fille sama (~20 filli ≈ 10 mies.);
 ocena bramek A/B ≥2026-09-10; re-ocena co 28 dni.
@@ -1505,3 +1510,15 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   (leave-one-asset-out / purged po czasie wspólnym). Doc:
   docs/POOLED_EVENTS_2026-08-08.md. Faza „czekamy na dane do nauki"
   SKRÓCONA z lat do zera — następny krok researchu: tabela cech → model.
+- **2026-08-08e** — 📋 TABELA CECH META-LABELERA GOTOWA
+  (`event_feature_table.py` → `data/ml/events_features.csv`, gitignored/
+  regenerowalny). 128 zdarzeń × 12 cech: per-aktywo vol20/vol_pctl_1y
+  (calm-vol z REGIME_FILTER jako cecha!)/trend_gap/ret20/dd_from_1y_high +
+  rynkowe z BTC (proxy cyklu): btc_vol20/btc_trend_gap/funding_last/
+  funding_cum30/doi7/doi30/mvrv_z (z-score w kroczących 4 latach).
+  Point-in-time: cechy ze świecy SYGNAŁOWEJ (nie fillu), funding ≤ czas
+  decyzji, serie dzienne shift +1 d, zero imputacji (komplet 91/128),
+  inf z zerowej bazy OI → NaN. Projekt cech zadeklarowany w docstringu
+  PRZED liczeniem. Doc: docs/EVENT_FEATURES_2026-08-08.md. Krok 2 (model,
+  celowo OSOBNA sesja): purged split po wspólnym czasie, embargo ≥60 d,
+  leave-one-asset-out, metryka P&L/Sharpe, bar = czyste EMA20/100 na M4.
