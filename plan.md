@@ -119,9 +119,13 @@ ENSEMBLE_OOS) → ~~mean reversion/day trading~~ (4× REJECT, doc
 MEAN_REVERSION) → ~~filtry reżimu z idei L1~~ (**3× REJECT 2026-08-08**,
 doc REGIME_FILTER: SMA200-y tną Sharpe'a, `calm vol` tnie DD do −43% ale
 kosztuje ~0,05 Sharpe'a — zapisany jako przyszła CECHA, nie bramka).
-**Poprzeczka dla meta-labelera = czyste EMA20/100.** Jedyne co zostaje:
-meta-labeler przy >100 zdarzeniach (pooling BTC+ETH dziś 31 — rośnie samo)
-albo hipoteza jakościowo nowa. SOPR NIEDOSTĘPNY w darmowym Coin Metrics.
+**Poprzeczka dla meta-labelera = czyste EMA20/100.** 🔓 **PRÓG PRÓBY
+OSIĄGNIĘTY 2026-08-08**: pooling 8 majorsów (uniwersum wg reguły, bez
+cherry-pickingu) = **128 zdarzeń > 100** (doc POOLED_EVENTS_2026-08-08.md;
+win rate 36%, mediana hold ~60 d → embargo!). Meta-labeler ODBLOKOWANY —
+następna sesja researchu: tabela cech per zdarzenie → model wg
+pre-rejestracji D11 → musi pobić czyste EMA na harnessie M4. SOPR
+NIEDOSTĘPNY w darmowym Coin Metrics.
 
 **3. Czekanie na dane:** bramka C zbiera fille sama (~20 filli ≈ 10 mies.);
 ocena bramek A/B ≥2026-09-10; re-ocena co 28 dni.
@@ -1488,3 +1492,16 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   EMA20/100. Pretendent #7 odparty; tania część kolejki researchu
   WYCZERPANA** — dalej tylko meta-labeler (>100 zdarzeń, dziś 31) albo
   jakościowo nowa hipoteza. Doc: docs/REGIME_FILTER_2026-08-08.md.
+- **2026-08-08d** — 🔓 PRÓG PRÓBY META-LABELERA OSIĄGNIĘTY. Pytanie usera
+  „czy dane do nauki da się pobrać z historii?" → TAK: pre-rejestrowany
+  pooling majorsów wykonany. Uniwersum wg REGUŁY (USDT spot, top-cap, bez
+  stabli, ≥5 lat): +BNB/XRP/LTC/ADA/DOGE/SOL, bulk 1d do holdoutu,
+  integrity 6/6 clean (pliki gitignorowane, regenerowalne). Spis zdarzeń
+  (`pooled_events_census.py`): **128 wejść EMA20/100 z etykietą po
+  kosztach** (>100 ✓), win rate 36%, mediana zdarzenia UJEMNA na każdym
+  rynku (anatomia trend-followingu: ogon wygranych płaci za resztę) →
+  metryką meta-labelera NIE może być accuracy, tylko P&L/Sharpe;
+  mediana hold ~60 d → embargo splitu ≥60 d; walidacja grupowana
+  (leave-one-asset-out / purged po czasie wspólnym). Doc:
+  docs/POOLED_EVENTS_2026-08-08.md. Faza „czekamy na dane do nauki"
+  SKRÓCONA z lat do zera — następny krok researchu: tabela cech → model.
