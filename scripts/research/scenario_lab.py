@@ -57,7 +57,10 @@ from app.backend.backtesting.engine import (  # noqa: E402
     run_backtest,
 )
 from app.backend.backtesting.metrics import compute_metrics  # noqa: E402
-from app.backend.backtesting.strategies import EmaCrossover  # noqa: E402
+from app.backend.backtesting.strategies import (  # noqa: E402
+    EmaCrossover,
+    RsiMeanReversion,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DATA = ROOT / "data" / "ml" / "historical"
@@ -114,6 +117,11 @@ def ema(fast: int, slow: int, allow_short: bool = False) -> Callable[[], object]
     return lambda: EmaCrossover(fast=fast, slow=slow, allow_short=allow_short)
 
 
+def rsi_mr(allow_short: bool) -> Callable[[], object]:
+    """Textbook defaults (14, 30/70, exit 50) — deliberately NOT tuned."""
+    return lambda: RsiMeanReversion(allow_short=allow_short)
+
+
 CANDIDATES: list[Candidate] = [
     Candidate(
         key="btc_1d_live",
@@ -134,6 +142,36 @@ CANDIDATES: list[Candidate] = [
         csv=DATA / "ETHUSDT_1d.csv", timeframe="1d", build=ema(20, 100),
         rationale="A second parallel channel at the same trade rate, not a faster "
                   "one. Diversifies the bet without changing the strategy.",
+    ),
+    Candidate(
+        key="btc_1d_rsi",
+        description="BTC 1d RSI mean-reversion long-only (buy dips)",
+        csv=DATA / "BTCUSDT_1d.csv", timeframe="1d", build=rsi_mr(False),
+        rationale="The user's 2026-08-08 premise: buy when it falls instead of "
+                  "following the trend. Textbook parameters, no tuning.",
+    ),
+    Candidate(
+        key="btc_1d_rsi_ls",
+        description="BTC 1d RSI mean-reversion long+short (buy dips, sell rips)",
+        csv=DATA / "BTCUSDT_1d.csv", timeframe="1d", build=rsi_mr(True),
+        rationale="Full counter-trend: also sell when it rises. The short leg "
+                  "of trend-following already failed; this asks if the "
+                  "mean-reversion short is any different.",
+    ),
+    Candidate(
+        key="btc_4h_rsi_ls",
+        description="BTC 4h RSI mean-reversion long+short",
+        csv=DATA / "BTCUSDT_4h.csv", timeframe="4h", build=rsi_mr(True),
+        rationale="Counter-trend at higher frequency — closer to day trading, "
+                  "more signals, 6x the fee events of 1d.",
+    ),
+    Candidate(
+        key="btc_1h_rsi_ls",
+        description="BTC 1h RSI mean-reversion long+short",
+        csv=DATA / "BTCUSDT_1h.csv", timeframe="1h", build=rsi_mr(True),
+        rationale="The closest our validated data gets to day trading. If "
+                  "aggressive short-horizon reversal works anywhere, it is "
+                  "here — and so is 24x the fee drag of 1d.",
     ),
     Candidate(
         key="btc_1d_short",
