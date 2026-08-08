@@ -113,16 +113,15 @@ demo z SSM (`/tradepulse/demo/key`+`secret`), zweryfikowane po skasowaniu
 (venue-4h `held`, equity 201,51, killswitch czysty). Lista akcji usera PUSTA.
 Nowy klucz LIVE dopiero przy M6 (i tam czeka znany blocker stałego IP).
 
-**2. (research, M5-safe)** Backlog wg dowodów w
-`docs/RESEARCH_ULEPSZEN_2026-08-07.md` **po DRUGIEJ korekcie (2026-08-08)**:
-~~vol targeting~~ (odrzucony M4/F2) → ~~ensemble EMA~~ (**ODRZUCONY OOS
-2026-08-08** — `docs/ENSEMBLE_OOS_2026-08-08.md`: przewaga w 1/4 layoutów,
-+32% obrotu zabija ją przy fee 0,2%, poprawa DD = artefakt punktu startu;
-pozycje ułamkowe w księdze NIE będą budowane) → **#1 = benchmark-filtr
-zmienności** (`vol_targeting_study.py::regime_filter_study` przez ten sam
-rygor OOS co `ema_ensemble_oos.py`) → meta-labeler dopiero przy >100
-zdarzeniach (pooling BTC+ETH daje dziś 31 — za mało; SOPR NIEDOSTĘPNY
-w darmowym Coin Metrics — zweryfikowane na snapshot).
+**2. (research, M5-safe)** Backlog wg dowodów — **TANIA CZĘŚĆ WYCZERPANA
+2026-08-08**: ~~vol targeting~~ (M4/F2) → ~~ensemble EMA~~ (OOS, doc
+ENSEMBLE_OOS) → ~~mean reversion/day trading~~ (4× REJECT, doc
+MEAN_REVERSION) → ~~filtry reżimu z idei L1~~ (**3× REJECT 2026-08-08**,
+doc REGIME_FILTER: SMA200-y tną Sharpe'a, `calm vol` tnie DD do −43% ale
+kosztuje ~0,05 Sharpe'a — zapisany jako przyszła CECHA, nie bramka).
+**Poprzeczka dla meta-labelera = czyste EMA20/100.** Jedyne co zostaje:
+meta-labeler przy >100 zdarzeniach (pooling BTC+ETH dziś 31 — rośnie samo)
+albo hipoteza jakościowo nowa. SOPR NIEDOSTĘPNY w darmowym Coin Metrics.
 
 **3. Czekanie na dane:** bramka C zbiera fille sama (~20 filli ≈ 10 mies.);
 ocena bramek A/B ≥2026-09-10; re-ocena co 28 dni.
@@ -1474,3 +1473,18 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   Przypomnienie z audytu 6 warstw: system „widział kierunek" AUC 0,519 =
   moneta. Werdykt: mean reversion / day trading → NIE ROBIMY.
   Doc: docs/MEAN_REVERSION_2026-08-08.md. EMA20/100: pretendent #6 odparty.
+- **2026-08-08c** — 🔬 Decyzja z userem: „zapożyczamy POMYSŁY z 6 warstw,
+  nie kod". Przeczytany SAM KOD silników (entry 3551 l., exit 1917 l.,
+  trener): 6 warstw = komitet day-tradingowy (L1 reżim, L2 LSTM 1m/5m,
+  L3 odwrócenia, L4 struktura ceny, L5 momentum/pewność, L6 timing,
+  hold 15 min–4 h); w trenerze widać wprost etykiety = funkcje własnych
+  cech (L3: `RSI<30 lub >70`, L4: `BB ekstremum lub vol>0,02`, L5/L6:
+  jawne wzory). Pierwszy zapożyczony pomysł (L1 reżim) ZMIERZONY nowym
+  kodem `regime_filter_oos.py` (reguła pre-rejestrowana, spany OOS, siatka
+  prowizji): **3× REJECT** — `SMA200 rising` 0,75–1,00, `price>SMA200`
+  tnie Sharpe'a I pogarsza DD (−59% vs −50%!), `calm vol` (80. percentyl
+  kroczący) jedyny tnie DD (−43…−45%) ale kosztuje ~0,05 Sharpe'a wszędzie
+  → cecha na przyszłość, nie bramka. **Poprzeczka meta-labelera = czyste
+  EMA20/100. Pretendent #7 odparty; tania część kolejki researchu
+  WYCZERPANA** — dalej tylko meta-labeler (>100 zdarzeń, dziś 31) albo
+  jakościowo nowa hipoteza. Doc: docs/REGIME_FILTER_2026-08-08.md.
