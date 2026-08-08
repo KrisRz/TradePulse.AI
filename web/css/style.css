@@ -218,6 +218,9 @@ a{color:inherit}
 .arch__svg{width:100%;min-width:760px;height:auto;display:block}
 .arch .wire{stroke:var(--line-hot);stroke-width:1.5}
 .arch .pulse{stroke:var(--amber);stroke-width:2;stroke-dasharray:10 90;stroke-dashoffset:100}
+/* delays live here, not in style="" attributes — the CSP forbids those */
+.pulse--1{--d:0s}.pulse--2{--d:.5s}.pulse--3{--d:1s}.pulse--4{--d:1.5s}.pulse--5{--d:2s}
+.chart-fail{display:flex;height:100%;align-items:center;justify-content:center;padding:2rem;text-align:center;color:var(--text-lo);font-size:.82rem;line-height:1.7}
 .arch__nodes rect{fill:var(--panel-2);stroke:var(--line-hot);stroke-width:1}
 .arch__nodes text{font-family:var(--mono);font-size:13px;font-weight:500;fill:var(--text-hi)}
 .arch__nodes .t2{font-size:11px;font-weight:400;fill:var(--text-lo)}

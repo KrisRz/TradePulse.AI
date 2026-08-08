@@ -241,9 +241,11 @@
     setStatus('unavailable');
     setConn('down', 'offline');
     if (host) {
-      host.innerHTML = '<div style="display:flex;height:100%;align-items:center;justify-content:center;' +
-        'padding:2rem;text-align:center;color:#5B6E80;font-size:.82rem;line-height:1.7">' +
-        'Market data is not reachable from this network.<br>' + msg + '</div>';
+      host.textContent = '';
+      var box = document.createElement('div');
+      box.className = 'chart-fail';
+      box.textContent = 'Market data is not reachable from this network. ' + msg;
+      host.appendChild(box);
     }
   }
 
