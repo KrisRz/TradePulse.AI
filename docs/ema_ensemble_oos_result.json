@@ -1,0 +1,296 @@
+{
+  "decision_rule": {
+    "registered": "2026-08-08",
+    "question": "Does the pre-specified 5-member AVERAGE ensemble beat the deployed single EMA20/100 out-of-sample, and survive fees?",
+    "accept_if": [
+      "ensemble Sharpe >= baseline Sharpe in >=3 of 4 layouts @ fee 0.001",
+      "ensemble Sharpe >= baseline Sharpe in >=3 of 4 layouts @ fee 0.002",
+      "ensemble Sharpe >  B&H Sharpe      in >=3 of 4 layouts @ fee 0.002",
+      "ensemble maxDD no worse than baseline in >=3 of 4 layouts @ fee 0.001"
+    ],
+    "on_accept": "queue for post-M5: fractional positions in engine+book, then the full M4 harness. Nothing changes in the M5 window.",
+    "on_reject": "ensemble drops off the adoption queue; a negative result is the deliverable.",
+    "note": "all four must hold; three of four is a rejection, not a debate"
+  },
+  "checks": {
+    "ens >= base Sharpe in >=3/4 @0.001": true,
+    "ens >= base Sharpe in >=3/4 @0.002": false,
+    "ens > B&H Sharpe in >=3/4 @0.002": true,
+    "ens maxDD no worse than base in >=3/4 @0.001": false
+  },
+  "accepted": false,
+  "cells": [
+    {
+      "layout": [
+        730,
+        180
+      ],
+      "fee": 0.001,
+      "oos_years": 6.41,
+      "baseline_sharpe": 0.9624944672278605,
+      "baseline_dd": -0.4965947290396109,
+      "baseline_turn": 3.2756410256410255,
+      "ensemble_sharpe": 0.950115241957981,
+      "ensemble_dd": -0.45443918502977243,
+      "ensemble_turn": 4.336324786324787,
+      "bh_sharpe": 0.8760635171926228,
+      "bh_dd": -0.7662925085545049,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        730,
+        180
+      ],
+      "fee": 0.002,
+      "oos_years": 6.41,
+      "baseline_sharpe": 0.9550806735402376,
+      "baseline_dd": -0.49960303922599825,
+      "baseline_turn": 3.2756410256410255,
+      "ensemble_sharpe": 0.9398602986445234,
+      "ensemble_dd": -0.45845612295282845,
+      "ensemble_turn": 4.336324786324787,
+      "bh_sharpe": 0.8760635171926228,
+      "bh_dd": -0.7662925085545049,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        730,
+        180
+      ],
+      "fee": 0.003,
+      "oos_years": 6.41,
+      "baseline_sharpe": 0.9476503519006169,
+      "baseline_dd": -0.5025963552646946,
+      "baseline_turn": 3.2756410256410255,
+      "ensemble_sharpe": 0.9296012631092025,
+      "ensemble_dd": -0.4624443652323009,
+      "ensemble_turn": 4.336324786324787,
+      "bh_sharpe": 0.8760635171926228,
+      "bh_dd": -0.7662925085545049,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        730,
+        180
+      ],
+      "fee": 0.005,
+      "oos_years": 6.41,
+      "baseline_sharpe": 0.9327416169909517,
+      "baseline_dd": -0.5085382440767727,
+      "baseline_turn": 3.2756410256410255,
+      "ensemble_sharpe": 0.9090715409615373,
+      "ensemble_dd": -0.47033555643977987,
+      "ensemble_turn": 4.336324786324787,
+      "bh_sharpe": 0.8760635171926228,
+      "bh_dd": -0.7662925085545049,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        500,
+        125
+      ],
+      "fee": 0.001,
+      "oos_years": 7.19,
+      "baseline_sharpe": 1.0741980152303459,
+      "baseline_dd": -0.49659472903961055,
+      "baseline_turn": 3.059047619047619,
+      "ensemble_sharpe": 1.0777441376190242,
+      "ensemble_dd": -0.5377976661989634,
+      "ensemble_turn": 4.115809523809523,
+      "bh_sharpe": 0.9780988056249802,
+      "bh_dd": -0.7662925085545057,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        500,
+        125
+      ],
+      "fee": 0.002,
+      "oos_years": 7.19,
+      "baseline_sharpe": 1.0675670960256578,
+      "baseline_dd": -0.499603039225998,
+      "baseline_turn": 3.059047619047619,
+      "ensemble_sharpe": 1.0685255979650103,
+      "ensemble_dd": -0.5403916594033937,
+      "ensemble_turn": 4.115809523809523,
+      "bh_sharpe": 0.9780988056249802,
+      "bh_dd": -0.7662925085545057,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        500,
+        125
+      ],
+      "fee": 0.003,
+      "oos_years": 7.19,
+      "baseline_sharpe": 1.060920348054425,
+      "baseline_dd": -0.5025963552646946,
+      "baseline_turn": 3.059047619047619,
+      "ensemble_sharpe": 1.0593029119761008,
+      "ensemble_dd": -0.5429716127059483,
+      "ensemble_turn": 4.115809523809523,
+      "bh_sharpe": 0.9780988056249802,
+      "bh_dd": -0.7662925085545057,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        500,
+        125
+      ],
+      "fee": 0.005,
+      "oos_years": 7.19,
+      "baseline_sharpe": 1.047580510347286,
+      "baseline_dd": -0.5085382440767722,
+      "baseline_turn": 3.059047619047619,
+      "ensemble_sharpe": 1.0408455821352145,
+      "ensemble_dd": -0.5480896919784992,
+      "ensemble_turn": 4.115809523809523,
+      "bh_sharpe": 0.9780988056249802,
+      "bh_dd": -0.7662925085545057,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        1000,
+        250
+      ],
+      "fee": 0.001,
+      "oos_years": 5.48,
+      "baseline_sharpe": 1.1583242978204313,
+      "baseline_dd": -0.4965947290396103,
+      "baseline_turn": 3.1025,
+      "ensemble_sharpe": 1.2068448023291243,
+      "ensemble_dd": -0.45443918502977176,
+      "ensemble_turn": 4.1245,
+      "bh_sharpe": 1.001010272713834,
+      "bh_dd": -0.7662925085545056,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        1000,
+        250
+      ],
+      "fee": 0.002,
+      "oos_years": 5.48,
+      "baseline_sharpe": 1.151540244998499,
+      "baseline_dd": -0.49960303922599847,
+      "baseline_turn": 3.1025,
+      "ensemble_sharpe": 1.1974531038378957,
+      "ensemble_dd": -0.45845612295282845,
+      "ensemble_turn": 4.1245,
+      "bh_sharpe": 1.001010272713834,
+      "bh_dd": -0.7662925085545056,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        1000,
+        250
+      ],
+      "fee": 0.003,
+      "oos_years": 5.48,
+      "baseline_sharpe": 1.144738669861258,
+      "baseline_dd": -0.5025963552646947,
+      "baseline_turn": 3.1025,
+      "ensemble_sharpe": 1.1880561689264355,
+      "ensemble_dd": -0.46244436523230026,
+      "ensemble_turn": 4.1245,
+      "bh_sharpe": 1.001010272713834,
+      "bh_dd": -0.7662925085545056,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        1000,
+        250
+      ],
+      "fee": 0.005,
+      "oos_years": 5.48,
+      "baseline_sharpe": 1.131084162083886,
+      "baseline_dd": -0.5085382440767732,
+      "baseline_turn": 3.1025,
+      "ensemble_sharpe": 1.169247114093838,
+      "ensemble_dd": -0.47033555643977953,
+      "ensemble_turn": 4.1245,
+      "bh_sharpe": 1.001010272713834,
+      "bh_dd": -0.7662925085545056,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        365,
+        90
+      ],
+      "fee": 0.001,
+      "oos_years": 7.64,
+      "baseline_sharpe": 1.041864359306515,
+      "baseline_dd": -0.49659472903961055,
+      "baseline_turn": 2.878136200716846,
+      "ensemble_sharpe": 1.0440418337934225,
+      "ensemble_dd": -0.537797666198963,
+      "ensemble_turn": 3.95089605734767,
+      "bh_sharpe": 0.8159170413143919,
+      "bh_dd": -0.7662925085545058,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        365,
+        90
+      ],
+      "fee": 0.002,
+      "oos_years": 7.64,
+      "baseline_sharpe": 1.0354342241373418,
+      "baseline_dd": -0.499603039225998,
+      "baseline_turn": 2.878136200716846,
+      "ensemble_sharpe": 1.034862826799822,
+      "ensemble_dd": -0.5403916594033942,
+      "ensemble_turn": 3.95089605734767,
+      "bh_sharpe": 0.8159170413143919,
+      "bh_dd": -0.7662925085545058,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        365,
+        90
+      ],
+      "fee": 0.003,
+      "oos_years": 7.64,
+      "baseline_sharpe": 1.028988717286919,
+      "baseline_dd": -0.5025963552646946,
+      "baseline_turn": 2.878136200716846,
+      "ensemble_sharpe": 1.0256796925625153,
+      "ensemble_dd": -0.5429716127059476,
+      "ensemble_turn": 3.95089605734767,
+      "bh_sharpe": 0.8159170413143919,
+      "bh_dd": -0.7662925085545058,
+      "bh_turn": 0.0
+    },
+    {
+      "layout": [
+        365,
+        90
+      ],
+      "fee": 0.005,
+      "oos_years": 7.64,
+      "baseline_sharpe": 1.0160526983555358,
+      "baseline_dd": -0.5085382440767722,
+      "baseline_turn": 2.878136200716846,
+      "ensemble_sharpe": 1.0073015334705275,
+      "ensemble_dd": -0.5480896919784994,
+      "ensemble_turn": 3.95089605734767,
+      "bh_sharpe": 0.8159170413143919,
+      "bh_dd": -0.7662925085545058,
+      "bh_turn": 0.0
+    }
+  ]
+}
