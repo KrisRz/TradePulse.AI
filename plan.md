@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-08-07**
+> Ostatnia aktualizacja: **2026-08-08**
 
 ---
 
@@ -22,7 +22,10 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
-**Stan na 2026-08-07 (trzy sesje: bramka C · kwarantanna/ML-data/F7 · alarmy+F5+M3b, PR #35–#44).**
+**Stan na 2026-08-08 (sesja: weryfikacja produ + research OOS ensemble → REJECT).**
+Prod zweryfikowany na żywo 2026-08-08: 3 boty chodzą, wszystkie alarmy OK
+(w tym `shadow-bot-no-invocation` dojrzał), bramka C = 1 rekord FILLED w
+DynamoDB. **Jesteśmy w trybie: czekamy i zbieramy dane.**
 
 #### Gdzie jesteśmy w milestone'ach
 M0–M4 ✅ · **M5 BIEGNIE — dzień 22/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
@@ -100,29 +103,30 @@ COLLECTING 1/20, heartbeat OK, DLQ puste, harmonogramy ENABLED).
 `held`, zero eventów „position risk", 0 błędów). Alarmy shadow/venue naprawione
 i **zaapplikowane** (PR #43): `shadow-bot-errors` zgasł sam **78 s po apply**
 zamiast wisieć do jutra — dokładnie to, po co była zmiana. F5 i M3b zamknięte
-(patrz niżej). Jedyny otwarty drobiazg: `shadow-bot-no-invocation` był
-`INSUFFICIENT_DATA` tuż po utworzeniu (Lambda istnieje od 2026-08-06 20:22,
-alarm potrzebuje 25 h historii) — **sprawdź, czy przeszedł w OK**, jednym
-`aws cloudwatch describe-alarms --region eu-west-2`.
+(patrz niżej). ✅ 2026-08-08: `shadow-bot-no-invocation` dojrzał i przeszedł
+w OK (2026-08-07 18:09) — wszystkie 9 alarmów TradePulse w OK, DLQ puste.
 
 🔴 **JEDYNA RZECZ DO ZROBIENIA PRZEZ USERA: skasować klucz Binance LIVE**
 w API Management (patrz F5 / `SECURITY.md`). Nic od niego nie zależy.
 
 **2. (research, M5-safe)** Backlog wg dowodów w
-`docs/RESEARCH_ULEPSZEN_2026-08-07.md` **po korekcie**: vol targeting SPADŁ
-(M4/F2 już go odrzucił — patrz korekta w doc) → **#1 = ensemble prędkości
-EMA** w scenario_lab na danych sprzed holdoutu → benchmark-filtr zmienności →
-meta-labeler (pooled BTC+ETH, cechy funding/ΔOI/MVRV-Z; SOPR NIEDOSTĘPNY
+`docs/RESEARCH_ULEPSZEN_2026-08-07.md` **po DRUGIEJ korekcie (2026-08-08)**:
+~~vol targeting~~ (odrzucony M4/F2) → ~~ensemble EMA~~ (**ODRZUCONY OOS
+2026-08-08** — `docs/ENSEMBLE_OOS_2026-08-08.md`: przewaga w 1/4 layoutów,
++32% obrotu zabija ją przy fee 0,2%, poprawa DD = artefakt punktu startu;
+pozycje ułamkowe w księdze NIE będą budowane) → **#1 = benchmark-filtr
+zmienności** (`vol_targeting_study.py::regime_filter_study` przez ten sam
+rygor OOS co `ema_ensemble_oos.py`) → meta-labeler dopiero przy >100
+zdarzeniach (pooling BTC+ETH daje dziś 31 — za mało; SOPR NIEDOSTĘPNY
 w darmowym Coin Metrics — zweryfikowane na snapshot).
 
 **3. Czekanie na dane:** bramka C zbiera fille sama (~20 filli ≈ 10 mies.);
 ocena bramek A/B ≥2026-09-10; re-ocena co 28 dni.
 
 ⚠️ **NIE ROBIMY:** vol targetingu w wariancie zmierzonym w M4 (odrzucony),
-maker orderów, shortów na BTC, zmian strategii 1d w oknie.
-
-⚠️ **NIE ROBIMY:** maker orderów (zmierzone, bez sensu), researchu shortów na
-BTC (odrzucony danymi), zmian w strategii 1d (unieważnia okno).
+ensemble prędkości EMA (odrzucony OOS 2026-08-08), maker orderów (zmierzone,
+bez sensu), shortów na BTC (odrzucone danymi), zmian strategii 1d w oknie,
+pozycji ułamkowych w księdze (jedyny powód odpadł z ensemble).
 ### Protokół wznowienia (rób po kolei)
 1. **Przeczytaj** `📍 STATUS TERAZ` → `🎯 NASTĘPNA AKCJA` powyżej. Odpowiedź na
    „od czego zacząć" jest tam — nie pytaj o nią usera.
@@ -1433,3 +1437,19 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   whitelisty IP ZOSTANIE SKASOWANY — a Lambda nie ma stałego IP. NAT Gateway
   ~$400/rok wobec budżetu $9,60/rok. Pierwszy krok: ZMIERZYĆ, czy polityka
   faktycznie gryzie, zanim cokolwiek przebudujemy.
+- **2026-08-08** — ✅ Prod zweryfikowany na żywo + 🔬 ensemble EMA ODRZUCONY OOS.
+  WERYFIKACJA: 3 boty chodzą (venue-4h co 4h, long 0,0031 BTC, equity 201,51
+  +0,75%, killswitch czysty; 1d FLAT poprawnie; shadow round-trip OK, slippage
+  ~0); wszystkie 9 alarmów OK — `shadow-bot-no-invocation` dojrzał (OK od
+  2026-08-07 18:09); bramka C = 1 rekord FILLED w DynamoDB (COLLECTING 1/20).
+  Tryb: czekamy i zbieramy dane. RESEARCH (M5-safe, poziom zwrotów, zero zmian
+  w silniku/księdze): `ema_ensemble_oos.py` — skrining GO z 2026-08-07
+  przepuszczony przez uczciwy harness (spany OOS 4 layoutów scenario_lab,
+  siatka prowizji, reguła pre-rejestrowana 2026-08-08 PRZED liczbami) →
+  **REJECT 2/4 checków**: przewaga tylko w layoucie (1000,250) (+0,05), reszta
+  ±0,01 szumu; +32% obrotu (4,1 vs 3,1/rok) odwraca znak przy fee 0,2%;
+  „DD −37→−30" z pełnej próby = artefakt punktu startu (2 layouty lepiej,
+  2 gorzej). Werdykt: `docs/ENSEMBLE_OOS_2026-08-08.md` + korekta w
+  RESEARCH_ULEPSZEN. Konsekwencje: pozycji ułamkowych NIE budujemy (jedyny
+  powód odpadł); kolejka researchu: #1 benchmark-filtr zmienności przez ten
+  sam rygor OOS. EMA20/100 przeżyło piątego pretendenta.

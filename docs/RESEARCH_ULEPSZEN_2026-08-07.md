@@ -50,6 +50,14 @@
 
 ### 2. Ensemble prędkości EMA — tanie, realne dowody
 
+> 🔴 **KOREKTA (2026-08-08): ZMIERZONY I ODRZUCONY.** Skrining pełnopróbkowy
+> 2026-08-07 dawał GO (0,93→0,98), ale uczciwy harness OOS (4 layouty, siatka
+> prowizji, reguła pre-rejestrowana — `scripts/research/ema_ensemble_oos.py`)
+> odrzucił: przewaga siedzi w 1/4 layoutów, +32% obrotu zabija ją przy 0,2%,
+> poprawa DD to artefakt punktu startu. Pełny werdykt:
+> `docs/ENSEMBLE_OOS_2026-08-08.md`. Nie relitygować bez nowej hipotezy.
+> Kolejka adopcji: benchmark-filtr zmienności awansuje na #1.
+
 - Uśrednianie sygnału po kilku lookbackach redukuje ryzyko „szczęścia jednego
   parametru"; dowody w ensemble'ach kanałowych Concretum (Sharpe >1.5 na BTC
   i altach, j.w.). Treść blogowa o „MA ribbons" = folklor; zasada uśredniania
