@@ -130,7 +130,10 @@ ocena bramek A/B ≥2026-09-10; re-ocena co 28 dni.
 ⚠️ **NIE ROBIMY:** vol targetingu w wariancie zmierzonym w M4 (odrzucony),
 ensemble prędkości EMA (odrzucony OOS 2026-08-08), maker orderów (zmierzone,
 bez sensu), shortów na BTC (odrzucone danymi), zmian strategii 1d w oknie,
-pozycji ułamkowych w księdze (jedyny powód odpadł z ensemble).
+pozycji ułamkowych w księdze (jedyny powód odpadł z ensemble),
+**mean reversion / day tradingu** (zmierzony 2026-08-08: RSI kontra-trend
+1d/4h/1h wszystkie REJECT, na 1h Sharpe −1,3…−3,8 i −100% —
+docs/MEAN_REVERSION_2026-08-08.md).
 ### Protokół wznowienia (rób po kolei)
 1. **Przeczytaj** `📍 STATUS TERAZ` → `🎯 NASTĘPNA AKCJA` powyżej. Odpowiedź na
    „od czego zacząć" jest tam — nie pytaj o nią usera.
@@ -1460,3 +1463,14 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   PR #46 zmergowany; user SKASOWAŁ klucz LIVE `TradePulseAI` → konto LIVE
   bez kluczy, boty grają dalej na parze demo z SSM (zweryfikowane po
   skasowaniu). Lista akcji usera PUSTA — pełny tryb czekania do ~2026-09-10.
+- **2026-08-08b** — 🔬 Przesłanka usera „kupuj jak spada, sprzedawaj jak
+  rośnie / agresywniej, jak 6 warstw" ZMIERZONA w scenario_lab (PR #47 był
+  już zmergowany): RsiMeanReversion (podręcznikowe parametry, bez strojenia)
+  × {1d long, 1d L+S, 4h L+S, 1h L+S} + kontrolka. **Wszystkie 4 REJECT**:
+  1d long S=0,29–0,57 (nie bije ani EMA ~1,0 ani B&H), 1d L+S zwrot
+  −99…−111%, 4h L+S −99,6%, 1h L+S S=−1,3…−3,8 i −100% wszędzie (1382
+  trejdy = ~276% kapitału w prowizjach). Kontrolka: checki 1–3 PASS; jej
+  FAIL na DSR = artefakt puli rozdętej wariancją RSI (opisane w doc).
+  Przypomnienie z audytu 6 warstw: system „widział kierunek" AUC 0,519 =
+  moneta. Werdykt: mean reversion / day trading → NIE ROBIMY.
+  Doc: docs/MEAN_REVERSION_2026-08-08.md. EMA20/100: pretendent #6 odparty.
