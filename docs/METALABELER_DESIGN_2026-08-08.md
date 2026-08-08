@@ -99,6 +99,17 @@ odwraca znak Sharpe'a. **Najbardziej prawdopodobny wynik eksperymentu:
 
 ## 4. Kryterium akceptacji (bez zmian od 2026-08-08, mechaniczne)
 
+> 🔴 **KOREKTA REGUŁY po próbach #1–#2 (2026-08-08, osobny commit,
+> uzasadnienie w METALABELER_RESULTS_2026-08-08.md §Korekta):** reguła
+> poniżej okazała się podatna na artefakt jednostajnej dźwigni — model o
+> ZEROWEJ dyskryminacji (rho(p,win)=−0,01) przeszedł ją 2/2, bo wagi
+> |net_return| windują ważony base rate do ~0,85, sizing centrowany na 0,5
+> nigdy nie schodzi poniżej 1× i „pobicie EMA" robi lewar, nie osąd.
+> Od próby #3 werdykt wymaga DODATKOWO: (a) Spearman(p, win) > 0 przy
+> p<0,10 na OOF; (b) ≥10% zdarzeń zsizowanych <1,0×; (c) 0 czerwonych
+> flag w top-5 wygranych (flaga = automatyczny REJECT, koniec ze statusem
+> „diagnostyka"). Próby #1–#2 ocenione TREŚCIOWO jako REJECT.
+
 Strategia TŁUMIONA modelem (pasmo 0,5–1,5×, te same zdarzenia OOF) musi
 pobić **czyste EMA20/100** na Sharpie po kosztach na zbiorczych ścieżkach
 OOF, ORAZ nie przegrywać na większości z 5 ścieżek CPCV. Uplift w
@@ -127,4 +138,5 @@ CFM (ogon trend-followingu) · studium 10-krypto (dev.to/nydartrading).
 
 | # | data | konfiguracja | wynik | wniosek |
 |---|---|---|---|---|
-| — | — | (jeszcze nic nie uruchomiono) | — | — |
+| 1 | 2026-08-08 | logit L2, purged 4-fold (guard z 5), embargo 30 d, C nested→0,01×4, wagi \|ret\|, sizing 0,5–1,5× | mech. PASS 2/2 = artefakt dźwigni; rho(p,win)=−0,01; 0/128 stłumionych; 5/5 flag top-5 | **REJECT w treści** |
+| 2 | 2026-08-08 | XGBoost benchmark (depth 2, mcw 5, eta 0,1, λ 5, natywne NaN) | identyczna degeneracja (+0,002) | REJECT; benchmark zgodny |
