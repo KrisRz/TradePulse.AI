@@ -183,11 +183,45 @@ Zmierzone po kursach BNB z chwili każdego filla:
   + www live (S3 + CloudFront + ACM, root `infra-site/`). Domena auto-renew do
   2026-09-28 ($9/rok — TA POZYCJA JEST W koszcie $1,35/mies., nie zapomnieć).
 
-### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-07, po PR #35–#44)
+### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-25, PR #56)
 
-**0. ✅ WSZYSTKO Z 2026-08-07 WDROŻONE I ZWERYFIKOWANE E2E** (deploy F7 zrobiony,
-dane ML komplet, audyt E2E przeszedł: suite zielony, bramka A PASS, C
-COLLECTING 1/20, heartbeat OK, DLQ puste, harmonogramy ENABLED).
+> **DECYZJA 2026-08-25: DAJEMY BOTOWI POPRACOWAĆ ~MIESIĄC.** Nie dlatego, że
+> nie ma co robić, tylko dlatego, że **jedyne, czego brakuje, to czas
+> kalendarzowy**. Kolejka ulepszeń jest zmierzona i pusta (9/9 odrzuconych),
+> a w oknie M5 i tak nie wolno ruszać strategii. Każda „poprawka" teraz
+> psułaby pomiar, który właśnie zaczął mieć treść.
+
+**0. LISTA AKCJI USERA (krótka, dwie pozycje):**
+- [ ] **`terraform apply` w `infra-site/`** — naprawa `/api/state` jest
+      zacommitowana, plan zweryfikowany (**1 zmiana, wyłącznie Lambda strony,
+      zero zasobów M5**), ale apply zablokował klasyfikator auto-mode.
+      Do czasu apply endpoint serwuje starą (zaniżoną) wartość.
+- [ ] **Zmergować PR #56** (CI zielone: pytest + gitleaks).
+
+**1. NAJBLIŻSZY KAMIEŃ: ocena bramek ≥2026-09-10** (za ~16 dni od 25.08).
+Do tego czasu **nie ruszamy strategii**. Spodziewany werdykt bramki B:
+`INCONCLUSIVE_EXTEND` (~1% mocy w 56 dni) — to nie porażka, to arytmetyka.
+
+**2. CO ZROBIĆ PRZY NASTĘPNYM OTWARCIU (kolejność):**
+1. Check-up jak 2026-08-25: alarmy, błędy, ciągłość barów, `CodeSha256` M5,
+   **i pozycja u ŹRÓDŁA** (saldo konta demo + `allOrders`), nie tylko z księgi.
+2. Sprawdzić, **czy kanał 4h zamknął pozycję otwartą 18.08**. To będzie
+   pierwsza transakcja z realną treścią (wchodziła przy 64 643, w szczycie
+   +22%). Jej wynik to najważniejszy nowy fakt, jaki może się pojawić.
+3. Sprawdzić bramkę C (było 3/20) i bota 1d (long od 22.08).
+4. Dopiero potem cokolwiek innego.
+
+**3. ODŁOŻONE ŚWIADOMIE (nie zapomnieć, nie robić teraz):**
+- **Prowizja poza księgą** — po zamknięciu bramki C, przez dyscyplinę golden
+  master. Szczegóły w sekcji „KSIĘGA 4h NIE PŁACI PROWIZJI" wyżej.
+- **Pokazać `fees_external` na stronie** — tanie i uczciwe, API już je zwraca,
+  frontend ignoruje. Można zrobić w dowolnej sesji, nie dotyka M5.
+- **Kandydat #10** — tylko przy ~2× zdarzeń albo cesze z NOWEJ hipotezy.
+  Reguła bez zmian po 9 odrzuceniach.
+
+**0-stare. ✅ WSZYSTKO Z 2026-08-07 WDROŻONE I ZWERYFIKOWANE E2E** (deploy F7
+zrobiony, dane ML komplet, audyt E2E przeszedł: suite zielony, bramka A PASS,
+C COLLECTING 1/20, heartbeat OK, DLQ puste, harmonogramy ENABLED).
 
 **1. ✅ ZROBIONE 2026-08-07** — F7 potwierdzony na żywo (16:10 UTC, bar 12:00:
 `held`, zero eventów „position risk", 0 błędów). Alarmy shadow/venue naprawione
