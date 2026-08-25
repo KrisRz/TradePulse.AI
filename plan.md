@@ -22,10 +22,28 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
-**Stan na 2026-08-08 (sesja: FRONTEND PORTFOLIO — strona live + README).**
-Kanał badawczy bez zmian od poprzedniej sesji (cheap queue wyczerpana,
-meta-labeler odrzucony). Ta sesja **nie dotknęła M5** — cała praca poszła
-w warstwę prezentacji, świadomie w odseparowanym roocie Terraform.
+**Stan na 2026-08-25 (sesja: CHECK-UP + KANDYDAT #9).** System zdrowy w
+całości: 9/9 alarmów OK, 0 błędów przez 7 dni, 42/42 wywołań bota 4h,
+115/115 barów bez luki, zamrożenie M5 (`CodeSha256`) nietknięte. Pozycja
+bota **potwierdzona u źródła** — konto Binance demo trzyma 0,05309 BTC
+(= 0,05 bazowe + 0,00309 bota), wszystkie 3 zlecenia zgodne z księgą.
+
+Zrobione 2026-08-25:
+- 🔴 **Kandydat #9 (trailing stop) ODRZUCONY** — pierwszy kandydat, którego
+  przesłanka PRZESZŁA (zwycięskie 1d szczytują +73,5%, wychodzą +33,5%),
+  a mimo to padł: wspólne pasmo na obu horyzontach = 1 wartość (wymagane 3),
+  a „poprawa" stoi na 1 transakcji (4h: 111% efektu z jednego zdarzenia).
+  Docs: `TRAILING_STOP_DESIGN_2026-08-25.md` + `..._RESULTS_...`. **Bilans 9/9
+  odrzuconych.** Nowa lekcja: dobra przesłanka NIE jest obietnicą.
+- ✅ **F7 zweryfikowane historycznie** (przy okazji, bo stopy ~10% bywają
+  zabójcze): na 1d wyraźnie pomaga, na 4h kosztuje 0,04 Sharpe'a. Bez akcji.
+- 🐞 **Naprawione `/api/state` → `paper.equity`** — zwracało `realized`
+  (zaksięgowane) zamiast wyceny rynkowej. Niewidoczne, dopóki bot 1d stał
+  flat; od 2026-08-22 zaniżało o 2,5%. + 4 testy (`test_site_status.py`).
+  ⚠️ **`terraform apply` w `infra-site/` JESZCZE NIE WYKONANY** — plan
+  zweryfikowany (1 zmiana, wyłącznie Lambda strony, zero zasobów M5).
+- 🔍 **Znaleziona luka wierności kosztów** — patrz „KSIĘGA 4h NIE PŁACI
+  PROWIZJI" niżej. Świadomie NIE naprawiona w trakcie zbierania bramki C.
 
 Zrobione 2026-08-08 (PR #54 zmergowany, **PR #55 OTWARTY, CI zielone**):
 - **`https://tradepulseai.co.uk` LIVE** (apex + www) — statyczna strona
@@ -47,10 +65,13 @@ Zrobione 2026-08-08 (PR #54 zmergowany, **PR #55 OTWARTY, CI zielone**):
 **Jesteśmy dalej w trybie: czekamy i zbieramy dane.**
 
 #### Gdzie jesteśmy w milestone'ach
-M0–M4 ✅ · **M5 BIEGNIE — dzień 23/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
-Kanał 4h: long od 2026-08-06 16:00 (entry 64 474,17, qty 0,0031); bramka C
-zbiera dowody TRWALE (DynamoDB) — `COLLECTING 1/20 filli`; kill-switch + **F7**
-(stop 10% od entry, dzienny limit 10%, progi pre-rejestrowane z pomiaru).
+M0–M4 ✅ · **M5 BIEGNIE — dzień 40/56**, ocena bramek ≥2026-09-10 · M6 zabramkowane bramką B.
+Kanał 4h: long od **2026-08-18 16:00** (entry 64 643,48, qty 0,00309) po
+zamknięciu pierwszego round-tripu ze **STRATĄ −1,03%** (06.08 → 12.08);
+bramka C zbiera dowody TRWALE (DynamoDB) — `COLLECTING 3/20 filli`;
+kill-switch + **F7** (stop 10% od entry, dzienny limit 10%, progi
+pre-rejestrowane z pomiaru; ✅ zweryfikowane historycznie 2026-08-25 —
+na 1d Sharpe 0,710→0,895 i DD −64,3%→−46,8%, na 4h koszt 0,04 Sharpe'a).
 **Kwarantanna enterprise WYKONANA** (5 skazanych klas odmawia startu bez
 `ENTERPRISE_ENGINES=on`). Dane pod ML zebrane: funding 2020-01+, snapshot
 Coin Metrics 2026-08-07 (też w safety), metrics OI **dociągnięte** (623 170
@@ -87,9 +108,47 @@ wierszy, 2166/2166 dni). Alarmy shadow/venue naprawione (PR #43) — patrz niże
   czytana data source'em.
 
 #### Stan strategii
-Bot 1d stoi **FLAT od 2026-05-29**, 0 sygnałów przez całe okno. To poprawne
-zachowanie trend-followingu w bessie, nie awaria. Bramka B ma ~1% mocy w 56 dni
+🆕 **Bot 1d WYSZEDŁ Z FLAT 2026-08-22** — pierwszy sygnał od 2026-05-29,
+entry 77 090,34, equity 10 236,53 (+2,37%), 0 zamkniętych transakcji.
+Zapis „FLAT przez całe okno" jest **nieaktualny**: okno M5 ma wreszcie
+otwartą pozycję w mierzonym kanale. Bramka B dalej ma ~1% mocy w 56 dni
 → spodziewany werdykt `INCONCLUSIVE_EXTEND`, realny horyzont 12–18 mies.
+Jedna pozycja tego nie zmienia — zmienia tylko to, że jest co mierzyć.
+
+Kanał 4h (giełdowy) na 2026-08-25: equity 242,07 z 200 = **+21,04%**, ale
+uczciwe rozbicie to **−1,03% zaksięgowane** (jedyna zamknięta transakcja,
+stratna) i **+22,09% niezrealizowane** w otwartej pozycji. Buy & hold w tym
+samym oknie: **+22,47%** — bot jest **1,43 pp ZA rynkiem**. To normalne dla
+trend-followingu (wchodzi po potwierdzeniu, zapłacił za jeden fałszywy start),
+ale „bije rynek" byłoby nieprawdą.
+
+#### 🔍 KSIĘGA 4h NIE PŁACI PROWIZJI (znalezione 2026-08-25, ŚWIADOMIE NIE NAPRAWIONE)
+
+`_book_actual_fee` w `portfolio.py` księguje prowizję w BNB do `fees_external`
+**poza equity** — bo bez kursu BNB nie da się jej przeliczyć. To jest udokumentowana,
+uczciwa decyzja („zgadywanie kursu byłoby gorsze niż pokazanie osobno"), ale ma
+konsekwencję, której nikt nie policzył: **ścieżka quantity-backed nie obciąża
+equity ŻADNĄ prowizją**. Ścieżka modelowana (bot 1d) obciąża normalnie.
+
+Zmierzone po kursach BNB z chwili każdego filla:
+
+| fill | notional | kurs BNB | prowizja | stawka |
+|---|---|---|---|---|
+| 06.08 21:11 | $199,87 | 771,94 | $0,1955 | 0,0978% |
+| 12.08 04:10 | $197,80 | 810,67 | $0,1962 | 0,0992% |
+| 18.08 20:10 | $199,75 | 845,60 | $0,2101 | 0,1052% |
+
+- **Razem $0,6018 zapłacone i nigdy niezaksięgowane.** Equity 242,07 → uczciwie
+  **241,47**, czyli **+20,73%** zamiast +21,04%. Rośnie z każdym fillem.
+- 🔴 **Hipoteza o rabacie BNB OBALONA POMIAREM**: stawka realna to ~0,10%, nie
+  0,075%. Model kosztu (`fee_rate=0.001`) jest **trafny co do 0,7%** —
+  backtest liczy prowizję dobrze, po prostu żywa księga jej nie stosuje.
+- **Dlaczego nie naprawiamy TERAZ:** bramka C jest w trakcie zbierania (3/20),
+  a to jest zmiana księgowania w środku pomiaru. Naprawa po zamknięciu bramki C
+  albo przy M6, przez dyscyplinę golden master (zamroź PRZED dotknięciem).
+- **Co zrobić tanio i od razu:** strona w ogóle nie pokazuje `fees_external`
+  (API je zwraca, frontend ignoruje). Wystarczy je wyświetlić, żeby publikowana
+  liczba przestała być cicho zawyżona.
 
 #### 🔴 CZTERY RZECZY, KTÓRYCH NIKT NIE SZUKAŁ (z 2026-08-06)
 1. **Mina w Terraformie** — `plan` na czystym repo chciał przedeployować obie
@@ -1616,3 +1675,36 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   METALABELER_RESULTS_2026-08-08.md. **EMA20/100 odparło pretendenta #8 —
   wszystkie sensowne ścieżki ulepszeń ZMIERZONE I ZAMKNIĘTE; projekt w
   czystym trybie zbierania danych do ≥2026-09-10.**
+
+- **2026-08-25 — CHECK-UP CAŁEGO SYSTEMU + KANDYDAT #9 (trailing stop).**
+  Check-up: 9/9 alarmów OK, 0 błędów/7 dni, 42/42 wywołań 4h, 115/115 barów
+  bez luki, `CodeSha256` M5 nietknięty, harmonogramy ENABLED. Pozycja
+  zweryfikowana **u źródła, nie w księdze**: konto Binance demo trzyma
+  0,05309 BTC (0,05 bazowe + 0,00309 bota), 3/3 zlecenia zgodne co do ceny.
+  Ceny bota = realny rynek co do centa (sygnały z `api.binance.com`).
+  **Nowe fakty:** bot 1d wyszedł z flat 2026-08-22 (pierwszy sygnał od maja,
+  entry 77 090,34, +2,37%) — zapis „FLAT przez całe okno" był nieaktualny;
+  kanał 4h +21,04%, ale to −1,03% zaksięgowane + 22,09% niezrealizowane,
+  przy buy & hold +22,47% (bot 1,43 pp ZA rynkiem); bramka C 3/20.
+  **Kandydat #9 = pierwszy, którego PRZESŁANKA PRZESZŁA** (zwycięskie 1d
+  szczytują +73,5%, wychodzą +33,5% → 45 pp oddane; 5/7 szczytuje >2×
+  wyjścia) **i który mimo to padł.** Siatka 12 wariantów × 2 horyzonty,
+  pętla symulacji zweryfikowana jako lustro silnika (`==` na floatach;
+  pierwsze uruchomienie WYKRYŁO rozbieżność 90 vs 91 — brak domknięcia na
+  końcu danych). Reguła pre-rejestrowana (bije na OBU horyzontach na ≥3
+  sąsiednich wartościach): wspólne pasmo = **1** wartość → REJECT. Treściowo
+  też: 4h@20% → 111% efektu z JEDNEJ transakcji, 1d@25% → największy
+  pojedynczy efekt (−58,88%) to 1368% sumy = szum, który się skasował.
+  Ciasny trailing niszczy strategię (2×ATR: 89/91 stopów, Sharpe −0,78).
+  Obalona też własna przesłanka projektowa: stop NIE dokłada round-tripu
+  (blokada `blocked_side` zamienia go w inne wyjście z tej samej transakcji).
+  Przy okazji **F7 zweryfikowane historycznie**: 1d Sharpe 0,710→0,895 i DD
+  −64,3%→−46,8%, 4h koszt 0,04 Sharpe'a — zdrowe, bez akcji.
+  **Znaleziona luka wierności:** ścieżka quantity-backed nie obciąża equity
+  żadną prowizją (BNB idzie poza księgę) — $0,6018 zapłacone i
+  niezaksięgowane, equity 242,07 → uczciwie 241,47. Hipoteza o rabacie BNB
+  OBALONA POMIAREM (realna stawka ~0,10%, model trafny co do 0,7%).
+  Naprawa świadomie odłożona (bramka C w trakcie zbierania).
+  Naprawione: `/api/state` → `paper.equity` liczyło `realized` zamiast
+  wyceny rynkowej (zaniżało o 2,5% od 22.08) + 4 testy; suite 410 zielony.
+  Docs: TRAILING_STOP_DESIGN/RESULTS_2026-08-25.md. **Bilans 9/9 odrzuconych.**

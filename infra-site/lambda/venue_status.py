@@ -125,16 +125,43 @@ def _fills(table) -> list:
 
 
 def _paper(table) -> dict:
+    """The 1d paper bot, marked to market.
+
+    ``realized`` is equity booked on *closed* trades only, so while a position
+    is open it is stale by exactly the open profit. That was invisible until
+    2026-08-22, when this bot took its first position since May and the two
+    numbers separated. Reporting ``realized`` as "equity" understated the bot
+    by 2.5% within three days of the position opening.
+
+    This bot runs the modelled path and its state predates the venue work, so
+    it carries no ``cash``/``qty`` to hand over the way :func:`_venue` does.
+    Equity is therefore marked here, with the same arithmetic the bot itself
+    uses, and the inputs are returned alongside so the page can re-mark to a
+    live price if it wants to.
+    """
     item = _state(table, PAPER_PK)
     st = item.get("state") or {}
     port = st.get("portfolio") or {}
-    initial = port.get("initial_capital") or 0
+    side = int(port.get("side") or 0)
     realized = port.get("realized")
+    entry_equity = port.get("entry_equity")
+    entry_fill = port.get("entry_fill")
+    last_price = port.get("last_price")
+
+    equity = realized
+    if side and entry_equity and entry_fill and last_price:
+        equity = entry_equity * (1.0 + side * (last_price / entry_fill - 1.0))
+
     return {
-        "position": int(port.get("side") or 0),
-        "position_label": POS_LABEL.get(int(port.get("side") or 0), "?"),
-        "equity": realized,
-        "initial_capital": initial,
+        "position": side,
+        "position_label": POS_LABEL.get(side, "?"),
+        "equity": equity,
+        "realized": realized,          # banked on closed trades, excludes the open one
+        "initial_capital": port.get("initial_capital") or 0,
+        "entry_time": port.get("entry_time"),
+        "entry_fill": entry_fill,
+        "entry_equity": entry_equity,
+        "last_price": last_price,
         "closed_trades": len(port.get("trades") or []),
         "last_bar": st.get("last_bar"),
         "updated_at": item.get("updated_at"),
