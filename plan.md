@@ -51,6 +51,19 @@ docs/plan). Werdykt w skrócie:
   dotyczy kluczy HMAC; self-generated **Ed25519** mogą handlować bez IP (cytat
   u źródła w audycie §9). NAT GW za $400/rok wypada; koszt = podpis Ed25519
   w executorze. KROK 0 = user testuje klucz jednorazowy.
+- ✅ **PR #57 ZMERGOWANY** przez usera w trakcie sesji. Druga część sesji:
+  **audyt E2E → `docs/ANALIZA_E2E_2026-09-04.md`** (24 szwy na żywo: feed →
+  sygnał → log → księga → giełda → stan → API → strona → alarmy → SNS →
+  Terraform). Ścieżka spójna od końca do końca; `terraform plan` bez zmian na
+  obu rootach; SNS e-mail CONFIRMED, historia alarmów dowodzi, że rurociąg
+  odpalił i wrócił 06–07.08. Luki: **E1** — `gate.py --fidelity` jest 1d-only
+  (`WINDOW_START` zaszyte, replay ścieżką modelowaną) → kanał 4h, który pójdzie
+  na live, **nie ma sprawdzenia „księga == replay"**; jego FAIL (348 rozjazdów
+  po $0,15–0,20) to dokładnie niezaksięgowana prowizja BNB (200,00 vs 199,80).
+  **E2** — origin `/api/state` publiczny bez CloudFront (OAC do zrobienia w
+  `infra-site/`). **E3** — brak `event_invoke_config` → domyślne 2 retry
+  Lambdy aktywne (potwierdza przesłankę CRITICAL-2). Fixy z 21.07 (PR #16)
+  wszystkie trzymają.
 
 **Stan na 2026-08-25 (sesja: CHECK-UP + KANDYDAT #9).** System zdrowy w
 całości: 9/9 alarmów OK, 0 błędów przez 7 dni, 42/42 wywołań bota 4h,
@@ -220,7 +233,8 @@ Zmierzone po kursach BNB z chwili każdego filla:
 > `gate.py`; ocenę 10.09 uruchamiamy kodem JAK JEST i zapisujemy do `docs/`.
 
 **0. LISTA AKCJI USERA:**
-- [ ] **Zmergować PR #57** (audyt; tylko docs + plan).
+- [x] ~~Zmergować PR #57~~ — ZMERGOWANY 2026-09-04.
+- [ ] **Zmergować PR #58** (audyt E2E; tylko docs + plan).
 - [ ] **KROK 0 (15 min, zero kodu):** na koncie LIVE założyć jednorazowy klucz
       **Ed25519** (self-generated) z Reading + Spot Trading, **BEZ IP**, wypłaty
       OFF — i zapisać, czy Binance go przyjmuje / czy znika banner „will be
@@ -1815,3 +1829,11 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   jednostkach → 0,000). 🟢 Blocker M6 stałego IP dotyczy tylko HMAC — Ed25519
   handluje bez IP (cytat Binance FAQ). Domena odnowiona do 2027-09-28. NIC na M5
   nie ruszone; następna sesja = audyt §10.
+- 2026-09-04 (cd.) — AUDYT E2E po merge PR #57 (branch session/e2e-audit-20260904,
+  PR #58): 24 szwy zweryfikowane na żywo (`docs/ANALIZA_E2E_2026-09-04.md`) —
+  ścieżka spójna od Binance do strony, log decyzji 51/51 + 174/174 bez luk,
+  3 fille == 3 zlecenia na venue, pozycja u źródła, `terraform plan` No changes
+  na obu rootach, SNS CONFIRMED + historia alarmów. Luki: E1 bramka A 1d-only
+  (kanał 4h bez parytetu księgowego; FAIL = niezaksięgowana prowizja 0,1%),
+  E2 publiczny origin API, E3 retry async aktywne. Fixy z 21.07 trzymają.
+  Pamięć `e2e-audit-verdict` przepisana. Nic na M5 nie ruszone.
