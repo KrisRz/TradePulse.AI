@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-08-08**
+> Ostatnia aktualizacja: **2026-09-04**
 
 ---
 
@@ -21,6 +21,36 @@
 > Nie pytaj „od czego zacząć" — odpowiedź jest tu. Wykonaj protokół i ruszaj.
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
+
+**Stan na 2026-09-04 (sesja: PEŁNY AUDYT — dzień 50/56 okna M5).** System
+zdrowy w całości: sha M5 `r8Luxno…tNq0=` nietknięte, 9/9 alarmów OK, 0 błędów
+przez 14 dni, 84/84 wywołań venue, testy zielone. **Bramka A PASS 6/6** (51 barów),
+bramka B `WINDOW_RUNNING` (0 RT, equity +5,32%, maxDD −3,63%), **bramka C 3/20**.
+Bot 1d LONG od 22.08; kanał 4h **wciąż LONG od 18.08** (entry 64 643, equity
+243,62 = +21,8%, z czego −1,03% zaksięgowane) — pozycja potwierdzona u źródła
+(0,05309 BTC, 0 otwartych zleceń). Domena odnowiona automatycznie do
+**2027-09-28** (zapis „decyzja ~2026-09-29" niżej jest nieaktualny).
+
+Zrobione 2026-09-04 — **`docs/AUDIT_2026-09-04.md`** (7 agentów + własna
+weryfikacja każdego HIGH/CRITICAL w kodzie i na prodzie; NIC nie zmienione poza
+docs/plan). Werdykt w skrócie:
+- **Strategia: nic do poprawy** — 9/9 odrzuceń = False Strategy Theorem; kanon
+  mówi „więcej treningu to zła dźwignia" przy N≈15–20 trejdów.
+- **Ścieżka pieniędzy: 2× CRITICAL + 4× HIGH**, wszystko klasa „awaria
+  systemowa", nic na Lambdach M5: brak `newClientOrderId` + retry POST po
+  timeout (duplikat zlecenia); zlecenie PRZED zapisem `last_bar` + domyślny retry
+  Lambdy (re-trade bara); **T2 kill-switcha martwe** (`execution_drag = 0.0` w
+  DynamoDB po 3 fillach — potwierdzone); **sizing z konta (sufit 200), nie z
+  księgi** → stąd `cash = −1,81` w księdze 4h; wspólny prefix SSM shadow/venue;
+  rekoncyliacja tylko loguje.
+- **Walidacja: 2× HIGH** — optymalizator walk-forward NIGDY nic nie wybrał
+  (`min_trades=10` → fallback do `combos[0]` = 10/50; „adaptive 1,11–1,18" to
+  stały backtest 10/50); DSR w złych jednostkach (`0.3` per-bar → zawsze 0,000).
+  Sklejanie foldów zawyża OOS Sharpe'a o ~0,05 (ciągły 0,96 vs B&H 0,87).
+- 🟢 **Blocker M6 „stały IP" prawie na pewno NIE ISTNIEJE** — reguła Binance
+  dotyczy kluczy HMAC; self-generated **Ed25519** mogą handlować bez IP (cytat
+  u źródła w audycie §9). NAT GW za $400/rok wypada; koszt = podpis Ed25519
+  w executorze. KROK 0 = user testuje klucz jednorazowy.
 
 **Stan na 2026-08-25 (sesja: CHECK-UP + KANDYDAT #9).** System zdrowy w
 całości: 9/9 alarmów OK, 0 błędów przez 7 dni, 42/42 wywołań bota 4h,
@@ -183,7 +213,39 @@ Zmierzone po kursach BNB z chwili każdego filla:
   + www live (S3 + CloudFront + ACM, root `infra-site/`). Domena auto-renew do
   2026-09-28 ($9/rok — TA POZYCJA JEST W koszcie $1,35/mies., nie zapomnieć).
 
-### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-08-25, PR #56)
+### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-04, PR #57)
+
+> **DECYZJA 2026-09-04: następna sesja = `docs/AUDIT_2026-09-04.md` §10**, po
+> kolei. Strategii nie ruszamy (nic do poprawy). Do 10.09 nie ruszamy M5 ani
+> `gate.py`; ocenę 10.09 uruchamiamy kodem JAK JEST i zapisujemy do `docs/`.
+
+**0. LISTA AKCJI USERA:**
+- [ ] **Zmergować PR #57** (audyt; tylko docs + plan).
+- [ ] **KROK 0 (15 min, zero kodu):** na koncie LIVE założyć jednorazowy klucz
+      **Ed25519** (self-generated) z Reading + Spot Trading, **BEZ IP**, wypłaty
+      OFF — i zapisać, czy Binance go przyjmuje / czy znika banner „will be
+      deleted". To rozstrzyga, czy M6 kosztuje $0 czy ~$40/rok. Klucza nie używać.
+- [ ] Decyzja: księga v2 (sizing z `cash`, prowizja BNB, resztka qty) — razem z
+      poprawkami bezpieczeństwa pod golden master, czy dopiero po bramce C?
+      Rekomendacja audytu: razem (nie czekać do 2027 ze złą księgą).
+- [ ] Decyzja do pre-rejestracji PRZED kolejną oceną co 28 dni: zaostrzyć bramkę B
+      o `psr_vs_zero ≥ 0,95` lub `window_days ≥ 365` (audyt §3 HIGH-2).
+
+**1. SESJA KODOWA A (M5-safe, kanał 4h, bezpieczeństwo egzekucji):** audyt §10
+KROK 1 — `newClientOrderId` + zero retry POST + rekoncyliacja po
+`origClientOrderId`; odczyt filli PRZED decyzją; `drag` po `bot.step()`;
+rekoncyliacja fail-closed w obie strony; osobne prefixy SSM; `reserved_concurrent_
+executions=1`; testy łapiące każdą awarię; deploy venue+shadow z weryfikacją sha M5.
+
+**2. PO OCENIE 10.09:** DSR `0.3/365`; walk-forward `no_admissible_combo`;
+ciągły OOS w `calibration_audit.py`; diagnostyki w raporcie bramki (B&H, CI Lo,
+N_eff, DD czas trwania); poprawić `M4_EDGE_VALIDATION.md`/plan („adaptive" = 10/50).
+
+**3. OPERACJE (dowolna sesja):** healthchecks.io dead-man; `docs/RUNBOOK.md`;
+eksport HMRC z fill-logu; `fees_external` na stronie.
+
+---
+#### (poprzednia NASTĘPNA AKCJA z 2026-08-25 — zachowana dla kontekstu)
 
 > **DECYZJA 2026-08-25: DAJEMY BOTOWI POPRACOWAĆ ~MIESIĄC.** Nie dlatego, że
 > nie ma co robić, tylko dlatego, że **jedyne, czego brakuje, to czas
@@ -1742,3 +1804,14 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   Naprawione: `/api/state` → `paper.equity` liczyło `realized` zamiast
   wyceny rynkowej (zaniżało o 2,5% od 22.08) + 4 testy; suite 410 zielony.
   Docs: TRAILING_STOP_DESIGN/RESULTS_2026-08-25.md. **Bilans 9/9 odrzuconych.**
+- 2026-09-04 — PEŁNY AUDYT (branch session/audit-20260904, PR #57): check-up
+  100% zdrowy (A PASS 6/6, B WINDOW_RUNNING 0 RT, C 3/20, pozycje u źródła), 7
+  agentów (go-live, open source, ML/trening, Binance, statystyka, 2× audyt kodu)
+  + własna weryfikacja HIGH/CRITICAL. Wynik `docs/AUDIT_2026-09-04.md`: strategia
+  nic do poprawy (False Strategy Theorem); ścieżka pieniędzy 2 CRITICAL + 4 HIGH
+  (brak clientOrderId, order-przed-zapisem, martwe T2 — `execution_drag=0.0`
+  potwierdzone w DynamoDB, sizing z konta → `cash=−1,81`, wspólny SSM); walidacja
+  2 HIGH (walk-forward nigdy nie wybierał → fallback 10/50; DSR w złych
+  jednostkach → 0,000). 🟢 Blocker M6 stałego IP dotyczy tylko HMAC — Ed25519
+  handluje bez IP (cytat Binance FAQ). Domena odnowiona do 2027-09-28. NIC na M5
+  nie ruszone; następna sesja = audyt §10.
