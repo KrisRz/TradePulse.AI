@@ -15,21 +15,26 @@ import pytest
 
 from app.backend.paper_trading.binance_demo import BinanceDemoExecutor
 from app.backend.paper_trading.portfolio import PaperPortfolio
-from app.backend.paper_trading.venue_handler import attach_venue
+from app.backend.paper_trading.venue_handler import BookOutOfSync, attach_venue
 
 
 class FakeRules:
     base_asset = "BTC"
     quote_asset = "USDT"
     step_size = Decimal("0.00001")
+    min_notional = Decimal("5")
 
 
 class FakeExecutor:
     base_url = "https://demo-api.binance.com"
+    client_prefix = "tpv4h"
 
-    def __init__(self, free_base=0.05):
+    def __init__(self, free_base=0.05, free_quote=5000.0, orders=None):
         self.free_base = free_base
+        self.free_quote = free_quote
         self.position = None
+        self.orders = list(orders or [])
+        self.orders_since_calls = []
 
     def set_position(self, qty):
         self.position = Decimal(str(abs(float(qty))))
@@ -37,13 +42,33 @@ class FakeExecutor:
     def rules(self):
         return FakeRules()
 
+    def balances(self):
+        return {"BTC": Decimal(str(self.free_base)),
+                "USDT": Decimal(str(self.free_quote))}
+
     def free_balance(self, asset):
-        return Decimal(str(self.free_base))
+        return self.balances().get(asset, Decimal("0"))
+
+    def orders_since(self, order_id=None, limit=50):
+        self.orders_since_calls.append((order_id, limit))
+        if order_id is None:
+            return self.orders[-limit:]
+        return [o for o in self.orders if int(o["orderId"]) >= int(order_id)]
+
+    def is_ours(self, client_order_id):
+        return bool(client_order_id) and client_order_id.startswith(f"{self.client_prefix}-")
+
+    def client_order_id(self, side, key):
+        return f"{self.client_prefix}-{side}-{key}"
 
 
 class Bot:
-    def __init__(self, portfolio):
+    def __init__(self, portfolio, extra=None, last_bar="2026-09-05 12:00:00+00:00"):
         self.portfolio = portfolio
+        # Real bots carry both: the venue watermark lives in ``extra`` and the
+        # unbooked-order check is anchored on ``last_bar``.
+        self.extra = dict(extra or {})
+        self.last_bar = last_bar
 
 
 # ------------------------------------------------------ position restoration --
@@ -104,14 +129,24 @@ def test_every_run_records_the_venue_balance_beside_the_book():
     assert "warning" not in record          # pre-funded coins are not a mismatch
 
 
-def test_a_book_holding_more_than_the_account_has_is_flagged_loudly():
-    """The one impossible state: the exit leg could not fill even in principle."""
+def test_a_book_holding_more_than_the_account_has_stops_the_run():
+    """The one impossible state: the exit leg could not fill even in principle.
+
+    Until 2026-09-05 this only logged. Logging it means the next decision is
+    still taken — on a book the account cannot honour — and the failure would
+    first appear as an exit that could not fill (audit 2026-09-04, HIGH-2).
+    """
     book = PaperPortfolio(initial_capital=200.0)
     book.reconcile(1, 64_000.0, "t0")       # ~0.0031 BTC on 200 capital
-    record = attach_venue(Bot(book), FakeExecutor(free_base=0.0000001))
+    with pytest.raises(BookOutOfSync, match="cannot fill"):
+        attach_venue(Bot(book), FakeExecutor(free_base=0.0000001))
 
-    assert "warning" in record
-    assert "cannot fill" in record["warning"]
+
+def test_a_book_claiming_cash_the_account_does_not_have_stops_the_run():
+    """The other direction, the one nothing checked at all: quote currency."""
+    book = PaperPortfolio(initial_capital=200.0)   # flat, cash = 200
+    with pytest.raises(BookOutOfSync, match="could not be funded"):
+        attach_venue(Bot(book), FakeExecutor(free_quote=1.0))
 
 
 def test_pre_funded_coins_are_not_mistaken_for_our_position():

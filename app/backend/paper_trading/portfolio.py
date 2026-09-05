@@ -119,16 +119,23 @@ class PaperPortfolio:
         """
         self._executor = executor
 
-    def _fill(self, order_side: int, price: float, time: str):
+    def _fill(self, order_side: int, price: float, time: str,
+              order_key: Optional[str] = None):
         """Obtain a fill for one order leg.
 
         Defaults to a :class:`SimulatedExecutor` built from the portfolio's
         *current* slippage, so restoring a book from disk can never execute
         against a stale cost model.
+
+        ``order_key`` names the decision this leg belongs to so a real venue can
+        refuse a second copy of it (see :class:`~.execution.Order`). It carries
+        no accounting meaning: the modelled path ignores it entirely, which is
+        what keeps the golden master exact.
         """
         executor = self._executor or SimulatedExecutor(slippage=self.slippage)
         return executor.execute(Order(side=order_side, reference_price=price,
-                                      time=time))
+                                      time=time,
+                                      idempotency_key=order_key or time))
 
     # -- fee handling ---------------------------------------------------- #
     def _book_actual_fee(self, fill) -> tuple[float, float]:
@@ -162,8 +169,9 @@ class PaperPortfolio:
         return 0.0, 0.0
 
     # -- opening and closing --------------------------------------------- #
-    def _open(self, new_side: int, price: float, time: str) -> None:
-        fill = self._fill(opening_order_side(new_side), price, time)
+    def _open(self, new_side: int, price: float, time: str,
+              order_key: Optional[str] = None) -> None:
+        fill = self._fill(opening_order_side(new_side), price, time, order_key)
         self.equity_before_entry = self.realized
 
         if fill.qty is None:
@@ -192,8 +200,9 @@ class PaperPortfolio:
         self.realized = self.cash + self.qty * fill.price
         self.entry_equity = self.realized
 
-    def _close(self, price: float, time: str, reason: str) -> None:
-        fill = self._fill(closing_order_side(self.side), price, time)
+    def _close(self, price: float, time: str, reason: str,
+               order_key: Optional[str] = None) -> None:
+        fill = self._fill(closing_order_side(self.side), price, time, order_key)
         exit_fill = fill.price
 
         if fill.qty is None:
@@ -228,10 +237,15 @@ class PaperPortfolio:
         ).__dict__)
         self.side = 0
 
-    def reconcile(self, target_side: int, price: float, time: str) -> Optional[dict]:
+    def reconcile(self, target_side: int, price: float, time: str,
+                  order_key: Optional[str] = None) -> Optional[dict]:
         """Move the portfolio to ``target_side``, trading at ``price`` if needed.
 
         Returns a dict describing the action taken (or None if already there).
+
+        ``order_key`` defaults to ``time`` — the bar. Both legs of a flip share
+        it: an executor distinguishes them by side, so one bar can produce at
+        most one BUY and one SELL however many times the run is retried.
         """
         self.last_price = price
         target_side = int(target_side)
@@ -240,9 +254,9 @@ class PaperPortfolio:
         action: dict[str, Any] = {"time": time, "price": price,
                                   "from": self.side, "to": target_side}
         if self.side != 0:
-            self._close(price, time, reason="signal")
+            self._close(price, time, reason="signal", order_key=order_key)
         if target_side != 0:
-            self._open(target_side, price, time)
+            self._open(target_side, price, time, order_key=order_key)
         return action
 
     # -- reporting ------------------------------------------------------- #

@@ -164,10 +164,16 @@ def test_missing_credentials_are_refused():
 
 
 def test_from_env_reads_credentials_and_refuses_when_absent():
+    ex = BinanceDemoExecutor.from_env({"BINANCE_API_KEY": "k", "BINANCE_API_SECRET": "s"})
+    assert ex.api_key == "k"
+    with pytest.raises(ValueError, match="BINANCE_API_KEY"):
+        BinanceDemoExecutor.from_env({})
+
+
+def test_the_old_demo_credential_names_still_work():
+    """Renaming a variable must not be able to strand a deployed function."""
     ex = BinanceDemoExecutor.from_env({"BINANCE_DEMO_KEY": "k", "BINANCE_DEMO_SECRET": "s"})
     assert ex.api_key == "k"
-    with pytest.raises(ValueError, match="BINANCE_DEMO_KEY"):
-        BinanceDemoExecutor.from_env({})
 
 
 # --------------------------------------------------------------- clock skew --
@@ -254,7 +260,11 @@ def test_business_errors_are_raised_immediately_with_the_venue_code():
         ex.execute(Order(side=BUY, reference_price=100_000.0, time="2026-08-06T00:00:00Z"))
     assert err.value.code == -2010
     assert "insufficient" in err.value.msg
-    assert [p for _m, p, _q in session.requests].count("/api/v3/order") == 1
+    # Exactly one POST. The rejection also costs one GET on the same path — the
+    # venue is asked whether it already holds this order before the error is
+    # believed — and that GET must never be counted as a second attempt.
+    posts = [(m, path) for m, path, _q in session.requests]
+    assert posts.count(("POST", "/api/v3/order")) == 1
 
 
 # ------------------------------------------------------------------- filters --

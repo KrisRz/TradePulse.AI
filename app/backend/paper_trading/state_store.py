@@ -85,14 +85,32 @@ class LocalJsonStateStore:
         return False
 
 
+class ConcurrentStateWrite(RuntimeError):
+    """Someone else wrote the state between our read and our write.
+
+    A bot that shrugs this off overwrites whatever the other run booked — the
+    silent way a fill disappears from a book. Raising fails the invocation,
+    which is what the errors alarm is for.
+    """
+
+
 class DynamoDBStateStore:
-    """State + decision log in one on-demand DynamoDB table (Lambda path)."""
+    """State + decision log in one on-demand DynamoDB table (Lambda path).
+
+    Writes to the state item are guarded by a version an update must match
+    (``state_version``). Reserved concurrency of 1 already makes two live
+    invocations unlikely, but "unlikely" is not an accounting guarantee, and a
+    person running the CLI against production while the schedule fires is not
+    unlikely at all.
+    """
 
     def __init__(self, table_name: str, partition_key: str) -> None:
         import boto3  # provided by the Lambda runtime
 
         self.table = boto3.resource("dynamodb").Table(table_name)
         self.pk = partition_key
+        # None = "not read yet, or read an item written before versioning".
+        self._state_version: Optional[int] = None
 
     @staticmethod
     def _to_ddb(obj: Any) -> Any:
@@ -114,16 +132,50 @@ class DynamoDBStateStore:
                                    ConsistentRead=True)
         item = resp.get("Item")
         if not item:
+            self._state_version = None
             return None
+        raw = item.get("state_version")
+        self._state_version = int(raw) if raw is not None else None
         return self._from_ddb(item.get("state"))
 
     def save(self, state: Dict[str, Any]) -> None:
-        self.table.put_item(Item={
+        """Write the state, but only over the version this process read.
+
+        The condition covers both starting points: an item that has never been
+        versioned (the state this channel is running on today) may be written
+        exactly once without one, and every write after that must match.
+        """
+        from botocore.exceptions import ClientError  # provided by the runtime
+
+        expected = self._state_version
+        next_version = (expected or 0) + 1
+        item = {
             "pk": self.pk,
             "sk": "state",
             "state": self._to_ddb(state),
             "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
+            "state_version": next_version,
+        }
+        if expected is None:
+            condition = "attribute_not_exists(state_version)"
+            values = None
+        else:
+            condition = "state_version = :expected"
+            values = {":expected": expected}
+
+        try:
+            kwargs: Dict[str, Any] = {"Item": item, "ConditionExpression": condition}
+            if values is not None:
+                kwargs["ExpressionAttributeValues"] = values
+            self.table.put_item(**kwargs)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                raise ConcurrentStateWrite(
+                    f"{self.pk} was written by another run since this one read it "
+                    f"(expected state_version {expected}); refusing to overwrite it"
+                ) from exc
+            raise
+        self._state_version = next_version
 
     def append_decision(self, record: Dict[str, Any]) -> None:
         self.table.put_item(Item={

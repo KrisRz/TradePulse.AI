@@ -47,9 +47,12 @@ def load_credentials_from_ssm(prefix: str) -> dict:
         raise RuntimeError(f"missing SSM parameters: {missing}")
 
     values = {p["Name"]: p["Value"] for p in resp["Parameters"]}
+    # Venue-neutral names: this same loader will one day hand out live keys, and
+    # a variable called "DEMO" on that path invites the wrong assumption at the
+    # wrong moment (audit 2026-09-04, HIGH-3).
     return {
-        "BINANCE_DEMO_KEY": values[f"{prefix}/key"],
-        "BINANCE_DEMO_SECRET": values[f"{prefix}/secret"],
+        "BINANCE_API_KEY": values[f"{prefix}/key"],
+        "BINANCE_API_SECRET": values[f"{prefix}/secret"],
     }
 
 
@@ -69,11 +72,13 @@ def handler(event, context):
     timeframe = os.environ.get("TRADING_TIMEFRAME", "1d")
     notional = float(os.environ.get("SHADOW_NOTIONAL", "10"))
     ssm_prefix = os.environ.get("SHADOW_CREDENTIALS_PATH", "/tradepulse/demo")
+    base_url = os.environ.get("BINANCE_BASE_URL")
     force = bool((event or {}).get("force")) if isinstance(event, dict) else False
 
     credentials = load_credentials_from_ssm(ssm_prefix)
     runner = build_shadow_runner(symbol=symbol, timeframe=timeframe,
-                                 notional=notional, credentials=credentials)
+                                 notional=notional, credentials=credentials,
+                                 base_url=base_url)
     if force:
         logger.warning("forced run: bypassing the once-per-day guard")
     result = runner.run_once(force=force)

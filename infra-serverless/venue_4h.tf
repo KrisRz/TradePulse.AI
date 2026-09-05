@@ -88,9 +88,14 @@ resource "aws_iam_role_policy" "venue_4h_ssm" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["ssm:GetParameter", "ssm:GetParameters"]
-      Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.shadow_credentials_path}/*"
+      Effect = "Allow"
+      Action = ["ssm:GetParameter", "ssm:GetParameters"]
+      # Both prefixes while they are the same value; once the venue has its own
+      # parameters, delete the shadow one from this list.
+      Resource = distinct([
+        "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.venue_credentials_path}/*",
+        "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.shadow_credentials_path}/*",
+      ])
     }]
   })
 }
@@ -106,6 +111,13 @@ resource "aws_lambda_function" "venue_4h" {
   memory_size      = 512 # runs the strategy, so pandas is on the hot path
   architectures    = ["x86_64"]
 
+  # One writer at a time. This channel reads the book, decides, orders, and
+  # writes the book back; two invocations overlapping would each decide on a
+  # book the other is about to change. The state item is also guarded by a
+  # version (state_store.py), because concurrency of 1 is an AWS setting and
+  # the accounting must not depend on one.
+  reserved_concurrent_executions = 1
+
   # Required: importing anything under app.backend.paper_trading executes the
   # package __init__, which pulls in `bot` and therefore pandas. This one needs
   # it for real, not merely as an import-chain artefact.
@@ -120,8 +132,23 @@ resource "aws_lambda_function" "venue_4h" {
       VENUE_MAX_NOTIONAL      = tostring(var.venue_4h_max_notional)
       PAPER_CAPITAL           = tostring(var.venue_4h_max_notional)
       SHADOW_CREDENTIALS_PATH = var.shadow_credentials_path
+      # Its own credential path, and its own endpoint, both as configuration.
+      # They point at the shared demo values today; M6 moves this channel onto
+      # keys of its own by changing these two lines, not the code.
+      VENUE_CREDENTIALS_PATH = var.venue_credentials_path
+      BINANCE_BASE_URL       = var.binance_base_url
     }
   }
+}
+
+# The Lambda's own async retries, made explicit and turned off. Retrying is the
+# scheduler's job — it retries 3 times, with a DLQ behind it — and two retry
+# layers stacked silently on top of each other (up to 8 invocations of a bar)
+# was the premise behind CRITICAL-2 in the 2026-09-04 audit. The order path is
+# idempotent now; the retry policy should still be one thing, in one place.
+resource "aws_lambda_function_event_invoke_config" "venue_4h" {
+  function_name          = aws_lambda_function.venue_4h.function_name
+  maximum_retry_attempts = 0
 }
 
 resource "aws_cloudwatch_log_group" "venue_4h" {

@@ -55,6 +55,10 @@ logger = logging.getLogger(__name__)
 #: same deletion protection, and a different key keeps the M5 book untouchable.
 SHADOW_PK = "SHADOW_{symbol}_{timeframe}"
 
+#: Prefix on every client order id the heartbeat sends, so the strategy channel
+#: auditing the same account can tell these orders apart from its own.
+CLIENT_PREFIX = "tpsh"
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -84,7 +88,23 @@ class ShadowRunner:
     def _day(now: datetime) -> str:
         return now.strftime("%Y-%m-%d")
 
-    def _close_stranded_position(self, state: dict) -> Optional[dict]:
+    @staticmethod
+    def _order_keys(day: str, now: datetime, force: bool) -> dict:
+        """Stable names for this run's order legs.
+
+        A scheduled run is named after its day, so a retry after a lost answer
+        asks the venue for the *same* order instead of placing another. A forced
+        run — the deploy check — carries the clock too: it is meant to trade, and
+        reusing the morning's ids would make it silently resolve to that morning's
+        fills and report a success that never happened.
+
+        The recovery leg gets its own name because it is a different order from
+        the round-trip's exit, on the same day, on the same side.
+        """
+        base = day if not force else f"{day}T{now.strftime('%H%M%S')}"
+        return {"recover": f"{base}#recover", "trip": f"{base}#trip"}
+
+    def _close_stranded_position(self, state: dict, order_key: str) -> Optional[dict]:
         """Flatten a position a previous run opened but failed to close.
 
         The one way this runner can leave state behind: the buy filled and the
@@ -101,7 +121,8 @@ class ShadowRunner:
         self.executor._position_qty = stranded      # restore what we are holding
         price = self.executor.mark_price()
         fill = self.executor.execute(
-            Order(side=SELL, reference_price=price, time=_utc_now().isoformat())
+            Order(side=SELL, reference_price=price, time=_utc_now().isoformat(),
+                  idempotency_key=order_key)
         )
         state["open_qty"] = 0.0
         self.store.save(state)
@@ -123,13 +144,15 @@ class ShadowRunner:
             return {"status": "already_done", "day": day}
 
         state = self.store.load() or {"open_qty": 0.0}
+        keys = self._order_keys(day, now, force)
         record: dict[str, Any] = {
             "bar": day, "time": now.isoformat(), "symbol": self.symbol,
             "venue": self.executor.base_url, "kind": "heartbeat",
+            "order_keys": keys,
         }
 
         try:
-            recovery = self._close_stranded_position(state)
+            recovery = self._close_stranded_position(state, keys["recover"])
             if recovery:
                 record["recovery"] = recovery
 
@@ -147,7 +170,7 @@ class ShadowRunner:
                                   initial_capital=10_000.0)
             book.set_executor(self.executor)
 
-            book.reconcile(1, entry_ref, now.isoformat())
+            book.reconcile(1, entry_ref, now.isoformat(), order_key=keys["trip"])
             entry = self.executor.reconciliations()[-1]
             # Persist immediately: if the sell now fails, the next run must know
             # there is something to flatten.
@@ -155,7 +178,7 @@ class ShadowRunner:
             self.store.save(state)
 
             exit_ref = self.executor.mark_price()
-            book.reconcile(0, exit_ref, now.isoformat())
+            book.reconcile(0, exit_ref, now.isoformat(), order_key=keys["trip"])
             exit_rec = self.executor.reconciliations()[-1]
             state["open_qty"] = float(self.executor.position_qty)
             self.store.save(state)
@@ -204,7 +227,8 @@ class ShadowRunner:
 
 def build_shadow_runner(symbol: str = "BTCUSDT", timeframe: str = "1d",
                         notional: float = 10.0, state_path: str = "data/shadow.json",
-                        credentials: Optional[dict] = None) -> ShadowRunner:
+                        credentials: Optional[dict] = None,
+                        base_url: Optional[str] = None) -> ShadowRunner:
     """Wire a runner from the environment, mirroring ``paper_trading.run``."""
     from .state_store import make_state_store
 
@@ -212,6 +236,10 @@ def build_shadow_runner(symbol: str = "BTCUSDT", timeframe: str = "1d",
         env=credentials,
         symbol=symbol,
         max_notional=notional,
+        # Its own namespace on a shared account: the strategy channel must be
+        # able to tell its orders from the heartbeat's when it audits the venue.
+        client_prefix=CLIENT_PREFIX,
+        **({"base_url": base_url} if base_url else {}),
     )
     store = make_state_store(
         state_path=state_path,
