@@ -59,7 +59,9 @@
     // starts lying politely.
     if ($('mFeesExt')) {
       var ext = (v.fees_external && v.fees_external.BNB) || 0;
-      $('mFeesExt').textContent = ext ? ext.toFixed(8) + ' BNB' : 'none';
+      // The unit lives in the label, like every other row here. Repeating it in
+      // the value made this the only line on the card that wrapped.
+      $('mFeesExt').textContent = ext ? ext.toFixed(8) : 'none';
       $('mFeesExt').title = ext
         ? 'Charged by the exchange, deliberately not deducted from the equity above'
         : '';

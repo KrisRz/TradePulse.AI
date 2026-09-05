@@ -73,35 +73,54 @@ resource "aws_lambda_function" "venue_status" {
   depends_on = [aws_cloudwatch_log_group.venue_status]
 }
 
+# The URL requires a signature, and only CloudFront has one (audit E2E
+# 2026-09-04, E2). Before this it was `NONE` and answered 200 to anyone who knew
+# the address, which meant the 30s edge cache bounded origin cost only for
+# traffic that bothered to go through the edge. Low severity — it is a read-only
+# status endpoint on a bot whose entire bill is $1.35/month — but "the cache
+# protects the origin" was simply not true, and an unauthenticated Lambda URL is
+# not the shape to carry into M6.
 resource "aws_lambda_function_url" "venue_status" {
   function_name      = aws_lambda_function.venue_status.function_name
-  authorization_type = "NONE"
-}
-
-# `authorization_type = NONE` on the URL is not enough on its own — without
-# this resource policy the URL answers 403, which CloudFront then swaps for the
-# error page. The endpoint is read-only and public by design.
-resource "aws_lambda_permission" "venue_status_url" {
-  statement_id           = "AllowPublicFunctionUrl"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.venue_status.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
+  authorization_type = "AWS_IAM"
 }
 
 # Reaching the URL and invoking the function are two separate authorisations —
-# since Oct 2025 a public URL needs both, and with only the one above it answers
-# 403 no matter what. `infra-serverless/main.tf` had to add this out of band
-# because AWS provider 5.x cannot express the condition; this root runs
-# provider 6.x, where it is a first-class argument. The condition matters: it
-# keeps the grant to invocations that arrive through the URL, not to
-# lambda:Invoke generally.
+# since Oct 2025 a URL needs both, and with only one of them it answers 403 no
+# matter what. Both are now scoped to this distribution rather than to `*`:
+# principal + `source_arn` together mean no other CloudFront distribution, in
+# this account or anyone else's, can use them.
+resource "aws_lambda_permission" "venue_status_url" {
+  statement_id           = "AllowCloudFrontFunctionUrl"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.venue_status.function_name
+  principal              = "cloudfront.amazonaws.com"
+  source_arn             = aws_cloudfront_distribution.site.arn
+  function_url_auth_type = "AWS_IAM"
+}
+
+# `invoked_via_function_url` keeps the grant to invocations arriving through the
+# URL, not to `lambda:Invoke` generally. AWS provider 6.x expresses it as a
+# first-class argument; `infra-serverless/main.tf` had to do it out of band.
 resource "aws_lambda_permission" "venue_status_invoke" {
-  statement_id             = "AllowPublicFunctionUrlInvoke"
+  statement_id             = "AllowCloudFrontFunctionUrlInvoke"
   action                   = "lambda:InvokeFunction"
   function_name            = aws_lambda_function.venue_status.function_name
-  principal                = "*"
+  principal                = "cloudfront.amazonaws.com"
+  source_arn               = aws_cloudfront_distribution.site.arn
   invoked_via_function_url = true
+}
+
+# Signs every origin request with SigV4 so the Lambda URL can tell CloudFront
+# from the world. `always` is deliberate: it overwrites any Authorization header
+# the viewer sent, which is what stops a caller from confusing the signature by
+# supplying one of their own.
+resource "aws_cloudfront_origin_access_control" "api" {
+  name                              = "tradepulse-site-api"
+  description                       = "SigV4 signing for the read-only state API origin"
+  origin_access_control_origin_type = "lambda"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }
 
 locals {

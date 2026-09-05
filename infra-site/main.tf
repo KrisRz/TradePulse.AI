@@ -238,8 +238,9 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   origin {
-    domain_name = local.status_lambda_host
-    origin_id   = "status-lambda"
+    domain_name              = local.status_lambda_host
+    origin_id                = "status-lambda"
+    origin_access_control_id = aws_cloudfront_origin_access_control.api.id
 
     custom_origin_config {
       http_port              = 80

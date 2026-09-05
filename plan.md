@@ -90,7 +90,16 @@ KROK 1, branch `session/exec-safety-20260905`). Zamknięte 2× CRITICAL + 3× HI
   sprzedaż 12.08 i odkupienie 18.08 to bed & breakfast, do puli idzie 0,00001.
   Zwykły dump CSV rozliczyłby ten trejd złą podstawą kosztową.
 - ✅ `fees_external` na stronie (equity nie jest obciążone prowizją BNB — strona
-  mówi o ile jest hojne). ⚠️ `./scripts/deploy_site.sh` do wykonania przez usera.
+  mówi o ile jest hojne).
+- ✅ **E2 z audytu E2E ZAMKNIĘTE** (`infra-site/`, osobny root): URL funkcji
+  `tradepulse-site-status` miał `AuthType = NONE` i odpowiadał 200 na strzał
+  bezpośredni — czyli cache na brzegu ograniczał koszt originu wyłącznie dla ruchu,
+  któremu chciało się iść przez CloudFronta. Teraz `AWS_IAM` + OAC typu `lambda`
+  (`signing_behavior = always`, więc nadpisuje `Authorization` przysłany przez
+  klienta), oba uprawnienia zawężone z `*` do `cloudfront.amazonaws.com` +
+  `source_arn` tej dystrybucji. **Zweryfikowane: bezpośrednio → 403, przez brzeg →
+  200 z `x-cache: Hit`.** Zostaje E1 jako jedyna otwarta luka z audytu E2E — ale
+  siedzi w zamrożonym `gate.py`.
 - Terraform: 2 add + 4 change, **zero zasobów M5**; sha M5 zweryfikowane po apply.
   Testy 471 zielone.
 
@@ -298,6 +307,28 @@ Zmierzone po kursach BNB z chwili każdego filla:
   + www live (S3 + CloudFront + ACM, root `infra-site/`). Domena auto-renew do
   2026-09-28 ($9/rok — TA POZYCJA JEST W koszcie $1,35/mies., nie zapomnieć).
 
+### 🗓 KIEDY CO — kalendarz decyzji i blokad (aktualizacja 2026-09-05)
+
+> Odpowiedź na „co dalej i kiedy" jest tutaj. Kolumna **blokada** mówi, dlaczego
+> czegoś NIE robimy dziś — prawie wszystko czeka na kalendarz, nie na trudność.
+
+| Kiedy | Co | Blokada |
+|---|---|---|
+| ✅ 2026-09-05 | KROK 1 (bezpieczeństwo egzekucji), KROK 4 (operacje), pre-rejestracja bramki B, E2 + E3 z audytu E2E | zrobione, zdeployowane, zweryfikowane |
+| 🔴 **dowolny dzień, USER** | **KROK 0** — jednorazowy klucz **Ed25519** na LIVE (Reading + Spot Trading, BEZ IP, wypłaty OFF) | **nic nie blokuje** — jedyna otwarta rzecz niezależna od kalendarza; rozstrzyga, czy M6 kosztuje $0 czy ~$40/rok |
+| **2026-09-10** | Ocena bramek **kodem JAK JEST** (pre-rejestracja). Raport do `docs/`. Werdykt B **już przesądzony**: `INCONCLUSIVE_EXTEND` (0 < 2 round-tripów) | `EARLIEST_EVAL` w `gate.py` |
+| zaraz po 10.09 | **KROK 2** — cała robota w `gate.py`: **E1** (parytet księgi per kanał), DSR `0,3/365`, walk-forward `no_admissible_combo`, diagnostyki (B&H, CI Lo, N_eff, DD), MEDIUM-5, oraz implementacja **B5/B6/B7 + `PROVISIONAL_PASS`** | `gate.py` zamrożone do 10.09 |
+| po E1 | **KROK 3** — księga v2 (sizing z `book.cash`, prowizja BNB do equity, resztka qty) pod dyscypliną złotego wzorca | **wymaga E1**: bez „księga == replay" nie ma czym złapać błędu w przepisywaniu księgowania |
+| **2026-10-08** | Kolejna ocena (cykl 28 dni) — **PIERWSZA rządzona zaostrzoną bramką B** | `REEVALUATE_EVERY_DAYS = 28` |
+| 2026-11-05, 12-03, … | kolejne oceny co 28 dni | — |
+| **~2027-05/06** | Bramka C rozstrzygalna (20 filli; dziś **3**, kanał 4h robi ~2 fille/mies.) | kalendarz |
+| **~2027-07 … 2028-01** | Horyzont bramki B (12–18 mies. od startu okna 2026-07-16). MinTRL **dziś** wskazuje ~2027-12 (472 bary więcej przy Sharpie 1,29) | kalendarz |
+| po bramce B | **M6** — Ed25519 w executorze, **świadome** usunięcie `ignore_changes`, sub-konto, BNB fee OFF, ramp $50 → $100 | bramka B |
+
+**Nic z tego nie jest pilne poza KROKIEM 0.** Bot handluje sam; sesje są opcjonalne.
+
+---
+
 ### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-05)
 
 > **DECYZJA 2026-09-05:** KROK 1 audytu ZROBIONY. Kolejność dalej wg
@@ -314,7 +345,8 @@ Zmierzone po kursach BNB z chwili każdego filla:
       czy M6 kosztuje $0 czy ~$40/rok. Klucza nie używać.
 - [x] ~~Decyzja o zaostrzeniu bramki B~~ — **ZDECYDOWANE I SPISANE 2026-09-05**:
       B5 + B6 + B7 razem, `docs/GATE_B_PREREGISTRATION_2026-09-05.md`.
-- [ ] `./scripts/deploy_site.sh` (z korzenia repo) — `fees_external` na stronie.
+- [ ] `./scripts/deploy_site.sh` (z korzenia repo) — `fees_external` + poprawka
+      łamiącego się wiersza (branch `session/site-fee-row-20260905`).
 - [ ] Ustawić okna checków healthchecks.io: venue 5h/1h, shadow 25h/2h.
 
 **1. OCENA BRAMEK ≥2026-09-10** — kodem JAK JEST (pre-rejestracja), raport do
