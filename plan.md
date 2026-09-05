@@ -90,7 +90,16 @@ KROK 1, branch `session/exec-safety-20260905`). Zamknięte 2× CRITICAL + 3× HI
   sprzedaż 12.08 i odkupienie 18.08 to bed & breakfast, do puli idzie 0,00001.
   Zwykły dump CSV rozliczyłby ten trejd złą podstawą kosztową.
 - ✅ `fees_external` na stronie (equity nie jest obciążone prowizją BNB — strona
-  mówi o ile jest hojne). ⚠️ `./scripts/deploy_site.sh` do wykonania przez usera.
+  mówi o ile jest hojne).
+- ✅ **E2 z audytu E2E ZAMKNIĘTE** (`infra-site/`, osobny root): URL funkcji
+  `tradepulse-site-status` miał `AuthType = NONE` i odpowiadał 200 na strzał
+  bezpośredni — czyli cache na brzegu ograniczał koszt originu wyłącznie dla ruchu,
+  któremu chciało się iść przez CloudFronta. Teraz `AWS_IAM` + OAC typu `lambda`
+  (`signing_behavior = always`, więc nadpisuje `Authorization` przysłany przez
+  klienta), oba uprawnienia zawężone z `*` do `cloudfront.amazonaws.com` +
+  `source_arn` tej dystrybucji. **Zweryfikowane: bezpośrednio → 403, przez brzeg →
+  200 z `x-cache: Hit`.** Zostaje E1 jako jedyna otwarta luka z audytu E2E — ale
+  siedzi w zamrożonym `gate.py`.
 - Terraform: 2 add + 4 change, **zero zasobów M5**; sha M5 zweryfikowane po apply.
   Testy 471 zielone.
 
@@ -314,7 +323,8 @@ Zmierzone po kursach BNB z chwili każdego filla:
       czy M6 kosztuje $0 czy ~$40/rok. Klucza nie używać.
 - [x] ~~Decyzja o zaostrzeniu bramki B~~ — **ZDECYDOWANE I SPISANE 2026-09-05**:
       B5 + B6 + B7 razem, `docs/GATE_B_PREREGISTRATION_2026-09-05.md`.
-- [ ] `./scripts/deploy_site.sh` (z korzenia repo) — `fees_external` na stronie.
+- [ ] `./scripts/deploy_site.sh` (z korzenia repo) — `fees_external` + poprawka
+      łamiącego się wiersza (branch `session/site-fee-row-20260905`).
 - [ ] Ustawić okna checków healthchecks.io: venue 5h/1h, shadow 25h/2h.
 
 **1. OCENA BRAMEK ≥2026-09-10** — kodem JAK JEST (pre-rejestracja), raport do
