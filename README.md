@@ -102,10 +102,18 @@ Supporting machinery, all in `app/backend/paper_trading/`:
 - `killswitch.py` — tracks peak equity, halts on an unexplained drawdown
 - `position_risk.py` — per-trade stop and daily loss limit, thresholds
   pre-registered from measurement rather than chosen to look good
+- **idempotent order path** — the client order id is derived from the decision,
+  not the moment of sending, so the exchange itself refuses a second copy; an
+  unanswered submit is resolved by *asking* the venue rather than resending; and
+  a run that finds one of its own fills missing from the book stops instead of
+  deciding on a fiction
+- `deadman.py` — a heartbeat to a service outside AWS, because every other alarm
+  here lives in the account it is watching and cannot report that account's own
+  disappearance
 
 ## What was tested and rejected
 
-Eight upgrades, each with real literature behind it, each pre-registered and
+Nine upgrades, each with real literature behind it, each pre-registered and
 each rejected out-of-sample. Keeping the list is cheaper than relearning it.
 
 | Candidate | Why it died |
@@ -118,6 +126,7 @@ each rejected out-of-sample. Keeping the list is cheaper than relearning it.
 | Short leg | Loses money net of costs |
 | Maker-only orders | Worth nothing at this size and cadence |
 | Meta-labeler | Zero discrimination (ρ = −0.01); 0 of 128 events actually attenuated — the "filter" was a flat 1.3× leverage in disguise |
+| Trailing stop | The first candidate whose *premise* held — winners do peak ~40 pp above where they exit — and it fell anyway: the two horizons share one usable band value where three were required, and the apparent gain rests on a single trade |
 
 Write-ups are in `docs/`. The strategy running today is the one from day one —
 not stubbornness, just the only candidate that has not yet failed a test.
@@ -215,6 +224,9 @@ Historical data stays out of git (regenerate it); training code is tracked.
 - [x] Paper bot with a verified backtest = live guarantee
 - [x] Serverless deployment (Lambda + EventBridge + DynamoDB)
 - [x] Execution layer on a demo venue: real fills, durable log, killswitch, position risk
+- [x] Execution safety: idempotent orders, fail-closed reconciliation, conditional
+      state writes, an alarm on the killswitch firing, a dead-man switch, and a
+      runbook (`docs/RUNBOOK.md`)
 - [x] Public site on `tradepulseai.co.uk`
 - [ ] **M5 gates** — evaluated from 2026-09-10. Gate B has ~1% power over 8 weeks, so `INCONCLUSIVE_EXTEND` is the expected verdict; the real horizon is 12–18 months
 - [ ] **Gate C** — 20 observed fills before execution quality can be judged
