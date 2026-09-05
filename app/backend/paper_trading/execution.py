@@ -50,6 +50,13 @@ class Order:
     time: str
     symbol: str = ""
     qty: Optional[float] = None    # None = size not modelled (fraction of equity)
+    # Stable name for *this* decision, so that sending the order twice cannot
+    # open the position twice. A real executor derives the venue's client order
+    # id from it (``binance_demo.client_order_id``); simulation ignores it.
+    # Defaults to the bar time, which is already what a decision belongs to — a
+    # caller passes something else only where a trade is not bar-driven, such as
+    # the kill switch flattening a position.
+    idempotency_key: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.side not in (BUY, SELL):
@@ -104,7 +111,10 @@ class SimulatedExecutor:
     """Fills from a slippage model — the behaviour the paper bot has always had.
 
     Stateless and deterministic: the same order always produces the same fill,
-    which is what lets the golden-master replay be exact.
+    which is what lets the golden-master replay be exact. It ignores
+    ``Order.idempotency_key`` deliberately: nothing here can be sent twice, and
+    a model that started reading the key could no longer reproduce the frozen
+    M5 book statement for statement.
     """
 
     def __init__(self, slippage: float = 0.0002) -> None:

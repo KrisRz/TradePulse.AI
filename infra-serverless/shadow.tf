@@ -48,6 +48,35 @@ variable "shadow_credentials_path" {
   default     = "/tradepulse/demo"
 }
 
+variable "venue_credentials_path" {
+  description = <<-EOT
+    SSM prefix holding the credentials for the STRATEGY channel (venue-4h).
+
+    Points at the shared demo prefix today. The 2026-09-04 audit (HIGH-3) asks
+    for one key per bot before real money: two channels reading one secret means
+    one leak is two compromised bots, and the heartbeat's key does not need
+    permission to move a real position. Flipping this is a deploy, not a code
+    change — create the parameters out of band first, exactly as above:
+
+      aws ssm put-parameter --name /tradepulse/venue/key    --type SecureString --value '...'
+      aws ssm put-parameter --name /tradepulse/venue/secret --type SecureString --value '...'
+  EOT
+  type        = string
+  default     = "/tradepulse/demo"
+}
+
+variable "binance_base_url" {
+  description = <<-EOT
+    Exchange REST endpoint the executing channels talk to.
+
+    Configuration rather than a constant in a module named "demo": the day this
+    points at api.binance.com must be a deploy someone decided on, visible in a
+    plan, and not an edit buried in Python.
+  EOT
+  type        = string
+  default     = "https://demo-api.binance.com"
+}
+
 locals {
   shadow_function_name = "tradepulse-shadow-bot"
 }
@@ -118,6 +147,10 @@ resource "aws_lambda_function" "shadow_bot" {
   memory_size      = 256
   architectures    = ["x86_64"]
 
+  # One writer at a time: the heartbeat records a stranded position in the same
+  # item it reads, and two overlapping runs could each open a leg.
+  reserved_concurrent_executions = 1
+
   # Required even though this path never runs the strategy: importing anything
   # under `app.backend.paper_trading` executes the package __init__, which pulls
   # in `bot` and therefore pandas. Reasoning "the heartbeat does not need pandas"
@@ -134,8 +167,16 @@ resource "aws_lambda_function" "shadow_bot" {
       TRADING_TIMEFRAME       = "1d"
       SHADOW_NOTIONAL         = tostring(var.shadow_notional)
       SHADOW_CREDENTIALS_PATH = var.shadow_credentials_path
+      BINANCE_BASE_URL        = var.binance_base_url
     }
   }
+}
+
+# Retries belong to the scheduler (3 attempts, DLQ behind them). See the same
+# resource in venue_4h.tf for why the Lambda's own layer is turned off.
+resource "aws_lambda_function_event_invoke_config" "shadow_bot" {
+  function_name          = aws_lambda_function.shadow_bot.function_name
+  maximum_retry_attempts = 0
 }
 
 resource "aws_cloudwatch_log_group" "shadow_bot" {
