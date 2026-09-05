@@ -273,11 +273,10 @@ Zmierzone po kursach BNB z chwili każdego filla:
 > `docs/AUDIT_2026-09-04.md` §10. Do 10.09 nie ruszamy M5 ani `gate.py`.
 
 **0. LISTA AKCJI USERA:**
-- [ ] **`terraform -chdir=infra-serverless apply tfplan`** — deploy venue-4h +
-      shadow z poprawkami bezpieczeństwa egzekucji (plan zweryfikowany: 2 add,
-      2 change, 0 destroy, żadnego zasobu M5). Po apply: sha M5 bez zmian,
-      wymuszony heartbeat, `killswitch --timeframe 4h`.
-- [ ] **Zmergować PR z branchu `session/exec-safety-20260905`.**
+- [x] ~~`terraform apply` (venue-4h + shadow: 2 add, 2 change, 0 destroy)~~ —
+      **WYKONANY 2026-09-05 17:00 UTC i zweryfikowany**: sha M5 nietknięte,
+      retry=0, współbieżność=1, wymuszony heartbeat OK, kill-switch czysty.
+- [x] ~~Zmergować PR #59~~ — **ZMERGOWANY 17:04 UTC**, wszystkie 3 commity w `main`.
 - [ ] **KROK 0 (15 min, zero kodu, wciąż otwarte):** na koncie LIVE założyć
       jednorazowy klucz **Ed25519** (self-generated) z Reading + Spot Trading,
       **BEZ IP**, wypłaty OFF — zapisać, czy Binance go przyjmuje. To rozstrzyga,
