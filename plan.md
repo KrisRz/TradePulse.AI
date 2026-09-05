@@ -63,6 +63,37 @@ KROK 1, branch `session/exec-safety-20260905`). Zamknięte 2× CRITICAL + 3× HI
   heartbeatu = warunkowy zapis działa na prodzie. Kill-switch 4h czysty.
   Kanał 4h dostanie wersję stanu i znacznik zleceń przy runie 20:10 UTC.
 
+**Stan na 2026-09-05 wieczór (sesja 2: PRE-REJESTRACJA + OPERACJE, KROK 4).**
+- 🔒 **Pre-rejestracja zaostrzenia bramki B SPISANA** →
+  `docs/GATE_B_PREREGISTRATION_2026-09-05.md`, **wiążąca, od oceny 2026-10-08**
+  (10.09 biegnie kodem JAK JEST). Dochodzą B5 `psr_vs_zero ≥ 0,95`, B6
+  `Sharpe ≥ Sharpe B&H`, B7 `window_days ≥ 365`; poniżej → `PROVISIONAL_PASS`,
+  który NIE autoryzuje M6. Dowód uczciwości: żadne z trzech nie jest dziś
+  spełnione (1d Sharpe 1,29 vs B&H **3,89**; 4h 6,40 vs **6,66**; PSR 0,695;
+  window 51 dni), a werdykt 10.09 jest już przesądzony na `INCONCLUSIVE_EXTEND`
+  (0 < 2 round-tripów) — pisane przy liczniku transakcji na zerze.
+- 🔴 **NOWE USTALENIE: halt kill-switcha był CAŁKOWICIE CICHY.** Alarmy stoją na
+  `Errors`/`Invocations`/DLQ, a halt zwraca 200 i nie rusza żadnej metryki.
+  Naprawione: metric filter `"KILL SWITCH:"` + alarm na SNS **oraz** ping `/fail`
+  na zewnątrz AWS. Zdeployowane i zweryfikowane.
+- ✅ **Dead-man switch DZIAŁA** (healthchecks.io, $0). Ping po każdym dokończonym
+  runie venue/shadow, `/fail` przy halcie; nigdy nie rzuca; brak parametru SSM =
+  funkcja wyłączona. User utworzył `/tradepulse/healthcheck/{venue-4h,shadow}` —
+  oba kanały pingnęły na żywo (19:22:45 i 19:23:33 UTC). Zalecane okna w RUNBOOK-u:
+  venue 5h/1h, shadow 25h/2h. **Bot 1d nie ma własnego pingu** (zamrożony do M6),
+  pokryty pośrednio.
+- ✅ **`docs/RUNBOOK.md`** — 13 sekcji objaw → znaczenie → komendy, w tym nowe tryby
+  awarii (`BookOutOfSync`, `OrderSubmissionUncertain`, `ConcurrentStateWrite`).
+- ✅ **Eksport HMRC** (`app/backend/reporting/hmrc.py` + `scripts/hmrc_export.py`):
+  prawdziwe reguły same-day → 30 dni → pula S.104, dni liczone w `Europe/London`.
+  Uruchomiony na REALNYM logu: **reguła 30-dniowa dotyczy tego bota naprawdę** —
+  sprzedaż 12.08 i odkupienie 18.08 to bed & breakfast, do puli idzie 0,00001.
+  Zwykły dump CSV rozliczyłby ten trejd złą podstawą kosztową.
+- ✅ `fees_external` na stronie (equity nie jest obciążone prowizją BNB — strona
+  mówi o ile jest hojne). ⚠️ `./scripts/deploy_site.sh` do wykonania przez usera.
+- Terraform: 2 add + 4 change, **zero zasobów M5**; sha M5 zweryfikowane po apply.
+  Testy 471 zielone.
+
 **Stan na 2026-09-04 (sesja: PEŁNY AUDYT — dzień 50/56 okna M5).** System
 zdrowy w całości: sha M5 `r8Luxno…tNq0=` nietknięte, 9/9 alarmów OK, 0 błędów
 przez 14 dni, 84/84 wywołań venue, testy zielone. **Bramka A PASS 6/6** (51 barów),
@@ -281,11 +312,14 @@ Zmierzone po kursach BNB z chwili każdego filla:
       jednorazowy klucz **Ed25519** (self-generated) z Reading + Spot Trading,
       **BEZ IP**, wypłaty OFF — zapisać, czy Binance go przyjmuje. To rozstrzyga,
       czy M6 kosztuje $0 czy ~$40/rok. Klucza nie używać.
-- [ ] Decyzja do pre-rejestracji PRZED kolejną oceną: zaostrzyć bramkę B o
-      `psr_vs_zero ≥ 0,95` lub `window_days ≥ 365` (audyt §3 HIGH-2).
+- [x] ~~Decyzja o zaostrzeniu bramki B~~ — **ZDECYDOWANE I SPISANE 2026-09-05**:
+      B5 + B6 + B7 razem, `docs/GATE_B_PREREGISTRATION_2026-09-05.md`.
+- [ ] `./scripts/deploy_site.sh` (z korzenia repo) — `fees_external` na stronie.
+- [ ] Ustawić okna checków healthchecks.io: venue 5h/1h, shadow 25h/2h.
 
 **1. OCENA BRAMEK ≥2026-09-10** — kodem JAK JEST (pre-rejestracja), raport do
-`docs/`. Spodziewane: A PASS, B `INCONCLUSIVE_EXTEND`, C 3/20.
+`docs/`. Werdykt B jest już przesądzony: `INCONCLUSIVE_EXTEND` (0 < 2 round-tripów).
+Spodziewane: A PASS, B `INCONCLUSIVE_EXTEND`, C 3/20.
 
 **2. PO OCENIE (audyt §10 KROK 2):** DSR `0.3/365`; walk-forward
 `no_admissible_combo`; ciągły OOS w `calibration_audit.py`; diagnostyki w
@@ -293,11 +327,15 @@ raporcie bramki (B&H, CI Lo, N_eff, DD czas trwania); poprawić
 `M4_EDGE_VALIDATION.md`/plan („adaptive" = 10/50). Plus **E1**: `gate --fidelity`
 per kanał (4h nie ma dziś sprawdzenia „księga == replay").
 
-**3. KSIĘGA v2 (audyt §10 KROK 3, decyzja: zaraz po KROKU 1):** sizing BUY z
-`book.cash`, prowizja BNB do equity, resztka qty — pod dyscypliną złotego wzorca.
+**3. KSIĘGA v2 (audyt §10 KROK 3) — DOPIERO PO E1.** Ustalone 2026-09-05: kanał 4h
+nie ma dziś ŻADNEGO sprawdzenia „księga == replay" (luka E1, a jej naprawa siedzi
+w zamrożonym `gate.py`). Przepisywanie księgowania bez tej siatki to dokładnie ten
+rodzaj zmiany, którą złoty wzorzec ma wyłapywać. Kolejność: ocena 10.09 → E1 +
+reszta `gate.py` → księga v2 (sizing z `book.cash`, prowizja BNB, resztka qty).
 
-**4. OPERACJE (dowolna sesja):** healthchecks.io dead-man; `docs/RUNBOOK.md`;
-eksport HMRC z fill-logu; `fees_external` na stronie.
+**4. ~~OPERACJE~~ — ZROBIONE 2026-09-05** (dead-man, RUNBOOK, HMRC, `fees_external`).
+Zostaje z KROKU 4 tylko: poprawka zapisu o domenie (zrobiona) i ewentualny własny
+check dla bota 1d przy M6.
 
 ---
 
@@ -1928,3 +1966,14 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   w logu fillów; dry-run `attach_venue` na realnej księdze przechodzi).
   `terraform plan` 2 add / 2 change / 0 destroy, zero zasobów M5.
   Docs: `EXECUTION_SAFETY_2026-09-05.md`. Księga v2 (HIGH-4) świadomie następna.
+- 2026-09-05 (cd.) — PRE-REJESTRACJA + OPERACJE (branch
+  session/ops-and-preregistration-20260905). Zaostrzenie bramki B spisane jako
+  wiążące od oceny 08.10 (B5 PSR ≥ 0,95 + B6 Sharpe ≥ B&H + B7 ≥ 365 dni,
+  `PROVISIONAL_PASS` poniżej) — żadne z trzech dziś niespełnione, B6 z dużym
+  zapasem (1d 1,29 vs 3,89). 🔴 Znalezione i naprawione: **halt kill-switcha nie
+  zapalał NICZEGO** (alarmy tylko na Errors/Invocations/DLQ) → metric filter +
+  alarm + ping `/fail`. Dead-man switch na healthchecks.io zdeployowany i
+  pingujący na obu kanałach. RUNBOOK (13 sekcji). Eksport HMRC z prawdziwymi
+  regułami — na realnym logu pokazał, że reguła 30-dniowa dotyczy tego bota
+  (sprzedaż 12.08 / odkupienie 18.08). `fees_external` na stronie. 27 nowych
+  testów, suite 471. Terraform 2 add + 4 change, zero M5.

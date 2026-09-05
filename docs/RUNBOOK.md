@@ -226,6 +226,18 @@ zakładaliśmy**.
 **Uwaga:** bot 1d (kanał M5) **nie ma** własnego pingu, bo jest zamrożony do M6.
 Jest pokryty pośrednio — siedzi w tym samym koncie i regionie co pozostałe dwa.
 
+**Ustawienia checków (healthchecks.io), żeby nie piszczały bez powodu:**
+
+| Check | Period | Grace | Zapiszczy po |
+|---|---|---|---|
+| `venue-4h` (ping co 4h) | 5h | 1h | ~6h ciszy = jeden pominięty bar z zapasem |
+| `shadow` (ping raz dziennie) | 25h | 2h | ~27h = jeden pominięty run dobowy |
+
+Nie ustawiaj venue równo na 4h: run startuje o :10 i odstęp bywa 4h ± minuta, więc
+dostawałbyś fałszywki. Alarm `no-invocation` w CloudWatch i tak łapie zatrzymany
+harmonogram w ~5h — dead-man dokłada wyłącznie przypadek, w którym nie działa sam
+AWS, więc nie musi być szybki, musi być **na zewnątrz**.
+
 ---
 
 ## 9. 🟡 Wiadomość w DLQ
