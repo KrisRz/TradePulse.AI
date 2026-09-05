@@ -65,6 +65,27 @@ variable "venue_credentials_path" {
   default     = "/tradepulse/demo"
 }
 
+variable "healthcheck_param_prefix" {
+  description = <<-EOT
+    SSM prefix holding dead-man switch ping URLs, one per channel:
+    `<prefix>/venue-4h` and `<prefix>/shadow`.
+
+    OPTIONAL by design — a missing parameter means the feature is simply off and
+    the bot trades exactly as before. Every alarm this system owns lives in the
+    same AWS account it watches, so none of them can see that account go away;
+    this is the one signal that fires on ABSENCE, from outside. Create the checks
+    at healthchecks.io (free), then:
+
+      aws ssm put-parameter --name /tradepulse/healthcheck/venue-4h --type SecureString --value 'https://hc-ping.com/...'
+      aws ssm put-parameter --name /tradepulse/healthcheck/shadow   --type SecureString --value 'https://hc-ping.com/...'
+
+    A ping URL is effectively a write-only secret — anyone holding it can silence
+    the alert — which is why it lives in SSM and never in tfstate.
+  EOT
+  type        = string
+  default     = "/tradepulse/healthcheck"
+}
+
 variable "binance_base_url" {
   description = <<-EOT
     Exchange REST endpoint the executing channels talk to.
@@ -127,9 +148,12 @@ resource "aws_iam_role_policy" "shadow_ssm" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["ssm:GetParameter", "ssm:GetParameters"]
-      Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.shadow_credentials_path}/*"
+      Effect = "Allow"
+      Action = ["ssm:GetParameter", "ssm:GetParameters"]
+      Resource = [
+        "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.shadow_credentials_path}/*",
+        "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.healthcheck_param_prefix}/*",
+      ]
     }]
   })
 }
@@ -168,6 +192,7 @@ resource "aws_lambda_function" "shadow_bot" {
       SHADOW_NOTIONAL         = tostring(var.shadow_notional)
       SHADOW_CREDENTIALS_PATH = var.shadow_credentials_path
       BINANCE_BASE_URL        = var.binance_base_url
+      HEALTHCHECK_PARAM       = "${var.healthcheck_param_prefix}/shadow"
     }
   }
 }

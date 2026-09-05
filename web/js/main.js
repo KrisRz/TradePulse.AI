@@ -52,6 +52,19 @@
       $('mKill').textContent = halted ? 'HALTED' : 'armed';
       $('mKill').style.color = halted ? 'var(--down)' : 'var(--up)';
     }
+    // Commission is billed in BNB, which the book records OUTSIDE equity because
+    // converting it would need a BNB price the book does not have. So the equity
+    // above is honestly a little generous, and by exactly this much. Publishing a
+    // number while hiding the reason it is slightly wrong is how a dashboard
+    // starts lying politely.
+    if ($('mFeesExt')) {
+      var ext = (v.fees_external && v.fees_external.BNB) || 0;
+      $('mFeesExt').textContent = ext ? ext.toFixed(8) + ' BNB' : 'none';
+      $('mFeesExt').title = ext
+        ? 'Charged by the exchange, deliberately not deducted from the equity above'
+        : '';
+    }
+
     if ($('stateAge')) $('stateAge').textContent = 'updated ' + relTime(v.updated_at);
 
     markEquity(null);

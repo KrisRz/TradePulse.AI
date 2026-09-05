@@ -44,7 +44,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from . import position_risk
+from . import deadman, position_risk
 from .binance_demo import DEMO_BASE_URL, BinanceDemoExecutor
 from .execution import BUY, SELL
 from .killswitch import KillSwitchState, apply_halt, evaluate, observe
@@ -313,7 +313,9 @@ def handler(event, context):
                   or os.environ.get("SHADOW_CREDENTIALS_PATH")
                   or "/tradepulse/demo")
 
-    credentials = load_credentials_from_ssm(ssm_prefix)
+    credentials = load_credentials_from_ssm(
+        ssm_prefix, os.environ.get("HEALTHCHECK_PARAM", ""))
+    healthcheck_url = credentials.get("HEALTHCHECK_URL")
     executor = BinanceDemoExecutor(
         api_key=credentials["BINANCE_API_KEY"],
         api_secret=credentials["BINANCE_API_SECRET"],
@@ -376,6 +378,10 @@ def handler(event, context):
                 bot._save()
             result["flattened_at"] = mark
         logger.error("KILL SWITCH: %s — %s", verdict.reason, verdict.detail)
+        # Say it OUTSIDE the account too. A halt returns 200, keeps being
+        # invoked and moves no error metric, so every alarm we own is blind to
+        # the firing of the one safety device that matters most.
+        deadman.ping(healthcheck_url, failed=True)
         result["venue"] = reconciliation
         return result
 
@@ -417,6 +423,9 @@ def handler(event, context):
     bot._save()
     result["killswitch"] = {"halted": False, **verdict.checks,
                             "execution_drag": switch.execution_drag}
+    # Reached only after the book, the decision log and the kill-switch state are
+    # all safely written: the ping means "this run completed", not "it started".
+    deadman.ping(healthcheck_url)
     result["venue"] = reconciliation
     if executor.reconciliations():
         last = executor.reconciliations()[-1]

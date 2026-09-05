@@ -28,32 +28,42 @@ import json
 import logging
 import os
 
+from . import deadman
 from .shadow import build_shadow_runner
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-def load_credentials_from_ssm(prefix: str) -> dict:
-    """Read ``<prefix>/key`` and ``<prefix>/secret`` as decrypted SecureStrings."""
+def load_credentials_from_ssm(prefix: str, healthcheck_param: str = "") -> dict:
+    """Read ``<prefix>/key`` and ``<prefix>/secret`` as decrypted SecureStrings.
+
+    ``healthcheck_param``, when given, is fetched in the SAME call and is
+    OPTIONAL: a missing parameter means the dead-man switch is simply not
+    configured, which must never stop the bot from trading. Bundling it here
+    costs no extra request — ``get_parameters`` takes up to ten names.
+    """
     import boto3  # provided by the Lambda runtime
 
     ssm = boto3.client("ssm")
-    names = [f"{prefix}/key", f"{prefix}/secret"]
+    required = [f"{prefix}/key", f"{prefix}/secret"]
+    names = required + ([healthcheck_param] if healthcheck_param else [])
     resp = ssm.get_parameters(Names=names, WithDecryption=True)
 
-    missing = resp.get("InvalidParameters") or []
+    values = {p["Name"]: p["Value"] for p in resp["Parameters"]}
+    missing = [n for n in required if n not in values]
     if missing:
         raise RuntimeError(f"missing SSM parameters: {missing}")
-
-    values = {p["Name"]: p["Value"] for p in resp["Parameters"]}
     # Venue-neutral names: this same loader will one day hand out live keys, and
     # a variable called "DEMO" on that path invites the wrong assumption at the
     # wrong moment (audit 2026-09-04, HIGH-3).
-    return {
+    out = {
         "BINANCE_API_KEY": values[f"{prefix}/key"],
         "BINANCE_API_SECRET": values[f"{prefix}/secret"],
     }
+    if healthcheck_param and healthcheck_param in values:
+        out["HEALTHCHECK_URL"] = values[healthcheck_param]
+    return out
 
 
 def handler(event, context):
@@ -75,7 +85,8 @@ def handler(event, context):
     base_url = os.environ.get("BINANCE_BASE_URL")
     force = bool((event or {}).get("force")) if isinstance(event, dict) else False
 
-    credentials = load_credentials_from_ssm(ssm_prefix)
+    credentials = load_credentials_from_ssm(
+        ssm_prefix, os.environ.get("HEALTHCHECK_PARAM", ""))
     runner = build_shadow_runner(symbol=symbol, timeframe=timeframe,
                                  notional=notional, credentials=credentials,
                                  base_url=base_url)
@@ -89,4 +100,8 @@ def handler(event, context):
     # notices. "already_done" and a clean run are both successes.
     if result.get("status") in ("venue_error", "too_small", "not_flat"):
         raise RuntimeError(f"shadow heartbeat failed: {result.get('error') or result}")
+
+    # Proof of life to a service OUTSIDE this AWS account — deliberately after
+    # the failure check, so a broken heartbeat cannot report itself healthy.
+    deadman.ping(credentials.get("HEALTHCHECK_URL"))
     return result

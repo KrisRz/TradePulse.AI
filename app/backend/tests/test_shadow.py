@@ -159,7 +159,7 @@ def test_the_handler_only_forces_when_explicitly_asked():
     original_build = shadow_handler.build_shadow_runner
     original_creds = shadow_handler.load_credentials_from_ssm
     shadow_handler.build_shadow_runner = lambda **kw: Runner()
-    shadow_handler.load_credentials_from_ssm = lambda prefix: {}
+    shadow_handler.load_credentials_from_ssm = lambda prefix, healthcheck="": {}
     try:
         shadow_handler.handler({}, None)                 # the scheduler's payload
         shadow_handler.handler(None, None)               # a manual empty invoke
