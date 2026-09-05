@@ -95,6 +95,7 @@ resource "aws_iam_role_policy" "venue_4h_ssm" {
       Resource = distinct([
         "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.venue_credentials_path}/*",
         "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.shadow_credentials_path}/*",
+        "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.healthcheck_param_prefix}/*",
       ])
     }]
   })
@@ -137,6 +138,8 @@ resource "aws_lambda_function" "venue_4h" {
       # keys of its own by changing these two lines, not the code.
       VENUE_CREDENTIALS_PATH = var.venue_credentials_path
       BINANCE_BASE_URL       = var.binance_base_url
+      # Optional: create the parameter and the dead-man switch turns itself on.
+      HEALTHCHECK_PARAM = "${var.healthcheck_param_prefix}/venue-4h"
     }
   }
 }
@@ -282,6 +285,43 @@ resource "aws_cloudwatch_metric_alarm" "venue_4h_heartbeat" {
   alarm_description = "4h venue channel missed a bar — the schedule is not firing while a position may be open."
   alarm_actions     = [aws_sns_topic.alerts.arn]
   ok_actions        = [aws_sns_topic.alerts.arn]
+}
+
+# The kill switch firing is the most important event this system can produce,
+# and until 2026-09-05 it was SILENT: a halt returns 200, the schedule keeps
+# invoking, no Errors datapoint appears and no DLQ message is written. Every
+# alarm above is blind to it. The only trace is a log line, so the log line is
+# what gets measured.
+resource "aws_cloudwatch_log_metric_filter" "venue_4h_killswitch" {
+  name           = "${local.venue_4h_function_name}-killswitch"
+  log_group_name = aws_cloudwatch_log_group.venue_4h.name
+  pattern        = "\"KILL SWITCH:\""
+
+  metric_transformation {
+    name          = "KillSwitchHalts"
+    namespace     = "TradePulse/venue-4h"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+# Period 300, not one bar: CloudWatch evaluates once per period, so a bar-long
+# window would leave the alarm already lit when the next halt is logged, and a
+# state that does not transition sends no mail. Same reasoning as the errors
+# alarm above.
+resource "aws_cloudwatch_metric_alarm" "venue_4h_killswitch" {
+  alarm_name          = "${local.venue_4h_function_name}-killswitch"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "KillSwitchHalts"
+  namespace           = "TradePulse/venue-4h"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  alarm_description = "4h venue channel HALTED — the kill switch fired and the channel has stopped trading. It does not re-arm itself; a person must look at the data and re-arm deliberately."
+  alarm_actions     = [aws_sns_topic.alerts.arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "venue_4h_dlq" {

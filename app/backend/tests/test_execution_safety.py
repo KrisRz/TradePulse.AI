@@ -616,8 +616,8 @@ def _run_handler(monkeypatch, bot, venue):
     monkeypatch.setenv("VENUE_MAX_NOTIONAL", "200")
     monkeypatch.setenv("PAPER_CAPITAL", "200")
     monkeypatch.setattr(venue_handler, "load_credentials_from_ssm",
-                        lambda prefix: {"BINANCE_API_KEY": "k",
-                                        "BINANCE_API_SECRET": "s"})
+                        lambda prefix, healthcheck="": {"BINANCE_API_KEY": "k",
+                                                        "BINANCE_API_SECRET": "s"})
     monkeypatch.setattr(venue_handler, "BinanceDemoExecutor",
                         lambda **kwargs: venue)
     monkeypatch.setattr(venue_handler, "build_bot", lambda **kwargs: bot)
@@ -635,7 +635,8 @@ def test_the_venue_channel_reads_its_own_credentials_path(monkeypatch):
     monkeypatch.setenv("VENUE_CREDENTIALS_PATH", "/tradepulse/venue")
     monkeypatch.setenv("SHADOW_CREDENTIALS_PATH", "/tradepulse/shadow")
     monkeypatch.setattr(venue_handler, "load_credentials_from_ssm",
-                        lambda prefix: seen.setdefault("prefix", prefix) and None
+                        lambda prefix, healthcheck="":
+                        seen.setdefault("prefix", prefix) and None
                         or {"BINANCE_API_KEY": "k", "BINANCE_API_SECRET": "s"})
     monkeypatch.setattr(venue_handler, "BinanceDemoExecutor", lambda **kwargs: venue)
     monkeypatch.setattr(venue_handler, "build_bot", lambda **kwargs: bot)
