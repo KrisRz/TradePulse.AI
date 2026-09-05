@@ -22,6 +22,40 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
+**Stan na 2026-09-05 (sesja: BEZPIECZEŃSTWO EGZEKUCJI — dzień 51/56 okna M5).**
+Check-up przed pracą: sha M5 `r8Luxno…tNq0=` nietknięte, 9/9 alarmów OK, 0 błędów
+przez 14 dni, 7/7 + 42/42 + 7/7 wywołań, 3/3 harmonogramy ENABLED. Kanał 4h wciąż
+LONG od 18.08 (mark 79 806, equity **244,79** = +22,4%, z czego −1,03%
+zaksięgowane), bot 1d LONG od 22.08 (equity 10 323,10 = +3,23%), bramka C 3/20.
+
+Zrobione 2026-09-05 — **`docs/EXECUTION_SAFETY_2026-09-05.md`** (audyt §10
+KROK 1, branch `session/exec-safety-20260905`). Zamknięte 2× CRITICAL + 3× HIGH
++ MEDIUM-3/4 + E3, **zero zmian księgowania, zero zasobów M5 w planie**:
+- **CRITICAL-1**: deterministyczny `newClientOrderId` z (symbol, strona, decyzja)
+  → giełda sama odrzuca duplikat. `POST /order` nie jest już ślepo powtarzany —
+  po timeoucie/5xx pytamy przez `origClientOrderId`, resend tylko po odpowiedzi
+  „nie ma takiego zlecenia", dwa razy bez odpowiedzi → `OrderSubmissionUncertain`.
+  Duplikat rozpoznajemy pytaniem, nie treścią błędu (−2010 = i duplikat, i brak
+  środków). Odzyskany fill dociąga prowizje z `myTrades`.
+- **CRITICAL-2**: skan sierot przed decyzją — nasze wykonane zlecenie, którego
+  księga nie zapisała, zatrzymuje run (`BookOutOfSync`). „Wytłumaczone" = id dla
+  ostatniego zapisanego bara, bo `step()` zapisuje księgę i bar jednym zapisem PO
+  fillu. Znacznik jedzie do przodu w każdym czystym runie (inaczej okno skanu
+  oślepłoby), a zasiew też skanuje.
+- **HIGH-1** T2 ożył (`drag` po `step()`); **HIGH-2** rekoncyliacja fail-closed w
+  obie strony; **HIGH-3** `VENUE_CREDENTIALS_PATH` + `BINANCE_BASE_URL` z env,
+  klucze bez „DEMO"; **MEDIUM-3** `reserved_concurrent_executions=1` + warunkowy
+  zapis stanu (`state_version`); **MEDIUM-4** halt zapisywany przed flattenem,
+  klucz `halt@<bar>`; **E3** jawny `event_invoke_config` (0 retry).
+- **30 nowych testów**, każdy pisany tak, by padać na kodzie sprzed naprawy;
+  sprawdzone mutacją **5/5 złapanych**. Suite 444 zielony, złoty wzorzec księgi
+  bez zmian.
+- Weryfikacja na żywo PRZED deployem (tylko odczyt): `allOrders` w obu trybach,
+  `lookup_order` → `None`, `myTrades` = 0,00024844 BNB (co do cyfry jak w logu
+  fillów), dry-run `attach_venue` na realnej księdze — obie strony przechodzą.
+- `terraform plan`: **2 do dodania, 2 do zmiany, 0 do usunięcia**, wyłącznie
+  venue-4h + shadow. `dist/paper_bot_lambda.zip` nietknięty.
+
 **Stan na 2026-09-04 (sesja: PEŁNY AUDYT — dzień 50/56 okna M5).** System
 zdrowy w całości: sha M5 `r8Luxno…tNq0=` nietknięte, 9/9 alarmów OK, 0 błędów
 przez 14 dni, 84/84 wywołań venue, testy zielone. **Bramka A PASS 6/6** (51 barów),
@@ -226,7 +260,42 @@ Zmierzone po kursach BNB z chwili każdego filla:
   + www live (S3 + CloudFront + ACM, root `infra-site/`). Domena auto-renew do
   2026-09-28 ($9/rok — TA POZYCJA JEST W koszcie $1,35/mies., nie zapomnieć).
 
-### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-04, PR #57)
+### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-05)
+
+> **DECYZJA 2026-09-05:** KROK 1 audytu ZROBIONY. Kolejność dalej wg
+> `docs/AUDIT_2026-09-04.md` §10. Do 10.09 nie ruszamy M5 ani `gate.py`.
+
+**0. LISTA AKCJI USERA:**
+- [ ] **`terraform -chdir=infra-serverless apply tfplan`** — deploy venue-4h +
+      shadow z poprawkami bezpieczeństwa egzekucji (plan zweryfikowany: 2 add,
+      2 change, 0 destroy, żadnego zasobu M5). Po apply: sha M5 bez zmian,
+      wymuszony heartbeat, `killswitch --timeframe 4h`.
+- [ ] **Zmergować PR z branchu `session/exec-safety-20260905`.**
+- [ ] **KROK 0 (15 min, zero kodu, wciąż otwarte):** na koncie LIVE założyć
+      jednorazowy klucz **Ed25519** (self-generated) z Reading + Spot Trading,
+      **BEZ IP**, wypłaty OFF — zapisać, czy Binance go przyjmuje. To rozstrzyga,
+      czy M6 kosztuje $0 czy ~$40/rok. Klucza nie używać.
+- [ ] Decyzja do pre-rejestracji PRZED kolejną oceną: zaostrzyć bramkę B o
+      `psr_vs_zero ≥ 0,95` lub `window_days ≥ 365` (audyt §3 HIGH-2).
+
+**1. OCENA BRAMEK ≥2026-09-10** — kodem JAK JEST (pre-rejestracja), raport do
+`docs/`. Spodziewane: A PASS, B `INCONCLUSIVE_EXTEND`, C 3/20.
+
+**2. PO OCENIE (audyt §10 KROK 2):** DSR `0.3/365`; walk-forward
+`no_admissible_combo`; ciągły OOS w `calibration_audit.py`; diagnostyki w
+raporcie bramki (B&H, CI Lo, N_eff, DD czas trwania); poprawić
+`M4_EDGE_VALIDATION.md`/plan („adaptive" = 10/50). Plus **E1**: `gate --fidelity`
+per kanał (4h nie ma dziś sprawdzenia „księga == replay").
+
+**3. KSIĘGA v2 (audyt §10 KROK 3, decyzja: zaraz po KROKU 1):** sizing BUY z
+`book.cash`, prowizja BNB do equity, resztka qty — pod dyscypliną złotego wzorca.
+
+**4. OPERACJE (dowolna sesja):** healthchecks.io dead-man; `docs/RUNBOOK.md`;
+eksport HMRC z fill-logu; `fees_external` na stronie.
+
+---
+
+#### (poprzednia NASTĘPNA AKCJA z 2026-09-04, PR #57 — zachowana dla kontekstu)
 
 > **DECYZJA 2026-09-04: następna sesja = `docs/AUDIT_2026-09-04.md` §10**, po
 > kolei. Strategii nie ruszamy (nic do poprawy). Do 10.09 nie ruszamy M5 ani
@@ -962,7 +1031,7 @@ Cel: zwalidowana strategia EMA lata co dzień, zapisuje decyzje + P&L.
 > 2026-07-15, zapis w DynamoDB `tradepulse_paper_bot`). Minimum 8 tygodni →
 > **ocena progów NIE WCZEŚNIEJ niż 2026-09-10**. Do tego czasu: NIE zmieniać
 > strategii/parametrów (unieważnia pomiar!), bot działa sam (cron 00:10 UTC).
-> Po drodze: ~2026-09-29 wygasa domena tradepulseai.co.uk (decyzja o odnowieniu).
+> ~~Po drodze: ~2026-09-29 wygasa domena~~ — **odnowiona automatycznie do 2027-09-28** (sprawdzone 2026-09-04); nie jest już żadną decyzją w tym oknie.
 - [ ] **M5.1** Zbieraj żywe metryki ≥8 tygodni (start 2026-07-16, koniec ≥2026-09-10).
 - [ ] **M5.2** BRAMKA B (rentowność) — progi z sekcji 3. Raport.
       ⚠️ Oczekiwany werdykt 2026-09-10: `INCONCLUSIVE_EXTEND` (P(rozstrzygalna
@@ -1837,3 +1906,19 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   (kanał 4h bez parytetu księgowego; FAIL = niezaksięgowana prowizja 0,1%),
   E2 publiczny origin API, E3 retry async aktywne. Fixy z 21.07 trzymają.
   Pamięć `e2e-audit-verdict` przepisana. Nic na M5 nie ruszone.
+- 2026-09-05 — BEZPIECZEŃSTWO EGZEKUCJI, audyt §10 KROK 1 (branch
+  session/exec-safety-20260905). Check-up 100% zdrowy przed pracą. Zamknięte:
+  CRITICAL-1 (deterministyczny `newClientOrderId` + koniec ślepego retry POST +
+  rozstrzyganie przez `origClientOrderId`/`myTrades`), CRITICAL-2 (skan sierot
+  przed decyzją, „wytłumaczone" = id ostatniego zapisanego bara, znacznik jedzie
+  w każdym czystym runie, zasiew też skanuje), HIGH-1 (T2 liczy drag PO stepie —
+  ożył), HIGH-2 (rekoncyliacja fail-closed w obie strony), HIGH-3 (własny prefix
+  SSM + `BINANCE_BASE_URL` z env, klucze bez „DEMO"), MEDIUM-3
+  (`reserved_concurrent_executions=1` + `state_version` z warunkowym zapisem),
+  MEDIUM-4 (halt zapisany przed flattenem, klucz `halt@<bar>`), E3 (jawny
+  `event_invoke_config`, 0 retry). 30 nowych testów pisanych pod awarię,
+  mutacja 5/5 złapanych, suite 444 zielony, złoty wzorzec księgi bez zmian.
+  Weryfikacja na żywo tylko do odczytu (myTrades zwraca prowizję co do cyfry jak
+  w logu fillów; dry-run `attach_venue` na realnej księdze przechodzi).
+  `terraform plan` 2 add / 2 change / 0 destroy, zero zasobów M5.
+  Docs: `EXECUTION_SAFETY_2026-09-05.md`. Księga v2 (HIGH-4) świadomie następna.
