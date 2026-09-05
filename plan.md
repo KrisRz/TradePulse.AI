@@ -55,6 +55,13 @@ KROK 1, branch `session/exec-safety-20260905`). Zamknięte 2× CRITICAL + 3× HI
   fillów), dry-run `attach_venue` na realnej księdze — obie strony przechodzą.
 - `terraform plan`: **2 do dodania, 2 do zmiany, 0 do usunięcia**, wyłącznie
   venue-4h + shadow. `dist/paper_bot_lambda.zip` nietknięty.
+- ✅ **DEPLOY WYKONANY 17:00 UTC i zweryfikowany**: sha M5 `r8Luxno…tNq0=` dalej
+  nietknięte, retry=0 i współbieżność=1 na obu, wymuszony heartbeat zrobił pełny
+  round-trip i wrócił flat, a zlecenia niosą u źródła id `tpsh-ee03d31d29bdef98ecaf`
+  / `tpsh-dd06063af2905d43aba9` — **dokładnie** te, które kod wylicza z klucza
+  decyzji (determinizm potwierdzony end-to-end). `state_version: 2` w księdze
+  heartbeatu = warunkowy zapis działa na prodzie. Kill-switch 4h czysty.
+  Kanał 4h dostanie wersję stanu i znacznik zleceń przy runie 20:10 UTC.
 
 **Stan na 2026-09-04 (sesja: PEŁNY AUDYT — dzień 50/56 okna M5).** System
 zdrowy w całości: sha M5 `r8Luxno…tNq0=` nietknięte, 9/9 alarmów OK, 0 błędów

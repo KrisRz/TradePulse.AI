@@ -209,9 +209,29 @@ PAPER_STATE_BACKEND=dynamodb AWS_DEFAULT_REGION=eu-west-2 \
   .venv/bin/python -m app.backend.paper_trading.run killswitch --timeframe 4h --capital 200
 ```
 
-Pierwszy run `venue-4h` po deployu zasieje znacznik zleceń i zapisze go razem z
-księgą. Od następnego filla `execution_drag` zacznie akumulować — dziś stoi na
-0,0 i to jest właśnie objaw, który naprawiamy.
+### Wykonane 2026-09-05 17:00 UTC — `apply` przeszedł, wynik zweryfikowany
+
+| Sprawdzenie | Wynik |
+|---|---|
+| sha M5 (`paper-bot`, `paper-bot-status`) | `r8Luxno…tNq0=` — **nietknięte** ✅ |
+| nowe sha venue-4h / shadow | `vzlVYX8j…FNjI=` / `HMBIb4IG…fNUE=` ✅ |
+| `MaximumRetryAttempts` | 0 na obu ✅ |
+| `ReservedConcurrentExecutions` | 1 na obu, `None` na M5 ✅ |
+| env venue | `VENUE_CREDENTIALS_PATH` + `BINANCE_BASE_URL` obecne ✅ |
+| wymuszony heartbeat | round-trip OK, `flat: true`, wejście 62267817385, wyjście 62267820552 ✅ |
+| **id zleceń u źródła** | `tpsh-ee03d31d29bdef98ecaf` / `tpsh-dd06063af2905d43aba9` — **dokładnie** te, które lokalny kod wylicza z klucza `2026-09-05T170039#trip` ✅ |
+| izolacja kanałów | kanał venue dla tego samego klucza daje `tpv4h-…`, a zlecenia heartbeatu NIE uznaje za swoje ✅ |
+| warunkowy zapis na prodzie | `state_version: 2` po dwóch zapisach heartbeatu ✅ |
+| kill-switch 4h | `halted: false`, czysty ✅ |
+
+To jest najmocniejszy dostępny dowód determinizmu: identyfikator, który
+zdeployowana Lambda wysłała na giełdę, zgadza się **co do znaku** z tym, który
+kod wylicza z decyzji. Powtórzony run poprosi o to samo zlecenie, a nie o drugie.
+
+Księga 4h nie ma jeszcze `state_version` — dostanie ją przy najbliższym runie
+(20:10 UTC), gałęzią `attribute_not_exists`. Wtedy też zasieje znacznik zleceń.
+Od następnego filla `execution_drag` zacznie akumulować; dziś stoi na 0,0 i to
+jest właśnie objaw, który naprawiamy.
 
 ---
 
