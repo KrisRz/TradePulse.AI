@@ -87,6 +87,14 @@ Zrobione 2026-09-16 — **`docs/GATE_EVAL_2026-09-16.md`** (branch `session/gate
   dziś złożyć JAKIEKOLWIEK zlecenie spot** — wie to tylko Binance (mail/powiadomienia/
   support). Konsekwencja: M6 na tym koncie = BTCUSDC w najlepszym razie, a w
   najgorszym inna giełda (licencja MiCA) i nowy executor.
+- 🧭 **Kraken jako zapasowa giełda dla M6 (ocena 16.09):** licencja MiCA (Irlandia)
+  + rejestracja FCA, **ograniczenie IP w kluczu opcjonalne** (znika problem stałego
+  IP), min. zlecenie 0,00005 BTC. Ale Kraken Pro na starcie: **0,40% maker / 0,80%
+  taker** (niższe progi od $2,5K wolumenu/mies. albo $20K aktywów). Zmierzone:
+  **bot 1d przeżywa 0,80%** (4/4 układów bije B&H), **kanał 4h nie** (0/4). Brak
+  darmowego demo spot. Kolejność: najpierw odpowiedź Binance (BTC/USDC = 8× taniej,
+  executor gotowy); Kraken dopiero, jeśli Binance odpada — nowy executor, tylko 1d,
+  zlecenia post-only mają tam sens (maker = połowa takera).
 - 🔴 **Strona: żywa cena NIGDY nie działała na produkcji** (od 08.08): `chart.js`
   łączył się z `stream.binance.com:9443`, a CSP dopuszcza host bez portu = tylko 443
   → naruszenie `connect-src` u każdego odwiedzającego. Naprawione (port 443),
