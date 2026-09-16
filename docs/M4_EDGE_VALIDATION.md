@@ -1,5 +1,30 @@
 # M4 — Edge validation (walk-forward, out-of-sample) — 2026-07-16
 
+> **🔴 SPROSTOWANIE 2026-09-16 (audyt 2026-09-04 HIGH-1 + MEDIUM-3, naprawione w kodzie).**
+> Kolumna „adaptive" nigdy nie była strategią przestrajaną. Optymalizator odrzucał
+> każdą kombinację, która w oknie treningowym zamknęła mniej niż `min_trades=10`
+> transakcji, a na BTC 1d nie osiąga tego **żadna** kombinacja z siatki w układach
+> 730/180, 500/125 i 365/90. Fold bez zwycięzcy dostawał po cichu pierwszy wpis
+> siatki, czyli EMA10/50. Stąd „optymalizator zawsze woli 10/50" i stąd
+> „adaptive 1.11–1.18": to był **stały backtest EMA10/50**, a nie walidacja selekcji
+> parametrów. Od 2026-09-16 taki fold jest oznaczany `no_admissible_combo` i w OOS
+> stoi flat. `calibration_audit.py` liczy teraz stałe 20/100 także **ciągle** (jeden
+> przebieg przez cały span OOS), bo sklejanie foldów dodawało ±0,05 Sharpe'a artefaktu:
+>
+> | layout | foldy bez wyboru | adaptive (po naprawie) | stałe 20/100 sklejone | **stałe 20/100 ciągłe** | B&H | trejdy ciągłe/sklejone |
+> |---|---|---|---|---|---|---|
+> | 730/180 | 13/13 | 0.00 (flat) | 1.01 | **0.96** | 0.87 | 11/20 |
+> | 500/125 | 21/21 | 0.00 (flat) | 1.00 | **1.07** | 0.97 | 11/24 |
+> | 1000/250 | 1/8 | 1.12 | 1.14 | **1.16** | 1.00 | 9/13 |
+> | 365/90 | 31/31 | 0.00 (flat) | 1.02 | **1.04** | 0.81 | 11/31 |
+>
+> **Wniosek:** selekcja parametrów in-sample→OOS **nigdy nie została zwalidowana na
+> 1d**. Konfiguracja produkcyjna broni się jednak na uczciwej, ciągłej liczbie: bije
+> B&H w 4/4 układach o 0,09–0,23 Sharpe'a. Obrona 20/100 stoi na argumencie plateau
+> i rangi (sekcja 2 `calibration_audit.py`), a nie na optymalizatorze. Tabele niżej
+> zostają jako zapis historyczny. Reprodukcja:
+> `PYTHONPATH=. .venv/bin/python scripts/research/calibration_audit.py`.
+
 > **⚠️ SPROSTOWANIE 2026-07-28.** Liczby w tabeli F0 („EMA Sharpe 1.11–1.18")
 > należą do strategii **przestrajanej na każdym foldzie**, a nie do stałego
 > EMA20/100, które handluje na Lambdzie. Optymalizator walk-forward nie wybrał

@@ -145,5 +145,47 @@ def _run_all() -> None:
     print(f"\n{len(fns)} tests passed.")
 
 
+
+# --------------------------------------------------------------------------- #
+# Walk-forward: an optimiser with nothing admissible must not pick anything
+# --------------------------------------------------------------------------- #
+def _trend_then_chop(n=400):
+    rng = np.random.default_rng(1)
+    closes = 100 * np.cumprod(1 + rng.normal(0.001, 0.02, n))
+    return _frame(closes, freq="1D")
+
+
+def test_a_fold_with_no_admissible_combination_is_flat_and_counted():
+    """Until 2026-09-16 such a fold silently traded the first grid entry."""
+    from app.backend.backtesting.strategies import EmaCrossover
+    from app.backend.backtesting.walkforward import NO_ADMISSIBLE_COMBO, walk_forward
+
+    df = _trend_then_chop()
+    wf = walk_forward(df, lambda fast, slow: EmaCrossover(fast=fast, slow=slow, allow_short=False),
+                      {"fast": [5, 10], "slow": [20, 40]}, BacktestConfig(allow_short=False),
+                      train_bars=150, test_bars=50, min_trades=10_000)
+
+    assert wf.folds and wf.inadmissible_folds == len(wf.folds)
+    assert all(f.best_params is None for f in wf.folds)
+    assert wf.combined.trades == 0
+    assert wf.params_summary() == {NO_ADMISSIBLE_COMBO: len(wf.folds)}
+
+
+def test_an_admissible_fold_still_trades_its_pick():
+    from app.backend.backtesting.strategies import EmaCrossover
+    from app.backend.backtesting.walkforward import walk_forward
+
+    df = _trend_then_chop()
+    wf = walk_forward(df, lambda fast, slow: EmaCrossover(fast=fast, slow=slow, allow_short=False),
+                      {"fast": [5, 10], "slow": [20, 40]}, BacktestConfig(allow_short=False),
+                      train_bars=150, test_bars=50, min_trades=1)
+
+    assert wf.inadmissible_folds == 0
+    assert all(f.best_params in ({"fast": 5, "slow": 20}, {"fast": 5, "slow": 40},
+                                 {"fast": 10, "slow": 20}, {"fast": 10, "slow": 40})
+               for f in wf.folds)
+    assert wf.combined.trades > 0
+
+
 if __name__ == "__main__":
     _run_all()

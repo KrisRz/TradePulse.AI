@@ -27,8 +27,27 @@ them at evaluation time would be fitting the criteria to the outcome):
    record until the Sharpe is statistically defensible".
 
 All Sharpe/skew/kurtosis inputs to PSR/DSR/MinTRL are PER-BAR (non-annualized)
-as the formulas require; the annualized Sharpe (365d, matching
-``backtesting.metrics``) is reported alongside.
+as the formulas require; the annualized Sharpe (bars per year of the channel's
+timeframe — 365 on 1d, matching ``backtesting.metrics``) is reported alongside.
+The trial-SR variance of rule 4 is a variance of ANNUALIZED Sharpe ratios and is
+converted to per-bar units before use (until 2026-09-16 it was applied per bar
+unconverted, which put the DSR benchmark at ~21.7 annualized and printed
+DSR 0.000 for every achievable record — audit 2026-09-04, MEDIUM-4).
+
+TIGHTENING (pre-registered 2026-09-05, docs/GATE_B_PREREGISTRATION_2026-09-05.md,
+binding from the 2026-10-08 evaluation; applied here to every verdict issued
+after the earliest evaluation, since it can only withhold a PASS):
+
+5. B5 ``psr_vs_zero >= 0.95`` (undefined PSR = not met).
+6. B6 annualized Sharpe >= that of buy & hold WITH costs on the identical bars.
+7. B7 ``window_days >= 365``.
+   Old gates met but not all of B5-B7 -> ``PROVISIONAL_PASS``, which does NOT
+   authorize M6.
+8. With a position open on the evaluation date, profit factor and fee drag
+   must pass both on closed trades alone and with the open position closed at
+   the last price (audit MEDIUM-5): a PASS must not depend on the date chosen.
+9. A quantity-backed book (the venue channel) books its BNB commission outside
+   equity, so its fee drag is not interpretable and that gate is not met.
 
 GATE SPLIT (pre-registered 2026-07-28, 44 days before the earliest evaluation,
 on pre-holdout data only — see docs/ANALIZA_KALIBRACJI_2026-07-28.md):
@@ -78,8 +97,14 @@ MIN_PROFIT_FACTOR = 1.3
 MAX_FEE_DRAG = 0.20
 MAX_TRACKING_ERROR = 0.10
 N_TRIALS = 30
-TRIAL_SR_VAR = 0.3
+TRIAL_SR_VAR = 0.3             # variance of ANNUALIZED trial Sharpe ratios
 PSR_CONFIDENCE = 0.95
+
+# Tightening of 2026-09-05 (B5-B7). May be made stricter before data, never looser.
+TIGHTENING_PREREGISTERED = date(2026, 9, 5)
+TIGHTENING_BINDING_FROM = date(2026, 10, 8)
+MIN_PSR_VS_ZERO = 0.95         # B5
+MIN_WINDOW_DAYS = 365          # B7
 _EULER_GAMMA = 0.5772156649015329
 
 _SECONDS_PER_YEAR = 365.0 * 24 * 3600   # crypto trades 24/7 (= metrics.py)
@@ -145,8 +170,12 @@ def expected_max_sharpe(n_trials: int, trial_sr_var: float) -> float:
 
 def deflated_sharpe(sr_hat: float, n_obs: int, skew: float, kurt: float,
                     n_trials: int = N_TRIALS,
-                    trial_sr_var: float = TRIAL_SR_VAR) -> float:
-    """DSR = PSR evaluated against the expected-max-SR of the trials."""
+                    trial_sr_var: float = TRIAL_SR_VAR / 365.0) -> float:
+    """DSR = PSR evaluated against the expected-max-SR of the trials.
+
+    ``sr_hat`` is per bar, so ``trial_sr_var`` must be too: the default converts
+    the annualized assumption for daily bars.
+    """
     return probabilistic_sharpe(
         sr_hat, expected_max_sharpe(n_trials, trial_sr_var), n_obs, skew, kurt)
 
@@ -173,6 +202,25 @@ class GateInputs:
     initial_capital: float
     open_position_days: int    # days currently in an open (unclosed) position
     tracking_error: Optional[float] = None   # M5.3 input, when available
+    # Close per processed bar, on the same index as ``equity``. Without it the
+    # buy & hold comparison (B6) cannot be made and is reported as not met.
+    prices: Optional[pd.Series] = None
+    fee_rate: float = 0.001
+    slippage: float = 0.0002
+    timeframe: str = "1d"
+    # True for a book driven by venue fills: its commission is booked outside
+    # equity (``fees_external``), so its fee drag means nothing yet.
+    quantity_backed: bool = False
+    # The open position, closed hypothetically at the last price (MEDIUM-5).
+    open_trade: Optional[dict] = None
+
+
+def periods_per_year(timeframe: str) -> float:
+    """Bars in a 365-day year for ``timeframe`` (crypto trades around the clock)."""
+    delta = _TIMEFRAME_DELTA.get(timeframe)
+    if delta is None:
+        raise ValueError(f"unknown timeframe {timeframe!r}")
+    return pd.Timedelta(days=365) / delta
 
 
 def _trade_stats(trades: list[dict]) -> dict:
@@ -200,58 +248,218 @@ def _trade_stats(trades: list[dict]) -> dict:
             "days_in_market_closed": days}
 
 
+def open_position_as_trade(portfolio: dict, price: float, time: str) -> Optional[dict]:
+    """The open position as if it were closed at ``price`` now, costs included.
+
+    A modelled book is closed by its own arithmetic on a copy, so the record is
+    exactly what the book would write. A quantity-backed book has no venue here
+    to fill against; its exit is priced from the held quantity with the same
+    slippage and fee model, which is the honest analogue.
+    """
+    from ..backtesting.costs import exit_fill_price
+    from .portfolio import PaperPortfolio
+
+    if not portfolio or not portfolio.get("side"):
+        return None
+    if not portfolio.get("quantity_backed"):
+        book = PaperPortfolio.from_dict(dict(portfolio, trades=[]))
+        book.reconcile(0, float(price), str(time))
+        trade = dict(book.trades[-1])
+        trade["exit_reason"] = "open_at_evaluation"
+        return trade
+
+    side = int(portfolio["side"])
+    exit_px = exit_fill_price(float(price), side, float(portfolio.get("slippage", 0.0002)))
+    qty = abs(float(portfolio.get("qty", 0.0)))
+    proceeds = qty * exit_px
+    fee = proceeds * float(portfolio.get("fee_rate", 0.001))
+    after = float(portfolio.get("cash", 0.0)) + side * proceeds - fee
+    before = float(portfolio.get("equity_before_entry") or 0.0)
+    if before <= 0:
+        return None
+    return {"entry_time": portfolio.get("entry_time"), "exit_time": str(time),
+            "side": side, "entry_price": float(portfolio["entry_fill"]),
+            "exit_price": exit_px, "net_return": after / before - 1.0,
+            "exit_reason": "open_at_evaluation"}
+
+
+def buy_and_hold_equity(prices: pd.Series, initial_capital: float,
+                        fee_rate: float, slippage: float) -> pd.Series:
+    """Buy & hold WITH costs on the given bars — the definition B6 binds to.
+
+    One entry at the first bar, one exit at the evaluation (last) bar, both
+    through the same fee and slippage helpers the strategy's book uses; in
+    between, marked to market like the book. This is the costlier reading for
+    buy & hold, i.e. the one more favourable to the bot, as the
+    pre-registration requires.
+    """
+    from ..backtesting.costs import apply_fee, entry_fill_price, exit_fill_price
+
+    p = prices.astype(float).sort_index()
+    entry_equity = apply_fee(initial_capital, fee_rate)
+    entry_fill = entry_fill_price(float(p.iloc[0]), 1, slippage)
+    equity = entry_equity * (p / entry_fill)
+    exit_value = apply_fee(
+        entry_equity * exit_fill_price(float(p.iloc[-1]), 1, slippage) / entry_fill,
+        fee_rate)
+    equity.iloc[-1] = exit_value
+    return equity
+
+
+def _annualized_sharpe(equity: pd.Series, ppy: float) -> tuple[Optional[float], pd.Series]:
+    rets = equity.pct_change().dropna()
+    sd = float(rets.std(ddof=1)) if len(rets) >= 2 else 0.0
+    if sd <= 0:
+        return None, rets
+    return float(rets.mean() / sd) * math.sqrt(ppy), rets
+
+
+def _drawdown_profile(equity: pd.Series) -> dict:
+    """Depth plus duration — a drawdown that lasts is a different risk."""
+    if len(equity) == 0:
+        return {"max_drawdown": 0.0, "longest_bars": 0, "current_bars": 0}
+    underwater = equity < equity.cummax()
+    longest = current = 0
+    for flag in underwater:
+        current = current + 1 if flag else 0
+        longest = max(longest, current)
+    return {"max_drawdown": float((equity / equity.cummax() - 1.0).min()),
+            "longest_bars": int(longest), "current_bars": int(current)}
+
+
 def evaluate(inputs: GateInputs, as_of: date) -> dict:
     """Full pre-registered evaluation. Pure — no I/O, fully testable."""
     eq = inputs.equity.dropna().sort_index()
     window_days = (as_of - WINDOW_START).days
+    ppy = periods_per_year(inputs.timeframe)
     report: dict[str, Any] = {
         "as_of": str(as_of),
         "window_start": str(WINDOW_START),
         "window_days": window_days,
         "earliest_eval": str(EARLIEST_EVAL),
+        "timeframe": inputs.timeframe,
         "bars": int(len(eq)),
     }
 
     # -- performance readout (always reported) --------------------------- #
-    rets = eq.pct_change().dropna()
     net_pnl = float(eq.iloc[-1] - inputs.initial_capital) if len(eq) else 0.0
-    running_max = eq.cummax()
-    max_dd = float((eq / running_max - 1.0).min()) if len(eq) else 0.0
-    sd = float(rets.std(ddof=1)) if len(rets) >= 2 else 0.0
-    sr_bar = float(rets.mean() / sd) if sd > 0 else None
-    sharpe_ann = sr_bar * math.sqrt(365.0) if sr_bar is not None else None
+    dd = _drawdown_profile(eq)
+    max_dd = dd["max_drawdown"]
+    sharpe_ann, rets = _annualized_sharpe(eq, ppy)
+    sr_bar = sharpe_ann / math.sqrt(ppy) if sharpe_ann is not None else None
 
     tstats = _trade_stats(inputs.trades)
+    notes = []
+    if inputs.quantity_backed:
+        tstats["fee_drag"] = None
+        notes.append("fees are booked outside equity (fees_external) on this "
+                     "quantity-backed book — fee drag is not interpretable and "
+                     "net figures exclude the commission")
     days_in_market = tstats["days_in_market_closed"] + inputs.open_position_days
     report["performance"] = {
         "final_equity": float(eq.iloc[-1]) if len(eq) else inputs.initial_capital,
         "net_pnl": net_pnl,
         "max_drawdown": max_dd,
         "sharpe_annualized": sharpe_ann,
+        "periods_per_year": ppy,
         "days_in_market": days_in_market,
         **tstats,
     }
 
-    # -- statistical readout (advisory) ----------------------------------- #
+    with_open = None
+    if inputs.open_trade is not None:
+        with_open = _trade_stats(list(inputs.trades) + [inputs.open_trade])
+        if inputs.quantity_backed:
+            with_open["fee_drag"] = None
+        report["performance_incl_open"] = {
+            "open_trade_net_return": inputs.open_trade["net_return"],
+            "profit_factor": with_open["profit_factor"],
+            "fee_drag": with_open["fee_drag"],
+            "win_rate": with_open["win_rate"],
+        }
+
+    # -- statistical readout ---------------------------------------------- #
+    psr0 = None
     if sr_bar is not None and len(rets) >= 3:
         skew = float(rets.skew())
         kurt = float(rets.kurt()) + 3.0            # pandas gives EXCESS kurtosis
-        sr_star = expected_max_sharpe(N_TRIALS, TRIAL_SR_VAR)
+        trial_var_bar = TRIAL_SR_VAR / ppy
+        sr_star = expected_max_sharpe(N_TRIALS, trial_var_bar)
         psr0 = probabilistic_sharpe(sr_bar, 0.0, len(rets), skew, kurt)
-        dsr = deflated_sharpe(sr_bar, len(rets), skew, kurt)
+        dsr = deflated_sharpe(sr_bar, len(rets), skew, kurt,
+                              trial_sr_var=trial_var_bar)
         mintrl = min_track_record_length(sr_bar, 0.0, skew, kurt)
+        # Standard error of the per-bar Sharpe under non-normal iid returns
+        # (Mertens), the same variance term PSR uses. Serial correlation is
+        # not corrected for, so this interval is if anything too narrow.
+        var_term = 1.0 - skew * sr_bar + (kurt - 1.0) / 4.0 * sr_bar ** 2
+        se_bar = math.sqrt(var_term / (len(rets) - 1)) if var_term > 0 else float("nan")
+        half = 1.959963984540054 * se_bar * math.sqrt(ppy)
         report["statistics"] = {
             "sr_per_bar": sr_bar, "skew": skew, "kurtosis": kurt,
-            "psr_vs_zero": psr0, "expected_max_sr_of_trials": sr_star,
+            "psr_vs_zero": psr0,
+            "expected_max_sr_of_trials_per_bar": sr_star,
+            "expected_max_sr_of_trials_annualized": sr_star * math.sqrt(ppy),
             "dsr": dsr,
-            "min_trl_days_vs_zero": mintrl,
-            "min_trl_days_remaining": max(0.0, mintrl - len(rets))
+            "min_trl_bars_vs_zero": mintrl,
+            "min_trl_bars_remaining": max(0.0, mintrl - len(rets))
             if math.isfinite(mintrl) else None,
-            "n_trials_assumed": N_TRIALS, "trial_sr_var_assumed": TRIAL_SR_VAR,
+            "sharpe_annualized_ci95": [sharpe_ann - half, sharpe_ann + half],
+            "n_trials_assumed": N_TRIALS,
+            "trial_sr_var_annualized_assumed": TRIAL_SR_VAR,
         }
     else:
         report["statistics"] = {
             "note": "no return variance yet (flat window) — PSR/DSR undefined"}
+
+    # -- benchmark and diagnostics (reported, never a threshold by itself) -- #
+    bh_sharpe = None
+    if inputs.prices is not None and len(inputs.prices.dropna()) >= 2:
+        prices = inputs.prices.dropna().sort_index()
+        bh = buy_and_hold_equity(prices, inputs.initial_capital,
+                                 inputs.fee_rate, inputs.slippage)
+        bh_sharpe, _ = _annualized_sharpe(bh, ppy)
+        bh_dd = _drawdown_profile(bh)
+        strat_return = float(eq.iloc[-1] / inputs.initial_capital - 1.0) if len(eq) else 0.0
+        bh_return = float(bh.iloc[-1] / inputs.initial_capital - 1.0)
+        report["benchmark"] = {
+            "definition": "buy & hold with costs: entry at the first bar, exit at "
+                          "the evaluation bar, strategy's own fee and slippage",
+            "first_bar": str(prices.index[0]), "last_bar": str(prices.index[-1]),
+            "buy_hold_return": bh_return,
+            "strategy_return": strat_return,
+            "excess_return": strat_return - bh_return,
+            "buy_hold_sharpe_annualized": bh_sharpe,
+            "buy_hold_max_drawdown": bh_dd["max_drawdown"],
+            "buy_hold_longest_drawdown_bars": bh_dd["longest_bars"],
+            "drawdown_avoided": max_dd - bh_dd["max_drawdown"],
+        }
+    report["diagnostics"] = {
+        "longest_drawdown_bars": dd["longest_bars"],
+        "current_drawdown_bars": dd["current_bars"],
+        "bar_hours": _TIMEFRAME_DELTA[inputs.timeframe] / pd.Timedelta(hours=1),
+        # The independent evidence is the trades, not the bars: returns inside
+        # one trend are strongly serially correlated (Lo 2002).
+        "effective_observations_trades": tstats["round_trips"]
+        + (1 if inputs.open_trade is not None else 0),
+        "position_open": inputs.open_trade is not None,
+    }
+    if notes:
+        report["notes"] = notes
+
+    tightened = {
+        "B5 psr_vs_zero>=0.95": psr0 is not None and math.isfinite(psr0)
+        and psr0 >= MIN_PSR_VS_ZERO,
+        "B6 sharpe>=buy&hold": sharpe_ann is not None and bh_sharpe is not None
+        and sharpe_ann >= bh_sharpe,
+        "B7 window_days>=365": window_days >= MIN_WINDOW_DAYS,
+    }
+    report["tightened_gates"] = tightened
+    report["tightening"] = {
+        "preregistered": str(TIGHTENING_PREREGISTERED),
+        "binding_from": str(TIGHTENING_BINDING_FROM),
+        "document": "docs/GATE_B_PREREGISTRATION_2026-09-05.md",
+    }
 
     # -- verdict (pre-registered precedence) ------------------------------ #
     if as_of < EARLIEST_EVAL:
@@ -270,23 +478,40 @@ def evaluate(inputs: GateInputs, as_of: date) -> dict:
             f"re-evaluate in {REEVALUATE_EVERY_DAYS} days")
         return report
 
+    def _pf_ok(stats):
+        return stats["profit_factor"] is not None and stats["profit_factor"] >= MIN_PROFIT_FACTOR
+
+    def _drag_ok(stats):
+        return stats["fee_drag"] is not None and stats["fee_drag"] < MAX_FEE_DRAG
+
     gates = {
         "max_drawdown<=25%": max_dd >= -MAX_DRAWDOWN_LIMIT,
-        "profit_factor>=1.3": tstats["profit_factor"] is not None
-        and tstats["profit_factor"] >= MIN_PROFIT_FACTOR,
+        "profit_factor>=1.3": _pf_ok(tstats),
         "net_pnl>0": net_pnl > 0.0,
-        "fee_drag<20%": tstats["fee_drag"] is not None
-        and tstats["fee_drag"] < MAX_FEE_DRAG,
+        "fee_drag<20%": _drag_ok(tstats),
     }
+    if with_open is not None:
+        gates["profit_factor>=1.3 (incl. open)"] = _pf_ok(with_open)
+        gates["fee_drag<20% (incl. open)"] = _drag_ok(with_open)
     if inputs.tracking_error is not None:
         gates["tracking_error<10%"] = abs(inputs.tracking_error) < MAX_TRACKING_ERROR
     else:
         report["skipped_gates"] = ["tracking_error<10% (M5.3 input not supplied)"]
     report["gates"] = gates
-    report["verdict"] = "PASS" if all(gates.values()) else "FAIL"
+
     failed = [k for k, v in gates.items() if not v]
-    report["verdict_reason"] = ("all hard gates met" if not failed
-                                else f"failed: {', '.join(failed)}")
+    missing = [k for k, v in tightened.items() if not v]
+    if failed:
+        report["verdict"] = "FAIL"
+        report["verdict_reason"] = f"failed: {', '.join(failed)}"
+    elif missing:
+        report["verdict"] = "PROVISIONAL_PASS"
+        report["verdict_reason"] = (
+            f"the original gates are met, the tightened ones are not "
+            f"({', '.join(missing)}) — this does NOT authorize M6")
+    else:
+        report["verdict"] = "PASS"
+        report["verdict_reason"] = "all hard gates met, including B5-B7"
     return report
 
 
@@ -333,6 +558,10 @@ class FidelityInputs:
     timeframe: str = "1d"
     lookback_bars: int = 400       # BotConfig.lookback_bars (feed request size)
     infra: Optional[dict] = None
+    # The venue's own fills (durable log). Required to replay a quantity-backed
+    # book: its equity follows the fills, not the slippage model.
+    fills: Optional[list[dict]] = None
+    window_start: Optional[date] = None   # defaults to the M5 window start
 
 
 def _truncate(items: list) -> list:
@@ -420,7 +649,10 @@ def check_signal_parity(inputs: FidelityInputs) -> dict:
             continue
         history = ref.iloc[pos + 1 - window: pos + 1]
         expected = int(inputs.strategy.target_positions(history).iloc[-1])
-        actual = int(rec["target"])
+        # A risk overlay (F7) may have overridden the strategy; the bot then
+        # records the strategy's own target separately, and that is what
+        # parity is about. ``target`` is what the book did — criterion 5's job.
+        actual = int(rec.get("strategy_target", rec["target"]))
         observed_targets.add(actual)
         if expected != actual:
             mismatches.append(f"{rec['bar']}: live target {actual}, strategy says {expected}")
@@ -514,6 +746,45 @@ def check_no_lookahead(inputs: FidelityInputs) -> dict:
                    checked=checked, unverifiable=_truncate(unverifiable))
 
 
+class _RecordedFills:
+    """An executor that answers with the venue's recorded fills, bar by bar.
+
+    Replaying a quantity-backed book through the slippage model compares it with
+    accounting it never used: the venue channel's equity follows real fills and
+    books its BNB commission outside equity, so a modelled replay disagrees on
+    every bar by exactly that commission (audit E2E 2026-09-04, E1). Feeding the
+    recorded fills back through the same ``PaperPortfolio`` asks the right
+    question — does the stored book equal its own fills?
+    """
+
+    def __init__(self, fills: list[dict]):
+        self._queue: dict[tuple[str, int], list[dict]] = {}
+        for rec in sorted(fills, key=lambda f: str(f.get("recorded_at", ""))):
+            key = (str(rec["bar"]), int(rec["side"]))
+            self._queue.setdefault(key, []).append(rec)
+        self.missing: list[str] = []
+
+    def execute(self, order):
+        from .execution import Fill
+
+        queue = self._queue.get((str(order.time), int(order.side)))
+        if not queue:
+            self.missing.append(f"{order.time}: {'BUY' if order.side > 0 else 'SELL'} "
+                                f"traded in the book but has no fill record")
+            raise LookupError(order.time)
+        rec = queue.pop(0)
+        return Fill(price=float(rec["actual_price"]), side=order.side, time=order.time,
+                    qty=float(rec["qty"]), fee_paid=float(rec.get("fee_paid") or 0.0),
+                    fee_asset=rec.get("fee_asset") or None,
+                    order_id=str(rec.get("order_id") or "") or None, raw=rec,
+                    base_asset=rec.get("base_asset") or None)
+
+    def unused(self) -> list[str]:
+        return [f"{bar}: {'BUY' if side > 0 else 'SELL'} fill {r.get('order_id')} "
+                f"never reached the book" for (bar, side), recs in self._queue.items()
+                for r in recs]
+
+
 def check_accounting_parity(inputs: FidelityInputs) -> dict:
     """5. Replaying the decision log reproduces the equity the bot recorded.
 
@@ -521,6 +792,10 @@ def check_accounting_parity(inputs: FidelityInputs) -> dict:
     — the same class, hence the same shared cost model as the backtest. If the
     replay diverges, the live book drifted from the accounting the gates are
     computed on.
+
+    A quantity-backed book (the venue channel) is replayed through its own
+    recorded fills instead of the slippage model; a traded bar without a fill
+    record, or a fill the book never took, is a divergence in its own right.
     """
     from .portfolio import PaperPortfolio
 
@@ -530,12 +805,24 @@ def check_accounting_parity(inputs: FidelityInputs) -> dict:
         slippage=float(book.get("slippage", 0.0002)),
         initial_capital=float(book.get("initial_capital", 10_000.0)),
     )
+    replayer = None
+    mode = "modelled"
+    if book.get("quantity_backed"):
+        if inputs.fills is None:
+            return _result("SKIPPED", "quantity-backed book, but no fill log was "
+                                      "supplied to replay it against")
+        replayer = _RecordedFills(inputs.fills)
+        portfolio.set_executor(replayer)
+        mode = "recorded fills"
 
     drifts = []
     records = _sorted_decisions(inputs.decisions)
     for rec in records:
         price = float(rec["price"])
-        portfolio.reconcile(int(rec["target"]), price, str(rec["bar"]))
+        try:
+            portfolio.reconcile(int(rec["target"]), price, str(rec["bar"]))
+        except LookupError:
+            break
         replay_equity = round(portfolio.equity(price), 2)
         replay_realized = round(portfolio.realized, 2)
         if abs(replay_equity - float(rec["equity"])) > EQUITY_TOLERANCE:
@@ -545,21 +832,25 @@ def check_accounting_parity(inputs: FidelityInputs) -> dict:
             drifts.append(f"{rec['bar']}: realized recorded {float(rec['realized'])}, "
                           f"replay {replay_realized}")
 
+    if replayer is not None:
+        drifts.extend(replayer.missing)
+        drifts.extend(replayer.unused())
+
     live_trades = len(book.get("trades", []) or [])
     replay_trades = len(portfolio.trades)
     if live_trades != replay_trades:
         drifts.append(f"closed trades: state has {live_trades}, replay produced {replay_trades}")
 
     if drifts:
-        return _result("FAIL", f"{len(drifts)} accounting divergence(s)",
-                       checked=len(records), drifts=_truncate(drifts))
+        return _result("FAIL", f"{len(drifts)} accounting divergence(s) ({mode} replay)",
+                       checked=len(records), mode=mode, drifts=_truncate(drifts))
     if not records:
         return _result("SKIPPED", "no records to replay")
     return _result(
         "PASS",
         f"{len(records)} bars replay to the recorded book "
-        f"(±${EQUITY_TOLERANCE:.2f}, {replay_trades} closed trades)",
-        checked=len(records), replay_trades=replay_trades)
+        f"(±${EQUITY_TOLERANCE:.2f}, {replay_trades} closed trades, {mode})",
+        checked=len(records), replay_trades=replay_trades, mode=mode)
 
 
 def check_infrastructure(inputs: FidelityInputs) -> dict:
@@ -575,23 +866,38 @@ def check_infrastructure(inputs: FidelityInputs) -> dict:
     problems = []
     missing_days = infra.get("days_without_invocation") or []
     if missing_days:
-        problems.append(f"{len(missing_days)} day(s) with no Lambda invocation")
+        problems.append(f"{len(missing_days)} {infra.get('period_label', 'day')}(s) "
+                        f"with no Lambda invocation")
     dlq = infra.get("dlq_messages_max")
     if dlq:
         problems.append(f"DLQ held up to {dlq} message(s)")
     fired = infra.get("alarms_fired") or []
     if fired:
         problems.append(f"{len(fired)} alarm transition(s) into ALARM")
+    errors = infra.get("function_errors")
+    if errors:
+        problems.append(f"{errors:.0f} function error(s)")
+    halted = {k: v for k, v in (infra.get("halts") or {}).items() if v}
+    if halted:
+        problems.append(f"kill switch halted {sum(halted.values()):.0f} time(s)")
 
     if problems:
         return _result("FAIL", "; ".join(problems),
                        days_without_invocation=_truncate([str(d) for d in missing_days]),
                        dlq_messages_max=dlq, alarms_fired=_truncate(fired))
-    return _result(
-        "PASS",
-        f"{infra.get('days_checked', '?')} day(s) with >=1 invocation, "
-        f"DLQ empty, no alarm fired",
-        days_checked=infra.get("days_checked"))
+    detail = (f"{infra.get('days_checked', '?')} {infra.get('period_label', 'day')}(s) "
+              f"with >=1 invocation, DLQ empty, no alarm fired")
+    if "function_errors" in infra:
+        detail += ", 0 function errors"
+    if infra.get("halts"):
+        detail += ", 0 kill-switch halts"
+    if infra.get("alarm_history_complete") is False:
+        detail += (f" (alarm history only from {infra['alarm_history_from']} — "
+                   f"CloudWatch keeps {ALARM_HISTORY_DAYS} days; errors and halts "
+                   f"are read from metrics over the whole window)")
+    return _result("PASS", detail, days_checked=infra.get("days_checked"),
+                   throttles=infra.get("throttles"),
+                   alarm_history_from=infra.get("alarm_history_from"))
 
 
 FIDELITY_CHECKS = [
@@ -896,11 +1202,13 @@ def evaluate_fidelity(inputs: FidelityInputs, as_of: date) -> dict:
             "target 0, so it cannot distinguish EMA20/100 from any other "
             "strategy that also stayed flat")
 
+    start = inputs.window_start or WINDOW_START
     return {
         "gate": "A — execution fidelity",
         "as_of": str(as_of),
-        "window_start": str(WINDOW_START),
-        "window_days": (as_of - WINDOW_START).days,
+        "timeframe": inputs.timeframe,
+        "window_start": str(start),
+        "window_days": (as_of - start).days,
         "criteria": criteria,
         "verdict": verdict,
         "verdict_reason": reason + (f" (with caveats: {len(caveats)})" if caveats else ""),
@@ -919,16 +1227,30 @@ def _inputs_from_records(decisions: list[dict], state: dict) -> GateInputs:
     df = pd.DataFrame(decisions)
     idx = pd.to_datetime(df["bar"], utc=True, format="ISO8601")
     equity = pd.Series(df["equity"].astype(float).values, index=idx).sort_index()
+    prices = (pd.Series(df["price"].astype(float).values, index=idx).sort_index()
+              if "price" in df else None)
     portfolio = state.get("portfolio", {})
     trades = portfolio.get("trades", [])
     open_days = 0
+    open_trade = None
     if portfolio.get("side", 0) != 0 and portfolio.get("entry_time"):
         open_days = max(
             (equity.index[-1] - pd.Timestamp(portfolio["entry_time"])).days, 0)
+        if prices is not None:
+            open_trade = open_position_as_trade(portfolio, float(prices.iloc[-1]),
+                                                str(prices.index[-1]))
+    timeframe = str(state.get("timeframe")
+                    or (df["timeframe"].iloc[-1] if "timeframe" in df else "1d"))
     return GateInputs(
         equity=equity, trades=trades,
         initial_capital=float(portfolio.get("initial_capital", 10_000.0)),
         open_position_days=open_days,
+        prices=prices,
+        fee_rate=float(portfolio.get("fee_rate", 0.001)),
+        slippage=float(portfolio.get("slippage", 0.0002)),
+        timeframe=timeframe,
+        quantity_backed=bool(portfolio.get("quantity_backed")),
+        open_trade=open_trade,
     )
 
 
@@ -1034,28 +1356,75 @@ def load_local(state_path: str) -> GateInputs:
     return _inputs_from_records(*load_records_local(state_path))
 
 
+def _utc(moment) -> pd.Timestamp:
+    ts = pd.Timestamp(moment)
+    return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+
+
+#: CloudWatch keeps alarm history for 30 days ("CloudWatch preserves alarm history
+#: for 30 days", CloudWatch User Guide, Using alarms). Measured 2026-09-16: the
+#: 2026-08-07 transitions the E2E audit read on 09-04 are no longer returned.
+ALARM_HISTORY_DAYS = 30
+
+
+def _metric_sum(cw, namespace: str, metric: str, dimensions: list[dict],
+                start: pd.Timestamp, end: pd.Timestamp) -> float:
+    """Sum of a metric over [start, end), daily buckets, chunked under the cap."""
+    total = 0.0
+    cursor = start
+    chunk = pd.Timedelta(days=1_440)
+    while cursor < end:
+        chunk_end = min(cursor + chunk, end)
+        resp = cw.get_metric_statistics(
+            Namespace=namespace, MetricName=metric, Dimensions=dimensions,
+            StartTime=cursor.to_pydatetime(), EndTime=chunk_end.to_pydatetime(),
+            Period=86_400, Statistics=["Sum"])
+        total += sum(p["Sum"] for p in resp["Datapoints"])
+        cursor = chunk_end
+    return total
+
+
 def load_infra_aws(function_name: str, dlq_queue_name: str, alarm_names: list[str],
-                   start: date, end: date, region: Optional[str] = None) -> dict:
+                   start, end, region: Optional[str] = None,
+                   period: pd.Timedelta = pd.Timedelta(days=1),
+                   extra_metrics: tuple = (),
+                   now: Optional[pd.Timestamp] = None) -> dict:
     """Criterion 6 evidence from CloudWatch — read-only.
 
-    Invocations are summed per UTC day: the scheduler fires once daily, so any
-    day with a zero sum is a run whose decision record could never exist.
+    Invocations are summed per scheduling period (a UTC day for the daily bot,
+    four hours for the venue channel): the scheduler fires once per period, so
+    a period with a zero sum is a run whose decision record could never exist.
+    Sub-daily periods are built from hourly datapoints, which CloudWatch keeps
+    for 455 days and which do not depend on how it aligns longer buckets.
     """
     import boto3
 
     cw = boto3.client("cloudwatch", region_name=region) if region else boto3.client("cloudwatch")
-    start_dt = pd.Timestamp(start, tz="UTC").to_pydatetime()
-    end_dt = (pd.Timestamp(end, tz="UTC") + pd.Timedelta(days=1)).to_pydatetime()
+    start_ts = _utc(start)
+    end_ts = _utc(end)
+    start_dt = start_ts.to_pydatetime()
+    end_dt = (end_ts + pd.Timedelta(days=1)).to_pydatetime()
+    daily = period >= pd.Timedelta(days=1)
+    query_period = 86_400 if daily else 3_600
+    chunk = pd.Timedelta(seconds=query_period * 1_440)   # CloudWatch's datapoint cap
 
-    invocations = cw.get_metric_statistics(
-        Namespace="AWS/Lambda", MetricName="Invocations",
-        Dimensions=[{"Name": "FunctionName", "Value": function_name}],
-        StartTime=start_dt, EndTime=end_dt, Period=86_400, Statistics=["Sum"])
-    seen = {pd.Timestamp(p["Timestamp"]).tz_convert("UTC").date()
-            for p in invocations["Datapoints"] if p["Sum"] >= 1}
-    # The final day is only complete after the 00:10 UTC run, so exclude it.
-    expected_days = pd.date_range(start, end, freq="D", inclusive="left")
-    missing = [d.date() for d in expected_days if d.date() not in seen]
+    stamps = []
+    cursor = start_ts
+    while cursor < _utc(end_dt):
+        chunk_end = min(cursor + chunk, _utc(end_dt))
+        invocations = cw.get_metric_statistics(
+            Namespace="AWS/Lambda", MetricName="Invocations",
+            Dimensions=[{"Name": "FunctionName", "Value": function_name}],
+            StartTime=cursor.to_pydatetime(), EndTime=chunk_end.to_pydatetime(),
+            Period=query_period, Statistics=["Sum"])
+        stamps.extend(_utc(p["Timestamp"]) for p in invocations["Datapoints"]
+                      if p["Sum"] >= 1)
+        cursor = chunk_end
+    seen = {stamp.floor(period) for stamp in stamps}
+    # The final period is only complete after its run, so the evaluation day
+    # itself is excluded.
+    expected = pd.date_range(start_ts.floor(period), end_ts, freq=period, inclusive="left")
+    missing = [(p.date() if daily else p) for p in expected if p not in seen]
 
     dlq = cw.get_metric_statistics(
         Namespace="AWS/SQS", MetricName="ApproximateNumberOfMessagesVisible",
@@ -1072,37 +1441,81 @@ def load_infra_aws(function_name: str, dlq_queue_name: str, alarm_names: list[st
             if '"newState":{"stateValue":"ALARM"' in item.get("HistoryData", "").replace(" ", ""):
                 fired.append(f"{alarm} @ {item['Timestamp']}")
 
+    # Alarm history only reaches back ALARM_HISTORY_DAYS. What the alarms watch
+    # is kept far longer as metrics, so the whole window is judged on those, and
+    # the alarm history is a second opinion over the part it still covers.
+    window_end = _utc(end_dt)
+    fn = [{"Name": "FunctionName", "Value": function_name}]
+    function_errors = _metric_sum(cw, "AWS/Lambda", "Errors", fn, start_ts, window_end)
+    throttles = _metric_sum(cw, "AWS/Lambda", "Throttles", fn, start_ts, window_end)
+    halts = {f"{ns}/{name}": _metric_sum(cw, ns, name, [], start_ts, window_end)
+             for ns, name in extra_metrics}
+    now_ts = _utc(now) if now is not None else pd.Timestamp.now(tz="UTC")
+    history_from = max(start_ts, now_ts - pd.Timedelta(days=ALARM_HISTORY_DAYS))
+
     return {
-        "days_checked": len(expected_days),
+        "days_checked": len(expected),
+        "period_label": "day" if daily else f"{int(period / pd.Timedelta(hours=1))}h period",
+        "function_errors": function_errors,
+        "throttles": throttles,
+        "halts": halts,
+        "alarm_history_from": str(history_from),
+        "alarm_history_complete": history_from <= start_ts,
         "days_without_invocation": missing,
         "dlq_messages_max": dlq_max,
         "alarms_fired": fired,
     }
 
 
+def _fmt(value, spec: str) -> str:
+    return "n/a" if value is None else format(value, spec)
+
+
 def _print_report(report: dict) -> None:
     print(f"=== M5 GATE REPORT — as of {report['as_of']} "
-          f"(day {report['window_days']} of window) ===")
+          f"(day {report['window_days']} of window, {report['timeframe']} bars) ===")
     perf = report["performance"]
     print(f"bars: {report['bars']}  equity: ${perf['final_equity']:,.2f}  "
           f"net P&L: ${perf['net_pnl']:,.2f}  maxDD: {perf['max_drawdown']*100:.2f}%")
     sr = perf["sharpe_annualized"]
     print(f"sharpe(ann): {sr:.2f}" if sr is not None else "sharpe(ann): n/a (no variance)")
     print(f"round trips: {perf['round_trips']}  days in market: {perf['days_in_market']}  "
-          f"PF: {perf['profit_factor']}  fee drag: {perf['fee_drag']}")
+          f"PF: {_fmt(perf['profit_factor'], '.3f')}  fee drag: {_fmt(perf['fee_drag'], '.4f')}")
+    incl = report.get("performance_incl_open")
+    if incl:
+        print(f"incl. open position (closed at last price, net "
+              f"{incl['open_trade_net_return']*100:+.2f}%): PF {_fmt(incl['profit_factor'], '.3f')}"
+              f"  fee drag {_fmt(incl['fee_drag'], '.4f')}")
     stats = report["statistics"]
     if "dsr" in stats:
-        rem = stats["min_trl_days_remaining"]
-        print(f"PSR(>0): {stats['psr_vs_zero']:.3f}  DSR(N={stats['n_trials_assumed']}): "
-              f"{stats['dsr']:.3f}  MinTRL: {stats['min_trl_days_vs_zero']:.0f} bars"
+        rem = stats["min_trl_bars_remaining"]
+        lo, hi = stats["sharpe_annualized_ci95"]
+        print(f"PSR(>0): {stats['psr_vs_zero']:.3f}  DSR(N={stats['n_trials_assumed']}, "
+              f"bar to clear {stats['expected_max_sr_of_trials_annualized']:.2f} ann.): "
+              f"{stats['dsr']:.3f}  MinTRL: {stats['min_trl_bars_vs_zero']:.0f} bars"
               + (f" ({rem:.0f} more needed)" if rem is not None else ""))
+        print(f"sharpe(ann) 95% CI: [{lo:.2f}, {hi:.2f}]")
     else:
         print(f"statistics: {stats['note']}")
+    bench = report.get("benchmark")
+    if bench:
+        print(f"buy&hold (with costs): return {bench['buy_hold_return']*100:+.2f}% vs "
+              f"strategy {bench['strategy_return']*100:+.2f}%  "
+              f"sharpe {_fmt(bench['buy_hold_sharpe_annualized'], '.2f')}  "
+              f"maxDD {bench['buy_hold_max_drawdown']*100:.2f}%")
+    diag = report["diagnostics"]
+    print(f"longest drawdown: {diag['longest_drawdown_bars']} bars "
+          f"(current {diag['current_drawdown_bars']})  "
+          f"effective observations: {diag['effective_observations_trades']} trade(s)")
+    for note in report.get("notes", []):
+        print(f"note: {note}")
     for g in report.get("skipped_gates", []):
         print(f"skipped: {g}")
     if "gates" in report:
         for name, ok in report["gates"].items():
             print(f"  gate {name}: {'PASS' if ok else 'FAIL'}")
+    for name, ok in report["tightened_gates"].items():
+        print(f"  tightened {name}: {'met' if ok else 'NOT met'}")
     print(f"VERDICT: {report['verdict']} — {report['verdict_reason']}")
 
 
@@ -1153,17 +1566,23 @@ def main(argv: list[str] | None = None) -> None:
 
     g = p.add_argument_group("Gate A — execution fidelity")
     g.add_argument("--fidelity", action="store_true",
-                   help="run Gate A (execution fidelity) instead of Gate B")
+                   help="run Gate A (execution fidelity) instead of Gate B; "
+                        "--pk BTCUSDT_4h checks the venue channel")
     g.add_argument("--infra", choices=["aws", "none"], default="aws",
                    help="criterion 6 evidence source (default: aws)")
     g.add_argument("--symbol", default="BTCUSDT")
-    g.add_argument("--timeframe", default="1d")
+    g.add_argument("--timeframe", default=None,
+                   help="default: the channel's (from --pk)")
     g.add_argument("--fast", type=int, default=20, help="live EMA fast period")
     g.add_argument("--slow", type=int, default=100, help="live EMA slow period")
     g.add_argument("--lookback-bars", type=int, default=400,
                    help="BotConfig.lookback_bars the live bot uses")
-    g.add_argument("--function", default="tradepulse-paper-bot")
-    g.add_argument("--dlq", default="tradepulse-paper-bot-scheduler-dlq")
+    g.add_argument("--function", default=None, help="default: the channel's Lambda")
+    g.add_argument("--dlq", default=None, help="default: the channel's scheduler DLQ")
+    g.add_argument("--since", default=None,
+                   help="ISO date/time from which criterion 6 (infrastructure) is "
+                        "checked (default: the M5 window for 1d, the channel's "
+                        "first run otherwise)")
     g.add_argument("--region", default=os.environ.get("AWS_REGION", "eu-west-2"))
 
     c = p.add_argument_group("Gate C — cost fidelity (4h venue channel)")
@@ -1173,6 +1592,13 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.pk is None:
         args.pk = "BTCUSDT_4h" if args.cost_fidelity else "BTCUSDT_1d"
+    channel = CHANNELS.get(args.pk, {})
+    args.timeframe = args.timeframe or channel.get("timeframe") or "1d"
+    args.function = args.function or channel.get("function") or "tradepulse-paper-bot"
+    args.dlq = args.dlq or channel.get("dlq") or "tradepulse-paper-bot-scheduler-dlq"
+    args.alarms = channel.get("alarms") or [f"{args.function}-errors",
+                                            f"{args.function}-no-invocation",
+                                            f"{args.function}-scheduler-dlq"]
     if args.state is None:
         args.state = f"paper_state/{args.pk}.json"
 
@@ -1217,39 +1643,114 @@ def main(argv: list[str] | None = None) -> None:
         _print_report(report)
 
 
+#: Where each channel's evidence lives. Keyed by the state partition key.
+CHANNELS = {
+    "BTCUSDT_1d": {
+        "timeframe": "1d",
+        "function": "tradepulse-paper-bot",
+        "dlq": "tradepulse-paper-bot-scheduler-dlq",
+        "alarms": ["tradepulse-paper-bot-errors",
+                   "tradepulse-paper-bot-no-invocation",
+                   "tradepulse-paper-bot-scheduler-dlq"],
+        "window_start": WINDOW_START,
+    },
+    "BTCUSDT_4h": {
+        "timeframe": "4h",
+        "function": "tradepulse-venue-4h",
+        "dlq": "tradepulse-venue-4h-scheduler-dlq",
+        "alarms": ["tradepulse-venue-4h-errors",
+                   "tradepulse-venue-4h-no-invocation",
+                   "tradepulse-venue-4h-dlq",
+                   "tradepulse-venue-4h-killswitch"],
+        "extra_metrics": (("TradePulse/venue-4h", "KillSwitchHalts"),),
+        # No pre-registered window: the channel is checked from its first run.
+        "window_start": None,
+    },
+}
+
+
+def fetch_reference_bars(symbol: str, timeframe: str, needed: int) -> pd.DataFrame:
+    """The last ``needed`` closed bars, paging past Binance's 1000-bar limit.
+
+    The newest page comes from the bot's own feed, so the still-open bar is
+    dropped exactly as the bot drops it. Older pages hold closed bars only.
+    """
+    import requests
+
+    from .feed import _BASE, _INTERVAL, _OHLCV, fetch_klines
+
+    bars = fetch_klines(symbol, timeframe, limit=min(needed + 1, 1000))
+    pages = [bars]
+    have = len(bars)
+    while have < needed:
+        end_ms = int(pages[0].index[0].timestamp() * 1000) - 1
+        resp = requests.get(_BASE, params={"symbol": symbol,
+                                           "interval": _INTERVAL[timeframe],
+                                           "endTime": end_ms,
+                                           "limit": min(needed - have, 1000)},
+                            timeout=10.0)
+        resp.raise_for_status()
+        rows = resp.json()
+        if not rows:
+            break
+        older = pd.DataFrame([r[:6] for r in rows],
+                             columns=["open_time", *_OHLCV])
+        older.index = pd.to_datetime(older.pop("open_time"), unit="ms", utc=True)
+        older = older.astype(float)
+        older.index.name = "time"
+        pages.insert(0, older)
+        have += len(older)
+    return pd.concat(pages).sort_index()
+
+
 def run_fidelity(args, as_of: date) -> dict:
     """Wire the CLI arguments into Gate A: records + reference bars + infra."""
     from ..backtesting.strategies import EmaCrossover
-    from .feed import fetch_klines
 
     decisions, state = (load_records_dynamodb(args.table, args.pk)
                         if args.source == "dynamodb"
                         else load_records_local(args.state))
+    if not decisions:
+        raise RuntimeError(f"no decision records for {args.pk}")
+
+    fills = None
+    if (state.get("portfolio") or {}).get("quantity_backed"):
+        fills, _rejections = (load_cost_records_dynamodb(args.table, args.pk)
+                              if args.source == "dynamodb"
+                              else load_cost_records_local(args.state))
+
+    # ``--since`` narrows only criterion 6. The replay always starts from the
+    # first record: a book cannot be rebuilt from the middle of its history.
+    ordered = _sorted_decisions(decisions)
+    channel_start = CHANNELS.get(args.pk, {}).get("window_start")
+    first_run = _utc(str(ordered[0].get("processed_at") or ordered[0]["bar"]))
+    infra_start = (_utc(args.since) if args.since
+                   else _utc(channel_start) if channel_start else first_run)
+    window_start = infra_start.date()
 
     # Enough reference history to rebuild the bot's decision window for the
-    # oldest record: its lookback plus the bars processed since. 1000 is the
-    # Binance per-request maximum.
-    needed = min(args.lookback_bars + len(decisions) + 5, 1000)
-    bars = fetch_klines(args.symbol, args.timeframe, limit=needed)
+    # oldest record: its lookback plus the bars processed since.
+    needed = args.lookback_bars + len(decisions) + 5
+    bars = fetch_reference_bars(args.symbol, args.timeframe, needed)
 
     infra = None
     if args.infra == "aws":
         try:
             infra = load_infra_aws(
                 function_name=args.function, dlq_queue_name=args.dlq,
-                alarm_names=[f"{args.function}-errors",
-                             f"{args.function}-no-invocation",
-                             f"{args.function}-scheduler-dlq"],
-                start=WINDOW_START, end=as_of, region=args.region)
+                alarm_names=args.alarms, start=infra_start, end=as_of,
+                region=args.region, period=_TIMEFRAME_DELTA[args.timeframe],
+                extra_metrics=CHANNELS.get(args.pk, {}).get("extra_metrics", ()))
         except Exception as exc:                      # noqa: BLE001 — reported, not fatal
             infra = None
             print(f"warning: AWS infrastructure check unavailable ({exc}) "
                   f"— criterion 6 will be SKIPPED")
 
     inputs = FidelityInputs(
-        decisions=decisions, state=state, bars=bars,
+        decisions=ordered, state=state, bars=bars,
         strategy=EmaCrossover(fast=args.fast, slow=args.slow, allow_short=False),
         timeframe=args.timeframe, lookback_bars=args.lookback_bars, infra=infra,
+        fills=fills, window_start=window_start,
     )
     return evaluate_fidelity(inputs, as_of)
 

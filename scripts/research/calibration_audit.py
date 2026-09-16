@@ -19,7 +19,6 @@ holdout line, so nothing here can see the live M5 window. Changes no parameter.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -90,6 +89,24 @@ def fixed_params_oos(df: pd.DataFrame, fast: int, slow: int,
     return compute_metrics(stitched, df.loc[equity.index])
 
 
+def fixed_params_continuous(df: pd.DataFrame, fast: int, slow: int,
+                            folds: list[tuple[int, int, int]], base: dict):
+    """Fixed parameters over the whole OOS span in ONE run.
+
+    Stitching folds closes every position at each boundary, pays for it, skips
+    the next fold's first bar and re-enters a bar later. For parameters that are
+    never re-fitted none of that is real, and it moved the Sharpe by ~0.05 —
+    the same order as the published margin over buy & hold (audit 2026-09-04,
+    MEDIUM-3). This is the number to quote for the live configuration.
+    """
+    first_test, last_end = folds[0][1], folds[-1][2]
+    warm = df.iloc[:last_end]
+    span = df.iloc[first_test:last_end]
+    target = make_ema(fast, slow).target_positions(warm).reindex(span.index).fillna(0.0)
+    res = run_backtest(span, target, BacktestConfig(**base), f"EMA{fast}/{slow}", "1d")
+    return compute_metrics(res, span)
+
+
 def buy_and_hold(df: pd.DataFrame, span: pd.DatetimeIndex, base: dict):
     sub = df.loc[span]
     return compute_metrics(
@@ -107,26 +124,28 @@ def report_deployed_vs_validated(df: pd.DataFrame, base: dict) -> None:
     print("=" * 78)
     print("1. DEPLOYED vs VALIDATED — which params does walk-forward actually pick?")
     print("=" * 78)
-    print(f"{'layout':<11}{'adaptive':>10}{'fixed 20/100':>14}{'B&H':>8}"
-          f"{'20/100 picked':>15}{'top pick':>13}")
+    print(f"{'layout':<11}{'adaptive':>10}{'no-pick':>9}{'stitched':>10}{'continuous':>12}"
+          f"{'B&H':>7}{'trades c/s':>12}")
 
     for train_bars, test_bars in LAYOUTS:
         wf = walk_forward(df, make_ema, GRID, BacktestConfig(**base),
                           train_bars=train_bars, test_bars=test_bars,
                           strategy_name="EMA", timeframe="1d", objective="sharpe")
-        picks = Counter((f.best_params["fast"], f.best_params["slow"]) for f in wf.folds)
         folds = fold_indices(df, train_bars, test_bars)
-        fixed = fixed_params_oos(df, LIVE_FAST, LIVE_SLOW, folds, base)
+        stitched = fixed_params_oos(df, LIVE_FAST, LIVE_SLOW, folds, base)
+        continuous = fixed_params_continuous(df, LIVE_FAST, LIVE_SLOW, folds, base)
         bh = buy_and_hold(df, wf.equity_curve.index, base)
-        (top_params, top_n), = picks.most_common(1)
 
         print(f"{train_bars}/{test_bars:<6}{wf.combined.sharpe:>10.2f}"
-              f"{fixed.sharpe:>14.2f}{bh.sharpe:>8.2f}"
-              f"{picks.get((LIVE_FAST, LIVE_SLOW), 0):>10}/{len(wf.folds):<4}"
-              f"{f'{top_params[0]}/{top_params[1]}x{top_n}':>13}")
+              f"{wf.inadmissible_folds:>5}/{len(wf.folds):<3}"
+              f"{stitched.sharpe:>10.2f}{continuous.sharpe:>12.2f}{bh.sharpe:>7.2f}"
+              f"{f'{continuous.trades}/{stitched.trades}':>12}")
 
-    print("\n  'adaptive' re-fits params every fold — that is what M4 published.")
-    print("  'fixed 20/100' is what the Lambda actually trades.")
+    print("\n  'adaptive' re-fits params every fold (what M4 published); 'no-pick' counts")
+    print("  folds where NO combination reached min_trades in its train window — those")
+    print("  folds are flat now, where they used to take EMA10/50 silently.")
+    print("  'stitched' is fixed 20/100 fold by fold; 'continuous' is the same span in one")
+    print("  run — the honest number for what the Lambda trades.")
 
 
 # --------------------------------------------------------------------------- #
