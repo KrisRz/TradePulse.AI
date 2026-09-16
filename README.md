@@ -42,7 +42,7 @@ flowchart LR
     L -->|orders| V[Binance demo venue]
     V -->|fills| L
     L --> D[(DynamoDB<br/>single table<br/>append-only fills)]
-    L --> CW[CloudWatch<br/>9 alarms → SNS]
+    L --> CW[CloudWatch<br/>10 alarms → SNS]
     D --> ST[Lambda status]
     ST --> CF[CloudFront] --> W[tradepulseai.co.uk]
     L -. same signal + cost code .- BT[Backtest engine]

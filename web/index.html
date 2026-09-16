@@ -240,8 +240,9 @@
     <p class="eyebrow">03 — WHAT IT RUNS ON</p>
     <h2 class="sec-h sec-h--big">No servers, no babysitting</h2>
     <p class="sec-sub sec-sub--wide">
-      The whole system is four Lambda functions on a schedule, one DynamoDB
-      table, and enough alarms that it tells me before I notice. It is defined
+      The whole system is three Lambda functions on a schedule, two read-only
+      endpoints, one DynamoDB table, and enough alarms that it tells me before
+      I notice. It is defined
       in Terraform end to end, so it can be destroyed and rebuilt from nothing.
     </p>
   </header>
@@ -317,7 +318,7 @@
         </g>
         <g class="node" transform="translate(640,170)">
           <rect width="180" height="48" rx="3"/>
-          <text x="14" y="20">CloudWatch</text><text x="14" y="36" class="t2">9 alarms → SNS → me</text>
+          <text x="14" y="20">CloudWatch</text><text x="14" y="36" class="t2">10 alarms → SNS → me</text>
         </g>
 
         <g class="node" transform="translate(320,300)">
@@ -339,15 +340,15 @@
       <p>Venue bot, paper bot, shadow bot, and two read-only status endpoints. Nothing else is running.</p>
     </li>
     <li class="tile reveal">
-      <span class="tile__n" data-count="82">0</span>
+      <span class="tile__n" data-count="88">0</span>
       <span class="tile__l">Terraform resources</span>
       <p>Every queue, alarm, role and DNS record is code, across two independent
       roots. Remote state in S3.</p>
     </li>
     <li class="tile reveal">
-      <span class="tile__n" data-count="9">0</span>
+      <span class="tile__n" data-count="10">0</span>
       <span class="tile__l">CloudWatch alarms</span>
-      <p>Errors, silence and dead letters each page me by email. Silence is the one that matters.</p>
+      <p>Errors, silence, dead letters and a kill-switch halt each page me by email. Silence is the one that matters.</p>
     </li>
     <li class="tile reveal">
       <span class="tile__n" data-count="1">0</span>
