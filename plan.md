@@ -407,7 +407,7 @@ Zmierzone po kursach BNB z chwili każdego filla:
 |---|---|---|
 | ✅ 2026-09-05 | KROK 1 (bezpieczeństwo egzekucji), KROK 4 (operacje), pre-rejestracja bramki B, E2 + E3 z audytu E2E | zrobione, zdeployowane, zweryfikowane |
 | ✅ 2026-09-16 | Ocena bramek kodem JAK JEST (`GATE_EVAL_2026-09-16.md`), idempotencja po naszej stronie (deploy), **KROK 2** (B5–B7, DSR, E1, MEDIUM-5, walk-forward) | zrobione; KROK 2 nie wymaga deployu (narzędzie lokalne) |
-| 🔴 **przed 2026-10-08, USER** | Decyzja o **mocy bramki B** (P(PASS) ≈ 0,16–0,22 przy prawdziwym edge'u po roku). Rekomendacja: nie luzować, dopisać analizę do pre-rejestracji | pre-rejestracja: zaostrzać wolno, luzować nigdy |
+| ✅ 2026-09-16, USER | **Decyzja o bramce B: progi bez zmian, demo.** Zmierzone: przy DD ≤ 25% bramka przepuściłaby żywą konfigurację w 4% okien rocznych i 0% dwuletnich — **celem pracy nad strategią jest DD ≤ 25%** (aneks w `GATE_B_PREREGISTRATION_2026-09-05.md`) | — |
 | ~~dowolny dzień, USER~~ ✅ 16.09 | ~~KROK 0 — klucz Ed25519 bez IP~~ — **rozstrzygnięte z UI**: Default Security Controls odbierają handel także Ed25519 bez IP. Przy M6: wyłączyć DSC świadomie **albo** stały IPv4 (~$80/rok) | decyzja przy M6, nie teraz |
 | ~~2026-09-10~~ ✅ 16.09 | Ocena bramek kodem JAK JEST — A PASS, B `INCONCLUSIVE_EXTEND`, C 6/20 | — |
 | ~~zaraz po 10.09~~ ✅ 16.09 | KROK 2 w `gate.py` (E1, DSR, walk-forward, diagnostyki, MEDIUM-5, B5/B6/B7) | — |
@@ -429,7 +429,9 @@ Zmierzone po kursach BNB z chwili każdego filla:
 - [ ] 🔴 **Binance: co to konto może dziś handlować?** Sprawdzić maile/powiadomienia
       Binance o MiCA (baner: brak nowych zleceń spot od 2026-07-01; brak par USDT).
       Od odpowiedzi zależy, czy M6 w ogóle może iść na Binance.
-- [ ] **Decyzja przed 08.10: moc bramki B.** Przy strategii dokładnie tak dobrej jak
+- [x] ~~Decyzja przed 08.10: moc bramki B~~ — **PODJĘTA 16.09: progi bez zmian, demo,
+      cel strategii = DD ≤ 25%** (aneks w pre-rejestracji). Stary opis zostaje niżej.
+- [ ] (archiwum) **Decyzja przed 08.10: moc bramki B.** Przy strategii dokładnie tak dobrej jak
       backtest zaostrzona bramka przechodzi po 365 dniach w ~16–22% przypadków
       (bootstrap blokowy, `docs/GATE_EVAL_2026-09-16.md` + raport researchu).
       Rekomendacja: **nie luzować** (fałszywy negatyw kosztuje czas, nie pieniądze),
@@ -450,7 +452,10 @@ otwarciu: pierwsze kupno kanału 4h na nowym kodzie (w logu „submitting BUY 23
 USDT of", w fill-logu `requested_quote`, `fee_quote_values`), potem
 `gate --fidelity --pk BTCUSDT_4h` i `--cost-fidelity` — oba muszą przejść.
 
-**2. RESEARCH „TRAFNIEJ"** (M5-safe): ~~#10 histereza~~ **ODRZUCONA 16.09**.
+**2. RESEARCH — CEL: DD ≤ 25% przy zachowaniu przewagi** (decyzja 16.09; wtedy bramka B
+staje się przejezdna uczciwie). Następny kandydat: **#12 — wielkość pozycji wg zmienności
+z pasmem bez handlu**, oceniany przede wszystkim po odsetku okien z DD ≤ 25%.
+~~#10 histereza~~ **ODRZUCONA 16.09**.
 Dalej: pre-rejestracja #11 portfel 8 majorsów (cel = płytszy DD, nie Sharpe; wariant
 bez SOL/DOGE; ciągłe spany) oraz retro SPA (`arch`) zamiast DSR z wariancji siatki
 (R4 w #10 pokazał, że ta nie filtruje). Nie warto: funding/basis, pora dnia,
@@ -2191,3 +2196,8 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   aktywo; C4 i E1 rozumieją nowe pola; Terraform rozdziela kapitał (200) od sufitu
   (1000). Mutacje 8/8, suite 521, wymuszony heartbeat zgodny u źródła co do prowizji.
   User: zostajemy na demo Binance i dopracowujemy bota i strategię.
+- 2026-09-16 (cd. 5) — DECYZJA O BRAMCE B. Zmierzone na żywej konfiguracji (F7):
+  obecna bramka przepuszcza ją w 4% okien rocznych i 0% dwuletnich; główna blokada to
+  pierwotne DD ≤ 25% (mediana DD 26% / 41%), B6 to prawie rzut monetą. User wybrał:
+  progi bez zmian, demo, cel strategii = DD ≤ 25%. Aneks w pre-rejestracji,
+  `scripts/research/gate_b_power.py`.
