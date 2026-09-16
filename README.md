@@ -117,7 +117,7 @@ Supporting machinery, all in `app/backend/paper_trading/`:
 
 ## What was tested and rejected
 
-Nine upgrades, each with real literature behind it, each pre-registered and
+Ten upgrades, each with real literature behind it, each pre-registered and
 each rejected out-of-sample. Keeping the list is cheaper than relearning it.
 
 | Candidate | Why it died |
@@ -131,6 +131,7 @@ each rejected out-of-sample. Keeping the list is cheaper than relearning it.
 | Maker-only orders | Worth nothing at this size and cadence |
 | Meta-labeler | Zero discrimination (ρ = −0.01); 0 of 128 events actually attenuated — the "filter" was a flat 1.3× leverage in disguise |
 | Trailing stop | The first candidate whose *premise* held — winners do peak ~40 pp above where they exit — and it fell anyway: the two horizons share one usable band value where three were required, and the apparent gain rests on a single trade |
+| Hysteresis band (4h) | Short-lived trades really are 40% of the losses, yet no band width beat the plain cross in more than 1 of 4 layouts at the 0.1% fee: fewer whipsaws, paid for with later entries and exits |
 
 Write-ups are in `docs/`. The strategy running today is the one from day one —
 not stubbornness, just the only candidate that has not yet failed a test.

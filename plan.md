@@ -58,6 +58,22 @@ Zrobione 2026-09-16 — **`docs/GATE_EVAL_2026-09-16.md`** (branch `session/gate
   (trejdy ≤ 4 dni = 25/91 i 40% wszystkich strat, 0 wygranych wśród ≤ 1 dnia),
   ale top-3 trejdy = 58% wyniku → pułapka #9. Moc zaostrzonej bramki B przy prawdziwym
   edge'u: P(PSR≥0,95) = 0,22, P(Sharpe≥B&H) = 0,54 po 365 dniach — **decyzja usera**.
+- 🔴 **Kandydat #10 (histereza, 4h) ODRZUCONY** wg pre-rejestracji (projekt w commicie
+  `2074f03` przed testem): przy prowizji 0,1% żadne pasmo nie bije bazy w więcej niż
+  1 z 4 układów — mniej whipsawów, ale spóźnione wejścia/wyjścia oddają całość.
+  **Bilans 10/10 odrzuconych.** Przy okazji: „4h 0/4 przy 0,3%" z 06.08 było
+  artefaktem sklejania foldów — ciągle baza 4h bije B&H 4/4 także przy 0,3%.
+  `docs/HYSTERESIS_RESULTS_2026-09-16.md`. README i `web/index.html` zaktualizowane
+  („Ten upgrades tested"), **strona NIE wdrożona** — czeka na zgodę.
+- 🔴 **Binance (sprawdzone w UI konta LIVE 16.09):** „Default Security Controls"
+  (zaznaczone) **odbierają handel także kluczom Ed25519/RSA bez ograniczenia IP**
+  („periodically or immediately revoked… if enabled with trading"). Zapis z 04.09
+  „Ed25519 znosi blocker stałego IP" jest **nieaktualny** — bez IP tylko po
+  świadomym wyłączeniu tych zabezpieczeń (decyzja usera przy M6) albo stały IPv4
+  (~$80/rok NAT instance; API Binance nie ma IPv6). KROK 0 jako test klucza —
+  zbędny, UI odpowiada. **Sub-konta dostępne** dla zwykłych użytkowników (FAQ z
+  03.09: KYC + 2FA, do 5), na koncie jest przycisk Activate (nie klikany). Konto
+  LIVE: Regular, 0,10%/0,10%, **BNB Fee Discount OFF**, 0 BNB, 0 kluczy API.
 
 **Stan na 2026-09-05 (sesja: BEZPIECZEŃSTWO EGZEKUCJI — dzień 51/56 okna M5).**
 Check-up przed pracą: sha M5 `r8Luxno…tNq0=` nietknięte, 9/9 alarmów OK, 0 błędów
@@ -356,7 +372,7 @@ Zmierzone po kursach BNB z chwili każdego filla:
 | ✅ 2026-09-05 | KROK 1 (bezpieczeństwo egzekucji), KROK 4 (operacje), pre-rejestracja bramki B, E2 + E3 z audytu E2E | zrobione, zdeployowane, zweryfikowane |
 | ✅ 2026-09-16 | Ocena bramek kodem JAK JEST (`GATE_EVAL_2026-09-16.md`), idempotencja po naszej stronie (deploy), **KROK 2** (B5–B7, DSR, E1, MEDIUM-5, walk-forward) | zrobione; KROK 2 nie wymaga deployu (narzędzie lokalne) |
 | 🔴 **przed 2026-10-08, USER** | Decyzja o **mocy bramki B** (P(PASS) ≈ 0,16–0,22 przy prawdziwym edge'u po roku). Rekomendacja: nie luzować, dopisać analizę do pre-rejestracji | pre-rejestracja: zaostrzać wolno, luzować nigdy |
-| 🔴 **dowolny dzień, USER** | **KROK 0** — jednorazowy klucz **Ed25519** na LIVE (Reading + Spot Trading, BEZ IP, wypłaty OFF) | **nic nie blokuje** — jedyna otwarta rzecz niezależna od kalendarza; rozstrzyga, czy M6 kosztuje $0 czy ~$40/rok |
+| ~~dowolny dzień, USER~~ ✅ 16.09 | ~~KROK 0 — klucz Ed25519 bez IP~~ — **rozstrzygnięte z UI**: Default Security Controls odbierają handel także Ed25519 bez IP. Przy M6: wyłączyć DSC świadomie **albo** stały IPv4 (~$80/rok) | decyzja przy M6, nie teraz |
 | ~~2026-09-10~~ ✅ 16.09 | Ocena bramek kodem JAK JEST — A PASS, B `INCONCLUSIVE_EXTEND`, C 6/20 | — |
 | ~~zaraz po 10.09~~ ✅ 16.09 | KROK 2 w `gate.py` (E1, DSR, walk-forward, diagnostyki, MEDIUM-5, B5/B6/B7) | — |
 | **następna sesja** | **KROK 3** — księga v2 (sizing z `book.cash`, prowizja BNB do equity, resztka qty) pod dyscypliną złotego wzorca; E1 jest siatką: po zmianie replay przez fille musi dalej dawać PASS na nowej arytmetyce | E1 gotowe od 16.09 — blokada zdjęta |
@@ -380,10 +396,12 @@ Zmierzone po kursach BNB z chwili każdego filla:
       Rekomendacja: **nie luzować** (fałszywy negatyw kosztuje czas, nie pieniądze),
       dopisać analizę mocy do pre-rejestracji jako oczekiwany czas czekania.
       Świadomie: przy tej regule M6 może się odsunąć o lata.
-- [ ] **KROK 0 (wciąż):** klucz Ed25519 na LIVE bez IP. **Plus nowe:** sprawdzić w UI
-      Binance „Profile → Sub Accounts", czy konto osobiste ma sub-konta (skróty FAQ
-      mówią o VIP1+; niezweryfikowane — strona supportu nie renderuje się z UK).
-      Plan M6 zakłada sub-konto.
+- [x] ~~KROK 0 + sub-konta~~ — **sprawdzone w UI 16.09** (patrz STATUS): sub-konta
+      dostępne (Activate, nie klikane — potrzebne dopiero przy M6); Ed25519 bez IP
+      NIE omija Default Security Controls → przy M6 decyzja: wyłączyć DSC albo stały IP.
+- [ ] **Zgoda na wdrożenie strony** (`./scripts/deploy_site.sh` z korzenia repo):
+      „Ten upgrades tested" + wiersz histerezy. Lokalnie DOM poprawny, wygląd do
+      sprawdzenia na żywej stronie po wdrożeniu.
 - [ ] Okna checków healthchecks.io: venue 5h/1h, shadow 25h/2h (nie da się
       sprawdzić z tej strony).
 - [x] ~~`./scripts/deploy_site.sh`~~ — strona wdrożona 2026-09-05 19:52 UTC
@@ -394,10 +412,12 @@ zamroź złoty wzorzec → sizing z `book.cash` (cap `max_notional`) → prowizj
 equity po kursie z chwili filla → resztka qty → `gate --fidelity --pk BTCUSDT_4h`
 musi dalej dawać PASS (po przeliczeniu historii nową arytmetyką) → deploy venue.
 
-**2. RESEARCH „TRAFNIEJ"** (M5-safe): pre-rejestracja #10 histereza (tylko 4h,
-jedno `b` z góry, reguła z siatką prowizji, DSR za 11 prób) i #11 portfel 8
-majorsów (cel = płytszy DD, nie Sharpe); retro SPA/PBO na 10 próbach. Nie warto:
-funding/basis, pora dnia, piramidowanie, sizing wg siły trendu, rotacja, Donchian.
+**2. RESEARCH „TRAFNIEJ"** (M5-safe): ~~#10 histereza~~ **ODRZUCONA 16.09**.
+Dalej: pre-rejestracja #11 portfel 8 majorsów (cel = płytszy DD, nie Sharpe; wariant
+bez SOL/DOGE; ciągłe spany) oraz retro SPA (`arch`) zamiast DSR z wariancji siatki
+(R4 w #10 pokazał, że ta nie filtruje). Nie warto: funding/basis, pora dnia,
+piramidowanie, sizing wg siły trendu, rotacja, Donchian, kolejne „opóźnienia"
+sygnału (histereza zmierzyła całą tę rodzinę).
 
 **3. Sprawdzić przy otwarciu:** pierwszy zaplanowany run venue-4h na nowym kodzie
 (2026-09-16 20:10 UTC) — `aws logs` bez `ERROR`, `gate --fidelity --pk BTCUSDT_4h` PASS.
@@ -2111,3 +2131,10 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   walk-forward `no_admissible_combo` (adaptive = stały 10/50 w 3/4 układów), ciągły
   OOS 20/100 0,96–1,16 vs B&H 0,81–1,00. Mutacje 4/4 + 17/17 + 1/1. Suite 504.
   Sprostowane: EXECUTION_SAFETY, M4_EDGE_VALIDATION, README, plan, RUNBOOK.
+- 2026-09-16 (cd.) — KANDYDAT #10 + BINANCE. Projekt histerezy zacommitowany
+  przed testem (`2074f03`), wynik REJECT (R1: przy 0,1% max 1/4 układów; R2 okazał
+  się niespełnialny, bo ciągła baza 4h bije B&H 4/4 nawet przy 0,3% — sprostowanie
+  notatki z 06.08; R4 nie filtruje). Bilans 10/10. W UI Binance: Default Security
+  Controls odbierają handel również kluczom Ed25519 bez IP → blocker stałego IP
+  wraca do M6 jako decyzja; sub-konta dostępne; BNB fee OFF; 0 kluczy. README
+  i strona: „Ten upgrades", strona niewdrożona.
