@@ -135,6 +135,8 @@ def make_executor(routes, **kwargs):
     routes.setdefault(("GET", "/api/v3/time"), [{"serverTime": 1_786_045_000_000}])
     # Every submit is preceded by a lookup of its id; a fresh id is unknown.
     routes.setdefault(("GET", ORDER_PATH), [not_found()])
+    # A BNB commission is priced straight after the fill.
+    routes.setdefault(("GET", "/api/v3/ticker/price"), [{"symbol": "BNBUSDT", "price": "800.00"}])
     session = Session(routes)
     kwargs.setdefault("sleep", lambda _s: None)
     kwargs.setdefault("client_prefix", "tpv4h")
@@ -177,6 +179,8 @@ class Venue:
         if path == "/api/v3/time":
             return Response({"serverTime": 1_786_045_000_000})
         if path == "/api/v3/ticker/price":
+            if query.get("symbol") == "BNBUSDT":
+                return Response({"symbol": "BNBUSDT", "price": "800.00"})
             return Response({"symbol": "BTCUSDT", "price": self.price})
         if path == ORDER_PATH and method == "GET":
             known = self.orders.get(query["origClientOrderId"])
@@ -187,7 +191,11 @@ class Venue:
             if earlier is not None and earlier["status"] != "FILLED":
                 return Response({"code": -2010, "msg": "Duplicate order sent."}, 400)
             self.posts.append(query)
-            self.seed_filled(client_id, query["side"], query["quantity"])
+            qty = query.get("quantity")
+            if qty is None:      # spend-this-much order: the venue works out the size
+                qty = (Decimal(query["quoteOrderQty"]) / Decimal(self.price)).quantize(
+                    Decimal("0.00001"), rounding="ROUND_DOWN")
+            self.seed_filled(client_id, query["side"], qty)
             return Response(self.orders[client_id])
         raise AssertionError(f"unexpected {method} {path}")
 

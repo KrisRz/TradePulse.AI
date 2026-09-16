@@ -62,6 +62,10 @@ from .execution import (
 )
 
 
+#: Commission billed in one of these is already in the book's own currency.
+_QUOTE_LIKE = ("", "USDT", "USD", "BUSD", "USDC", "FDUSD")
+
+
 @dataclass
 class PaperTrade:
     entry_time: str
@@ -98,6 +102,9 @@ class PaperPortfolio:
     quantity_backed: bool = False     # True once a venue fill drove the book
     fees_quote: float = 0.0           # commission actually charged, in quote
     fees_external: dict = field(default_factory=dict)  # {asset: amount}, unbooked
+    # Third-asset commission (BNB) that WAS charged to cash, because the venue
+    # priced it at fill time. Kept per asset so the amounts stay auditable.
+    fees_converted: dict = field(default_factory=dict)  # {asset: amount}
 
     def __post_init__(self) -> None:
         if self.realized is None:
@@ -120,7 +127,8 @@ class PaperPortfolio:
         self._executor = executor
 
     def _fill(self, order_side: int, price: float, time: str,
-              order_key: Optional[str] = None):
+              order_key: Optional[str] = None,
+              quote_budget: Optional[float] = None):
         """Obtain a fill for one order leg.
 
         Defaults to a :class:`SimulatedExecutor` built from the portfolio's
@@ -135,43 +143,63 @@ class PaperPortfolio:
         executor = self._executor or SimulatedExecutor(slippage=self.slippage)
         return executor.execute(Order(side=order_side, reference_price=price,
                                       time=time,
-                                      idempotency_key=order_key or time))
+                                      idempotency_key=order_key or time,
+                                      quote_budget=quote_budget))
 
     # -- fee handling ---------------------------------------------------- #
     def _book_actual_fee(self, fill) -> tuple[float, float]:
         """Split a venue commission into (quote cost, base-asset units taken).
 
         Returns what must come off cash and off quantity respectively. Which
-        one applies is decided by the asset the venue billed, and the fill
-        carries the base asset so this does not have to be configured:
+        one applies is decided per billed asset, and the fill carries the base
+        asset so this does not have to be configured:
 
         * billed in the asset just traded  -> comes off the position
         * billed in the quote currency     -> comes off cash
-        * billed in anything else (BNB)    -> recorded, not booked
+        * billed in anything else (BNB)    -> comes off cash at the quote value
+          the venue priced it at when it filled; recorded beside the book only
+          when no such price came with the fill
 
-        The third case is a real cost that cannot be converted without a price
-        this book does not have. Guessing a rate would be worse than showing it
-        separately, and silently dropping it would overstate every result.
+        Guessing a rate would be worse than showing the fee separately, which is
+        why an unpriced third-asset fee still lands in ``fees_external``. Until
+        2026-09-16 every BNB fee did, so the venue channel's equity carried no
+        commission at all (audit 2026-09-04, KROK 3).
         """
-        amount = fill.fee_paid or 0.0
-        if not amount:
+        if fill.fees:
+            billed = dict(fill.fees)
+        elif fill.fee_paid:
+            billed = {fill.fee_asset or "": fill.fee_paid}
+        else:
             return 0.0, 0.0
-        asset = (fill.fee_asset or "").upper()
         base = (fill.base_asset or "").upper()
+        priced = {k.upper(): v for k, v in (fill.fee_quote_values or {}).items()}
 
-        if asset and base and asset == base:
-            return 0.0, amount
-        if asset in ("", "USDT", "USD", "BUSD", "USDC", "FDUSD"):
-            self.fees_quote += amount
-            return amount, 0.0
-
-        self.fees_external[asset] = self.fees_external.get(asset, 0.0) + amount
-        return 0.0, 0.0
+        fee_quote = 0.0
+        fee_base = 0.0
+        for raw_asset, amount in billed.items():
+            if not amount:
+                continue
+            asset = (raw_asset or "").upper()
+            if asset and base and asset == base:
+                fee_base += amount
+            elif asset in _QUOTE_LIKE:
+                fee_quote += amount
+            elif priced.get(asset) is not None:
+                fee_quote += priced[asset]
+                self.fees_converted[asset] = self.fees_converted.get(asset, 0.0) + amount
+            else:
+                self.fees_external[asset] = self.fees_external.get(asset, 0.0) + amount
+        self.fees_quote += fee_quote
+        return fee_quote, fee_base
 
     # -- opening and closing --------------------------------------------- #
     def _open(self, new_side: int, price: float, time: str,
               order_key: Optional[str] = None) -> None:
-        fill = self._fill(opening_order_side(new_side), price, time, order_key)
+        # A venue sizes a long from the book's cash, so the position compounds
+        # exactly as the backtest's does. The model needs no budget and gets none.
+        budget = self.cash if (self._executor is not None and new_side > 0) else None
+        fill = self._fill(opening_order_side(new_side), price, time, order_key,
+                          quote_budget=budget)
         self.equity_before_entry = self.realized
 
         if fill.qty is None:
@@ -192,7 +220,9 @@ class PaperPortfolio:
         signed_qty = new_side * fill.qty
         notional = fill.qty * fill.price
 
-        self.qty = signed_qty - (new_side * fee_base)
+        # Added to, not replaced: a sell floored to the lot size can leave dust
+        # behind, and overwriting it would make that dust vanish from equity.
+        self.qty = self.qty + signed_qty - (new_side * fee_base)
         self.cash = self.cash - (new_side * notional) - fee_quote
         self.side = new_side
         self.entry_fill = fill.price
@@ -301,4 +331,6 @@ class PaperPortfolio:
             p.cash = p.entry_equity * (1.0 - p.side) if p.side else p.realized
         if "fees_external" not in d or p.fees_external is None:
             p.fees_external = {}
+        if "fees_converted" not in d or p.fees_converted is None:
+            p.fees_converted = {}
         return p

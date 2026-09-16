@@ -194,6 +194,14 @@ class Reconciliation:
     #: The id WE gave the order. Deterministic per (symbol, side, decision), so
     #: it is also how a later run recognises a fill the book already contains.
     client_order_id: Optional[str] = None
+    #: Quote currency a BUY sized from the book was allowed to spend
+    #: (``quoteOrderQty``). Gate C's partial-fill check compares against this
+    #: when no base quantity was requested.
+    requested_quote: Optional[float] = None
+    #: Commission per billed asset, and the quote value of the ones billed in a
+    #: third asset, priced at fill time. Replaying the book needs both.
+    fees: Optional[dict] = None
+    fee_quote_values: Optional[dict] = None
 
     @property
     def price_error(self) -> float:
@@ -670,28 +678,62 @@ class BinanceDemoExecutor:
         return float(weighted / total_qty), float(total_qty), len(fills)
 
     @staticmethod
-    def _commission(response: dict, base_asset: str) -> tuple[float, str, Decimal]:
-        """Total commission, plus how much of it was taken out of the base asset.
+    def _commission(response: dict, base_asset: str) -> tuple[dict, Decimal]:
+        """Commission per billed asset, plus how much was taken out of the base asset.
 
         Binance can charge in the asset received, or in BNB when the account holds
         it. That distinction is not cosmetic: a BUY charged in BTC leaves us
         holding *less BTC than we bought*, and selling the un-netted quantity later
-        fails on insufficient balance.
+        fails on insufficient balance. Amounts in different assets are never
+        added together.
         """
-        fills = response.get("fills") or []
-        if not fills:
-            return 0.0, "", Decimal("0")
-        total = Decimal("0")
-        base_taken = Decimal("0")
-        assets = set()
-        for f in fills:
-            amount = Decimal(f.get("commission", "0"))
+        per_asset: dict[str, Decimal] = {}
+        for f in response.get("fills") or []:
             asset = f.get("commissionAsset", "")
-            total += amount
-            assets.add(asset)
-            if asset == base_asset:
-                base_taken += amount
-        return float(total), "/".join(sorted(a for a in assets if a)), base_taken
+            per_asset[asset] = per_asset.get(asset, Decimal("0")) + Decimal(f.get("commission", "0"))
+        base_taken = per_asset.get(base_asset, Decimal("0"))
+        return {k: float(v) for k, v in per_asset.items() if v}, base_taken
+
+    def _price_third_asset_fees(self, fees: dict, rules: SymbolRules) -> Optional[dict]:
+        """Quote value of commission billed in neither leg of the pair, at fill time.
+
+        Asked straight after the fill, so the rate is the one the fee was really
+        worth. A failure here must never undo a trade that already happened: the
+        fee is then left unpriced and the book records it beside equity instead.
+        """
+        values = {}
+        for asset, amount in fees.items():
+            if asset in (rules.base_asset, rules.quote_asset) or not asset:
+                continue
+            try:
+                payload = self._request("GET", "/api/v3/ticker/price",
+                                        {"symbol": f"{asset}{rules.quote_asset}"},
+                                        signed=False)
+                values[asset] = amount * float(payload["price"])
+            except (BinanceAPIError, requests.RequestException, KeyError, ValueError) as exc:
+                logger.warning("could not price the %s commission (%s) — it stays "
+                               "outside the book", asset, exc)
+        return values or None
+
+    def plan_quote(self, budget: float) -> Decimal:
+        """Quote to spend on a BUY the book sized, within every limit we hold.
+
+        The book's cash is the budget; the account balance and the configured
+        ceiling can only lower it. Floored to the cent so the venue never rounds
+        it up past what the book has.
+        """
+        rules = self.rules()
+        quote = Decimal(str(budget))
+        quote = min(quote, self.free_balance(rules.quote_asset) * Decimal(str(self.quote_fraction)))
+        if self.max_notional is not None:
+            quote = min(quote, Decimal(str(self.max_notional)))
+        quote = quote.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        if quote <= 0 or (rules.min_notional_applies_to_market and quote < rules.min_notional):
+            raise OrderTooSmall(
+                f"quote {quote} is below the venue minimum {rules.min_notional} "
+                f"{rules.quote_asset} (book budget {budget})"
+            )
+        return quote
 
     def _submit(self, params: dict[str, Any], client_order_id: str,
                 order: Order, qty: Decimal) -> dict[str, Any]:
@@ -851,28 +893,42 @@ class BinanceDemoExecutor:
         if not rules.tradable:
             raise SymbolNotTradable(f"{self.symbol} status is {rules.status}, not TRADING")
 
-        qty = Decimal(str(order.qty)) if order.qty is not None \
-            else self.plan_quantity(order.side, order.reference_price)
-        qty = self._floor_to_step(qty, rules.step_size)
-
         client_order_id = self.client_order_id(
             order.side, order.idempotency_key or order.time)
         params = {
             "symbol": self.symbol,
             "side": "BUY" if order.side == BUY else "SELL",
             "type": "MARKET",
-            "quantity": format(qty.normalize(), "f"),
             "newClientOrderId": client_order_id,
             "newOrderRespType": "FULL",   # we need the individual fills
         }
+        quote_budget = None
+        if order.side == BUY and order.qty is None and order.quote_budget is not None:
+            # Spend what the book has, and let the venue work out the quantity:
+            # a quantity computed at the decision price would overspend the
+            # book whenever the price moved up before the order landed.
+            quote_budget = self.plan_quote(order.quote_budget)
+            params["quoteOrderQty"] = format(quote_budget.normalize(), "f")
+            qty = self._floor_to_step(quote_budget / Decimal(str(order.reference_price)),
+                                      rules.step_size)
+        else:
+            qty = Decimal(str(order.qty)) if order.qty is not None \
+                else self.plan_quantity(order.side, order.reference_price)
+            qty = self._floor_to_step(qty, rules.step_size)
+            params["quantity"] = format(qty.normalize(), "f")
         mark_at_order = self.mark_price() if self.measure_drift else None
 
-        logger.info("submitting %s %s %s as %s", params["side"], params["quantity"],
+        logger.info("submitting %s %s %s as %s", params["side"],
+                    params.get("quantity") or f"{params['quoteOrderQty']} {rules.quote_asset} of",
                     self.symbol, client_order_id)
         response = self._submit(params, client_order_id, order, qty)
 
         avg_price, executed_qty, fill_count = self._average_fill_price(response)
-        fee_paid, fee_asset, base_fee = self._commission(response, rules.base_asset)
+        fees, base_fee = self._commission(response, rules.base_asset)
+        fee_paid = sum(fees.values()) if len(fees) == 1 else (
+            fees.get(rules.base_asset) or next(iter(fees.values()), 0.0))
+        fee_asset = "/".join(sorted(fees))
+        fee_quote_values = self._price_third_asset_fees(fees, rules) if fees else None
         status = response.get("status", "")
 
         if status not in ("FILLED", "PARTIALLY_FILLED"):
@@ -904,8 +960,11 @@ class BinanceDemoExecutor:
             fill_count=fill_count,
             status=status,
             mark_at_order=mark_at_order,
-            requested_qty=float(qty),
+            requested_qty=None if quote_budget is not None else float(qty),
             client_order_id=str(response.get("clientOrderId") or client_order_id),
+            requested_quote=float(quote_budget) if quote_budget is not None else None,
+            fees=fees or None,
+            fee_quote_values=fee_quote_values,
         )
         self._reconciliations.append(record)
         logger.info("filled %s @ %.2f (assumed %.2f, slippage %.5f%% vs %.5f%% assumed)",
@@ -922,6 +981,8 @@ class BinanceDemoExecutor:
             order_id=str(response.get("orderId", "")) or None,
             raw=response,
             base_asset=rules.base_asset,
+            fees=fees or None,
+            fee_quote_values=fee_quote_values,
         )
 
     # ----------------------------------------------------------------- reporting --

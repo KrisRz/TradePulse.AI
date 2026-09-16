@@ -746,6 +746,11 @@ def check_no_lookahead(inputs: FidelityInputs) -> dict:
                    checked=checked, unverifiable=_truncate(unverifiable))
 
 
+def _floats(mapping) -> Optional[dict]:
+    """DynamoDB hands numbers back as Decimal; the book does float arithmetic."""
+    return {k: float(v) for k, v in mapping.items()} if mapping else None
+
+
 class _RecordedFills:
     """An executor that answers with the venue's recorded fills, bar by bar.
 
@@ -777,7 +782,9 @@ class _RecordedFills:
                     qty=float(rec["qty"]), fee_paid=float(rec.get("fee_paid") or 0.0),
                     fee_asset=rec.get("fee_asset") or None,
                     order_id=str(rec.get("order_id") or "") or None, raw=rec,
-                    base_asset=rec.get("base_asset") or None)
+                    base_asset=rec.get("base_asset") or None,
+                    fees=_floats(rec.get("fees")),
+                    fee_quote_values=_floats(rec.get("fee_quote_values")))
 
     def unused(self) -> list[str]:
         return [f"{bar}: {'BUY' if side > 0 else 'SELL'} fill {r.get('order_id')} "
@@ -1032,7 +1039,14 @@ def check_partial_fills(inputs: CostFidelityInputs) -> dict:
             continue
         requested, executed = f.get("requested_qty"), f.get("qty")
         step = f.get("step_size")
-        if requested is None or step is None:
+        quote = f.get("requested_quote")
+        if quote is not None and step is not None and f.get("actual_price"):
+            # A BUY sized in quote currency: the venue chooses the quantity, so
+            # the shortfall is measured in what was spent, to one lot's worth.
+            spent = float(executed or 0.0) * float(f["actual_price"])
+            if float(quote) - spent > float(step) * float(f["actual_price"]):
+                partials.append(f"{label}: asked to spend {quote}, spent {spent:.2f}")
+        elif requested is None or step is None:
             unverifiable.append(f"{label}: requested quantity not recorded")
         elif float(requested) - float(executed or 0.0) > float(step):
             partials.append(f"{label}: requested {requested}, executed {executed}")

@@ -344,3 +344,122 @@ def test_position_value_marks_only_the_holding():
     assert book.position_value(31_000.0) == pytest.approx(book.qty * 31_000.0)
     assert not math.isclose(book.position_value(31_000.0), book.equity(31_000.0)) \
         or book.cash == 0.0
+
+
+# ------------------------------------------ book v2 (audit 2026-09-04, KROK 3) --
+class RichExecutor:
+    """Fills carrying per-asset fees and fill-time quote values, as the venue does now."""
+
+    def __init__(self, fills):
+        self.fills = list(fills)
+        self.orders = []
+
+    def execute(self, order: Order) -> Fill:
+        self.orders.append(order)
+        spec = self.fills.pop(0)
+        return Fill(price=spec["price"], side=order.side, time=order.time,
+                    qty=spec["qty"], base_asset="BTC", fees=spec.get("fees"),
+                    fee_quote_values=spec.get("values"))
+
+
+def test_a_bnb_fee_priced_at_fill_time_is_charged_to_cash():
+    """Until 2026-09-16 every BNB fee stayed outside equity, so the venue book
+    carried no commission at all. Priced at the fill, it is a quote cost."""
+    book = PaperPortfolio(fee_rate=FEE, slippage=SLIP, initial_capital=200.0)
+    book.set_executor(RichExecutor([
+        {"price": 60_000.0, "qty": 0.003, "fees": {"BNB": 0.0003},
+         "values": {"BNB": 0.18}},
+    ]))
+    book.reconcile(1, 60_000.0, "t0")
+
+    assert book.cash == pytest.approx(200.0 - 180.0 - 0.18)
+    assert book.fees_quote == pytest.approx(0.18)
+    assert book.fees_converted == {"BNB": pytest.approx(0.0003)}
+    assert book.fees_external == {}
+    assert book.equity(60_000.0) == pytest.approx(200.0 - 0.18)
+
+
+def test_fees_in_two_assets_are_each_booked_their_own_way():
+    """Adding 0.000001 BTC to 0.0003 BNB is not a number (audit MEDIUM-2)."""
+    book = PaperPortfolio(fee_rate=FEE, slippage=SLIP, initial_capital=200.0)
+    book.set_executor(RichExecutor([
+        {"price": 60_000.0, "qty": 0.003, "fees": {"BTC": 0.000001, "BNB": 0.0003},
+         "values": {"BNB": 0.18}},
+    ]))
+    book.reconcile(1, 60_000.0, "t0")
+
+    assert book.qty == pytest.approx(0.003 - 0.000001)
+    assert book.cash == pytest.approx(200.0 - 180.0 - 0.18)
+
+
+def test_an_unpriced_bnb_fee_still_waits_beside_the_book():
+    book = PaperPortfolio(fee_rate=FEE, slippage=SLIP, initial_capital=200.0)
+    book.set_executor(RichExecutor([
+        {"price": 60_000.0, "qty": 0.003, "fees": {"BNB": 0.0003}, "values": None},
+    ]))
+    book.reconcile(1, 60_000.0, "t0")
+
+    assert book.fees_external == {"BNB": pytest.approx(0.0003)}
+    assert book.cash == pytest.approx(20.0)
+
+
+def test_dust_left_by_a_floored_sell_survives_the_next_buy():
+    """A BTC-billed fee leaves 0.00253746 BTC; the lot size lets 0.00253 go.
+    The rest is still ours and must not vanish when the next position opens
+    (audit MEDIUM-1)."""
+    book = PaperPortfolio(fee_rate=FEE, slippage=SLIP, initial_capital=200.0)
+    book.set_executor(RichExecutor([
+        {"price": 60_000.0, "qty": 0.00254, "fees": {"BTC": 0.00000254}},
+        {"price": 61_000.0, "qty": 0.00253},
+        {"price": 62_000.0, "qty": 0.001},
+    ]))
+    book.reconcile(1, 60_000.0, "t0")
+    book.reconcile(0, 61_000.0, "t1")
+    dust = 0.00254 - 0.00000254 - 0.00253
+    assert book.qty == pytest.approx(dust)
+
+    book.reconcile(1, 62_000.0, "t2")
+    assert book.qty == pytest.approx(dust + 0.001)
+
+
+def test_a_venue_book_offers_its_own_cash_as_the_budget():
+    """The order compounds exactly when the book does (audit HIGH-4)."""
+    book = PaperPortfolio(fee_rate=FEE, slippage=SLIP, initial_capital=200.0)
+    venue = RichExecutor([
+        {"price": 50_000.0, "qty": 0.004},
+        {"price": 60_000.0, "qty": 0.004},
+        {"price": 60_000.0, "qty": 0.0038},
+    ])
+    book.set_executor(venue)
+    book.reconcile(1, 50_000.0, "t0")
+    book.reconcile(0, 60_000.0, "t1")
+    book.reconcile(1, 60_000.0, "t2")
+
+    budgets = [o.quote_budget for o in venue.orders]
+    assert budgets[0] == pytest.approx(200.0)
+    assert budgets[1] is None                           # a sell spends nothing
+    assert budgets[2] == pytest.approx(240.0)           # the profit goes back in
+
+
+def test_the_model_is_never_handed_a_budget(monkeypatch):
+    """The frozen M5 book must not see anything new on its orders."""
+    from app.backend.paper_trading import execution
+
+    seen = []
+    original = execution.SimulatedExecutor.execute
+
+    def spy(self, order):
+        seen.append(order.quote_budget)
+        return original(self, order)
+
+    monkeypatch.setattr(execution.SimulatedExecutor, "execute", spy)
+    book = PaperPortfolio(fee_rate=FEE, slippage=SLIP, initial_capital=CAPITAL)
+    for side, price in LONG_STEPS:
+        book.reconcile(side, price, f"t{price}")
+    assert seen and all(b is None for b in seen)
+
+
+def test_a_book_without_the_converted_fees_field_still_loads():
+    legacy = PaperPortfolio(initial_capital=200.0).to_dict()
+    legacy.pop("fees_converted")
+    assert PaperPortfolio.from_dict(legacy).fees_converted == {}

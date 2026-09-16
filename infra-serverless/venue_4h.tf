@@ -27,21 +27,31 @@ variable "venue_4h_zip_path" {
   default     = "../dist/venue_4h_lambda.zip"
 }
 
-variable "venue_4h_max_notional" {
+variable "venue_4h_capital" {
   description = <<-EOT
-    Ceiling per order in quote units, and also the book's capital.
+    The book's starting capital in quote units. Only read when a book is first
+    created; a running book carries its own figure in DynamoDB.
 
-    The two are deliberately kept equal: the book sizes positions as a fraction
-    of equity, so a "full equity" position must map onto an order of roughly the
-    same size at the venue. Let them drift apart and the book would report a
-    strategy sitting 99% in cash while the venue held a token position.
-
-    200 USDT mirrors the size M6 actually plans ($50-100 real), leaves the demo
-    account's 5000 USDT room for the shadow bot, and keeps every order well clear
-    of the 5 USDT MIN_NOTIONAL floor.
+    200 USDT mirrors the size M6 plans ($50-100 real), leaves the demo account's
+    5000 USDT room for the shadow bot, and keeps every order well clear of the
+    5 USDT MIN_NOTIONAL floor.
   EOT
   type        = number
   default     = 200
+}
+
+variable "venue_4h_max_notional" {
+  description = <<-EOT
+    Safety ceiling per order in quote units — a limit, not the order size.
+
+    Until 2026-09-16 this was also the book's capital and every BUY was sized
+    from the account balance capped here, so the venue kept buying 200 USDT
+    while the book compounded (audit 2026-09-04, HIGH-4). A BUY now spends the
+    book's own cash; this only stops a corrupted book from spending the demo
+    account. Five times the starting capital leaves room for the book to grow.
+  EOT
+  type        = number
+  default     = 1000
 }
 
 locals {
@@ -131,7 +141,7 @@ resource "aws_lambda_function" "venue_4h" {
       TRADING_SYMBOL          = "BTCUSDT"
       TRADING_TIMEFRAME       = "4h"
       VENUE_MAX_NOTIONAL      = tostring(var.venue_4h_max_notional)
-      PAPER_CAPITAL           = tostring(var.venue_4h_max_notional)
+      PAPER_CAPITAL           = tostring(var.venue_4h_capital)
       SHADOW_CREDENTIALS_PATH = var.shadow_credentials_path
       # Its own credential path, and its own endpoint, both as configuration.
       # They point at the shared demo values today; M6 moves this channel onto

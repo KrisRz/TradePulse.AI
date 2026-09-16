@@ -350,8 +350,9 @@ def test_active_window_has_no_caveats(faithful):
 class _Venue:
     """Fills at a price a little off the reference, billed in BNB, like demo."""
 
-    def __init__(self, notional=200.0):
+    def __init__(self, notional=200.0, priced=False):
         self.notional = notional
+        self.priced = priced
         self.records = []
 
     def execute(self, order):
@@ -360,21 +361,24 @@ class _Venue:
             qty = round(self.notional / price, 5)
         else:
             qty = self.records[-1]["qty"]
+        values = {"BNB": 0.2} if self.priced else None
+        fees = {"BNB": 0.00025} if self.priced else None
         self.records.append({
             "bar": order.time, "side": order.side, "qty": qty, "actual_price": price,
             "fee_paid": 0.00025, "fee_asset": "BNB", "base_asset": "BTC",
+            "fees": fees, "fee_quote_values": values,
             "order_id": str(1000 + len(self.records)),
             "recorded_at": f"2026-08-{10 + len(self.records):02d}T00:00:00+00:00"})
         return Fill(price=price, side=order.side, time=order.time, qty=qty,
                     fee_paid=0.00025, fee_asset="BNB", base_asset="BTC",
-                    order_id=self.records[-1]["order_id"])
+                    order_id=self.records[-1]["order_id"], fees=fees,
+                    fee_quote_values=values)
 
 
-@pytest.fixture
-def venue_channel():
+def _venue_channel(priced: bool):
     bars = make_bars(n=60)
     strategy = EmaCrossover(fast=3, slow=8, allow_short=False)
-    venue = _Venue()
+    venue = _Venue(priced=priced)
     book = PaperPortfolio(fee_rate=FEE, slippage=SLIP, initial_capital=200.0)
     book.set_executor(venue)
     decisions = []
@@ -392,6 +396,19 @@ def venue_channel():
     return FidelityInputs(decisions=decisions, state={"portfolio": book.to_dict()},
                           bars=bars, strategy=strategy, timeframe="1d",
                           lookback_bars=LOOKBACK, infra=None, fills=venue.records)
+
+
+@pytest.fixture
+def venue_channel():
+    return _venue_channel(priced=False)
+
+
+def test_a_book_that_charged_its_bnb_fees_replays_through_its_fills():
+    """Book v2 puts the priced fee into equity; the replay must do the same."""
+    channel = _venue_channel(priced=True)
+    assert channel.state["portfolio"]["fees_converted"]
+    res = check_accounting_parity(channel)
+    assert res["status"] == "PASS", res
 
 
 def test_a_quantity_backed_book_replays_through_its_own_fills(venue_channel):
