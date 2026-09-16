@@ -74,6 +74,12 @@ Zrobione 2026-09-16 — **`docs/GATE_EVAL_2026-09-16.md`** (branch `session/gate
   zbędny, UI odpowiada. **Sub-konta dostępne** dla zwykłych użytkowników (FAQ z
   03.09: KYC + 2FA, do 5), na koncie jest przycisk Activate (nie klikany). Konto
   LIVE: Regular, 0,10%/0,10%, **BNB Fee Discount OFF**, 0 BNB, 0 kluczy API.
+- 🔴 **Strona: żywa cena NIGDY nie działała na produkcji** (od 08.08): `chart.js`
+  łączył się z `stream.binance.com:9443`, a CSP dopuszcza host bez portu = tylko 443
+  → naruszenie `connect-src` u każdego odwiedzającego. Naprawione (port 443),
+  plus panel przy FLAT (cena wejścia i zdanie „position is open" były nieprawdą).
+  **Wdrożone 3× i sprawdzone na żywo** (status `live`, 0 naruszeń CSP, 24 h z tickera;
+  mobile 390 px bez przewijania poziomego).
 
 **Stan na 2026-09-05 (sesja: BEZPIECZEŃSTWO EGZEKUCJI — dzień 51/56 okna M5).**
 Check-up przed pracą: sha M5 `r8Luxno…tNq0=` nietknięte, 9/9 alarmów OK, 0 błędów
@@ -399,9 +405,8 @@ Zmierzone po kursach BNB z chwili każdego filla:
 - [x] ~~KROK 0 + sub-konta~~ — **sprawdzone w UI 16.09** (patrz STATUS): sub-konta
       dostępne (Activate, nie klikane — potrzebne dopiero przy M6); Ed25519 bez IP
       NIE omija Default Security Controls → przy M6 decyzja: wyłączyć DSC albo stały IP.
-- [ ] **Zgoda na wdrożenie strony** (`./scripts/deploy_site.sh` z korzenia repo):
-      „Ten upgrades tested" + wiersz histerezy. Lokalnie DOM poprawny, wygląd do
-      sprawdzenia na żywej stronie po wdrożeniu.
+- [x] ~~Wdrożenie strony~~ — **zrobione 16.09** (3 wdrożenia: „Ten upgrades",
+      panel przy FLAT, żywa cena przez port 443), sprawdzone na żywo.
 - [ ] Okna checków healthchecks.io: venue 5h/1h, shadow 25h/2h (nie da się
       sprawdzić z tej strony).
 - [x] ~~`./scripts/deploy_site.sh`~~ — strona wdrożona 2026-09-05 19:52 UTC
@@ -2138,3 +2143,7 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   Controls odbierają handel również kluczom Ed25519 bez IP → blocker stałego IP
   wraca do M6 jako decyzja; sub-konta dostępne; BNB fee OFF; 0 kluczy. README
   i strona: „Ten upgrades", strona niewdrożona.
+- 2026-09-16 (cd. 2) — STRONA. Wdrożona z #10; przy weryfikacji na żywo znalezione:
+  żywa cena nigdy nie działała (CSP bez portu vs `:9443`) i panel kłamał przy FLAT.
+  Oba naprawione, wdrożone, sprawdzone w przeglądarce (override `document.hidden`,
+  nasłuch `securitypolicyviolation`, mobile w ramce z jednego originu).
