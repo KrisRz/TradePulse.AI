@@ -8,7 +8,11 @@
 
   var SYMBOL = 'BTCUSDT';
   var REST = 'https://api.binance.com/api/v3/klines?symbol=' + SYMBOL + '&interval=4h&limit=400';
-  var WS = 'wss://stream.binance.com:9443/stream?streams=btcusdt@kline_4h/btcusdt@ticker';
+  // Port 443, not 9443: the site's CSP allows `wss://stream.binance.com`, and a
+  // CSP source without a port matches only the default one. From 2026-08-08 to
+  // 2026-09-16 the :9443 URL was blocked for every visitor and the price never
+  // went live. Binance serves the same streams on both ports.
+  var WS = 'wss://stream.binance.com/stream?streams=btcusdt@kline_4h/btcusdt@ticker';
 
   var C = {
     up: '#00A99C', down: '#F61C30',

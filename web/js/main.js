@@ -40,8 +40,18 @@
       posEl.setAttribute('data-pos',
         v.position > 0 ? 'long' : v.position < 0 ? 'short' : 'flat');
     }
+    // The book keeps the last entry price after a position closes. Showing it
+    // next to FLAT would read as a position that is not there.
     if ($('mEntry')) {
-      $('mEntry').textContent = v.entry_fill ? '$' + nf2.format(v.entry_fill) : '—';
+      $('mEntry').textContent = v.position && v.entry_fill
+        ? '$' + nf2.format(v.entry_fill) : '—';
+    }
+    if ($('mPosNote')) {
+      $('mPosNote').textContent = v.position
+        ? 'The position above is open right now; equity is marked to the live '
+          + 'price, not to the last close.'
+        : 'The bot is flat right now, so there is nothing to mark: equity is the '
+          + 'cash its last closed trade left.';
     }
     if ($('mOrder')) {
       var id = (window.TP_LAST_ORDER || '');
