@@ -77,7 +77,12 @@ class FakeResponse:
 
 
 class FakeSession:
-    """Records every request and answers from a queue keyed by path."""
+    """Records every request and answers from a queue keyed by path.
+
+    A ``(method, path)`` key, when present, wins over the bare path. That is how
+    the lookup the executor makes before every submit (``GET /api/v3/order``) is
+    kept apart from the submit itself (``POST`` on the same path).
+    """
 
     def __init__(self, responses: dict[str, list]):
         self.responses = {k: list(v) for k, v in responses.items()}
@@ -88,7 +93,7 @@ class FakeSession:
         params = dict(parse_qsl(parsed.query))
         self.requests.append((method, parsed.path, params))
         self.requests[-1][2]["__headers__"] = headers or {}
-        queue = self.responses.get(parsed.path)
+        queue = self.responses.get((method, parsed.path)) or self.responses.get(parsed.path)
         if not queue:
             raise AssertionError(f"unexpected request to {parsed.path}")
         item = queue.pop(0) if len(queue) > 1 else queue[0]
@@ -110,6 +115,12 @@ def make_executor(responses=None, **kwargs):
     responses.setdefault("/api/v3/exchangeInfo", [EXCHANGE_INFO])
     responses.setdefault("/api/v3/account", [ACCOUNT])
     responses.setdefault("/api/v3/time", [{"serverTime": 1_786_045_000_000}])
+    # The pre-submit lookup of a fresh client order id finds nothing.
+    responses.setdefault(("GET", "/api/v3/order"), [FakeResponse(
+        {"code": -2013, "msg": "Order does not exist."}, status_code=400)])
+    # A BNB commission is priced right after the fill (path key, so a test that
+    # scripts the mark price keeps control of this route).
+    responses.setdefault("/api/v3/ticker/price", [{"symbol": "BNBUSDT", "price": "600.00"}])
     session = FakeSession(responses)
     kwargs.setdefault("sleep", lambda _s: None)
     ex = BinanceDemoExecutor(KEY, SECRET, session=session, **kwargs)
@@ -448,8 +459,18 @@ def test_order_reporting_no_execution_is_an_error_not_a_silent_zero():
     empty = {"symbol": "BTCUSDT", "orderId": 1, "status": "EXPIRED",
              "executedQty": "0", "cummulativeQuoteQty": "0", "fills": []}
     ex, _session = make_executor(responses={"/api/v3/order": [empty]})
+    with pytest.raises(BinanceAPIError, match="EXPIRED with nothing executed"):
+        ex.execute(Order(side=BUY, reference_price=100_000.0, time="t"))
+
+
+def test_a_non_terminal_order_with_nothing_executed_is_still_an_error():
+    """Not a refusal (the order may yet run), but never booked as a zero fill."""
+    pending = {"symbol": "BTCUSDT", "orderId": 2, "status": "NEW",
+               "executedQty": "0", "cummulativeQuoteQty": "0", "fills": []}
+    ex, _session = make_executor(responses={"/api/v3/order": [pending]})
     with pytest.raises(BinanceAPIError, match="no executed quantity"):
         ex.execute(Order(side=BUY, reference_price=100_000.0, time="t"))
+    assert ex.rejections() == []
 
 
 def test_average_price_falls_back_to_the_fills_when_no_aggregate_is_reported():
@@ -577,6 +598,7 @@ def test_commission_split_across_assets_is_reported_without_losing_either():
     ex, _session = make_executor(responses={"/api/v3/order": [order_response(fills)]})
     fill = ex.execute(Order(side=BUY, reference_price=64_000.0, time="t"))
     assert fill.fee_asset == "BNB/BTC"                      # both, sorted
+    assert fill.fees == {"BTC": pytest.approx(0.000001), "BNB": pytest.approx(0.00005)}
     assert ex.position_qty == Decimal("0.002") - Decimal("0.000001")   # only BTC nets off
 
 
@@ -680,3 +702,82 @@ def test_the_reconciliation_records_the_requested_quantity():
     ex, _session = make_executor(responses={"/api/v3/order": [order_response(fills)]})
     ex.execute(Order(side=BUY, reference_price=64_446.0, time="t", qty=0.0031))
     assert ex.reconciliations()[-1].requested_qty == pytest.approx(0.0031)
+
+
+# ------------------------------------------- book v2: quote-sized buys, fee prices --
+def _posts(session):
+    return [q for m, p, q in session.requests if p == "/api/v3/order" and m == "POST"]
+
+
+def test_a_buy_the_book_sized_spends_its_budget_not_the_account():
+    fills = [{"price": "100000.00", "qty": "0.00231", "commission": "0", "commissionAsset": "BNB"}]
+    ex, session = make_executor(responses={("POST", "/api/v3/order"): [order_response(fills)]})
+    ex.execute(Order(side=BUY, reference_price=100_000.0, time="t", quote_budget=231.487))
+
+    sent = _posts(session)[0]
+    assert sent["quoteOrderQty"] == "231.48"          # floored to the cent
+    assert "quantity" not in sent
+    rec = ex.reconciliations()[-1]
+    assert rec.requested_quote == pytest.approx(231.48)
+    assert rec.requested_qty is None
+
+
+@pytest.mark.parametrize("kwargs, free, expected", [
+    ({"max_notional": 200.0}, "5000", "200"),
+    ({}, "150.5", "150.5"),
+])
+def test_the_budget_never_exceeds_the_ceiling_or_the_account(kwargs, free, expected):
+    account = {"balances": [{"asset": "BTC", "free": "0", "locked": "0"},
+                            {"asset": "USDT", "free": free, "locked": "0"}]}
+    fills = [{"price": "100000.00", "qty": "0.0015", "commission": "0", "commissionAsset": "BNB"}]
+    ex, session = make_executor(responses={("POST", "/api/v3/order"): [order_response(fills)],
+                                           "/api/v3/account": [account]}, **kwargs)
+    ex.execute(Order(side=BUY, reference_price=100_000.0, time="t", quote_budget=10_000.0))
+    assert _posts(session)[0]["quoteOrderQty"] == expected
+
+
+def test_a_budget_below_the_venue_minimum_is_refused_before_sending():
+    ex, session = make_executor(responses={("POST", "/api/v3/order"): [order_response([])]})
+    with pytest.raises(OrderTooSmall):
+        ex.execute(Order(side=BUY, reference_price=100_000.0, time="t", quote_budget=3.0))
+    assert _posts(session) == []
+
+
+def test_a_sell_is_still_sized_in_quantity():
+    buy = order_response([{"price": "100000", "qty": "0.002", "commission": "0",
+                           "commissionAsset": "BNB"}])
+    sell = order_response([{"price": "101000", "qty": "0.002", "commission": "0",
+                            "commissionAsset": "BNB"}], order_id=2)
+    ex, session = make_executor(responses={("POST", "/api/v3/order"): [buy, sell]})
+    ex.execute(Order(side=BUY, reference_price=100_000.0, time="t0", quote_budget=200.0))
+    ex.execute(Order(side=SELL, reference_price=101_000.0, time="t1"))
+    sent = _posts(session)[1]
+    assert sent["quantity"] == "0.002" and "quoteOrderQty" not in sent
+
+
+def test_a_bnb_commission_is_priced_when_it_is_paid():
+    fills = [{"price": "100000.00", "qty": "0.002", "commission": "0.00025",
+              "commissionAsset": "BNB"}]
+    ex, session = make_executor(responses={
+        ("POST", "/api/v3/order"): [order_response(fills)],
+        "/api/v3/ticker/price": [{"symbol": "BNBUSDT", "price": "640.00"}]})
+    fill = ex.execute(Order(side=BUY, reference_price=100_000.0, time="t", quote_budget=200.0))
+
+    assert fill.fee_quote_values == {"BNB": pytest.approx(0.16)}
+    assert ex.reconciliations()[-1].fee_quote_values == {"BNB": pytest.approx(0.16)}
+    asked = [q for m, p, q in session.requests if p == "/api/v3/ticker/price"]
+    assert asked[-1]["symbol"] == "BNBUSDT"
+
+
+def test_a_failed_fee_price_never_undoes_the_trade():
+    """The order has executed; a missing rate only leaves the fee unpriced."""
+    fills = [{"price": "100000.00", "qty": "0.002", "commission": "0.00025",
+              "commissionAsset": "BNB"}]
+    ex, _session = make_executor(responses={
+        ("POST", "/api/v3/order"): [order_response(fills)],
+        "/api/v3/ticker/price": [FakeResponse({"code": -1121, "msg": "Invalid symbol."},
+                                              status_code=400)]})
+    fill = ex.execute(Order(side=BUY, reference_price=100_000.0, time="t", quote_budget=200.0))
+
+    assert fill.qty == pytest.approx(0.002)
+    assert fill.fee_quote_values is None

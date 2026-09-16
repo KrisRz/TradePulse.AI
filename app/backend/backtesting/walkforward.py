@@ -30,6 +30,15 @@ from .strategy import Strategy
 
 StrategyFactory = Callable[..., Strategy]
 
+#: Reported for a fold in which no combination closed ``min_trades`` trades in
+#: its train window. Until 2026-09-16 such a fold silently took the first grid
+#: entry (EMA10/50), which is how "the optimiser always prefers 10/50" came to be
+#: reported: on 1d BTC no combination ever reached 10 trades in a train window,
+#: so nothing was ever selected (audit 2026-09-04, HIGH-1). Such a fold now
+#: stays flat out of sample and is counted — an optimiser with nothing to choose
+#: from must not be credited with a choice.
+NO_ADMISSIBLE_COMBO = "no_admissible_combo"
+
 
 def expand_grid(grid: dict[str, list]) -> list[dict]:
     """Cartesian product of a {param: [values]} grid into a list of kwargs."""
@@ -59,9 +68,13 @@ class Fold:
     train_end: pd.Timestamp
     test_start: pd.Timestamp
     test_end: pd.Timestamp
-    best_params: dict
+    best_params: dict | None      # None: no combination was admissible
     train_score: float
     oos: Metrics
+
+    @property
+    def admissible(self) -> bool:
+        return self.best_params is not None
 
 
 @dataclass
@@ -75,8 +88,14 @@ class WalkForwardResult:
     def params_summary(self) -> dict:
         """How often each parameter set was chosen across folds."""
         from collections import Counter
-        c = Counter(tuple(sorted(f.best_params.items())) for f in self.folds)
-        return {dict(k).__repr__(): n for k, n in c.most_common()}
+        c = Counter(tuple(sorted(f.best_params.items())) if f.admissible else None
+                    for f in self.folds)
+        return {(NO_ADMISSIBLE_COMBO if k is None else dict(k).__repr__()): n
+                for k, n in c.most_common()}
+
+    @property
+    def inadmissible_folds(self) -> int:
+        return sum(1 for f in self.folds if not f.admissible)
 
 
 def walk_forward(
@@ -109,7 +128,7 @@ def walk_forward(
         test = df.iloc[test_start_i: test_end_i]
 
         # --- in-sample: pick best params on the train window only ---
-        best_params, best_score = combos[0], -np.inf
+        best_params, best_score = None, -np.inf
         for params in combos:
             strat = factory(**params)
             res = run_backtest(train, strat.target_positions(train), config,
@@ -119,8 +138,11 @@ def walk_forward(
                 best_score, best_params = score, params
 
         # --- out-of-sample: apply best params, signals warmed via ext lookback ---
-        strat = factory(**best_params)
-        target_test = strat.target_positions(ext).reindex(test.index).fillna(0.0)
+        if best_params is None:
+            target_test = pd.Series(0.0, index=test.index)
+        else:
+            strat = factory(**best_params)
+            target_test = strat.target_positions(ext).reindex(test.index).fillna(0.0)
         oos_cfg = BacktestConfig(**{**config.__dict__, "initial_capital": init_cap})
         oos_res = run_backtest(test, target_test, oos_cfg, strategy_name, timeframe)
         oos_metrics = compute_metrics(oos_res, test)
@@ -244,6 +266,9 @@ def main(argv: list[str] | None = None) -> None:
         )
         results.append(wf)
         _print_row(name, wf.combined)
+        if wf.inadmissible_folds:
+            print(f"{'':<12}^ {wf.inadmissible_folds}/{len(wf.folds)} folds had no "
+                  f"admissible combination — flat out of sample in those folds")
 
     # Buy & hold over the exact OOS span (first fold's test start → last bar).
     if results and results[0].equity_curve is not None and len(results[0].equity_curve):

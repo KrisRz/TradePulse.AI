@@ -73,6 +73,10 @@ _ERR_ORDER_DOES_NOT_EXIST = -2013
 #: HTTP statuses that mean "slow down" (429) or "you have been IP-banned" (418).
 _RATE_LIMITED = (429, 418)
 
+#: Terminal order states that, with nothing executed, mean the venue did not
+#: carry the order out. ``EXPIRED_IN_MATCH`` is self-trade prevention.
+_NOT_EXECUTED = frozenset({"EXPIRED", "EXPIRED_IN_MATCH", "REJECTED", "CANCELED"})
+
 #: A client order id must fit ``^[\.A-Za-z0-9_-]{1,36}$``; the prefix is the part
 #: we choose per channel, so it is kept plainly alphanumeric and short.
 _CLIENT_PREFIX_RE = re.compile(r"^[A-Za-z0-9]{1,12}$")
@@ -106,6 +110,20 @@ class OrderTooSmall(ValueError):
     Raised *before* anything is sent. The exchange would reject it as ``-1013``
     anyway; failing locally keeps the reason legible and costs no rate limit.
     """
+
+
+class OrderNotExecuted(BinanceAPIError):
+    """The venue accepted a MARKET order and executed none of it.
+
+    Binance answers such an order with HTTP 200 and a terminal status —
+    typically ``EXPIRED``, with the cause in ``expiryReason`` (its price range
+    execution rule, or no liquidity). Nothing moved, so there is no fill to book;
+    for Gate C it is a refusal like any other.
+    """
+
+    def __init__(self, status: str, msg: str, endpoint: str = "/api/v3/order") -> None:
+        self.status = status
+        super().__init__(-1, msg, None, endpoint)
 
 
 class OrderSubmissionUncertain(RuntimeError):
@@ -176,6 +194,14 @@ class Reconciliation:
     #: The id WE gave the order. Deterministic per (symbol, side, decision), so
     #: it is also how a later run recognises a fill the book already contains.
     client_order_id: Optional[str] = None
+    #: Quote currency a BUY sized from the book was allowed to spend
+    #: (``quoteOrderQty``). Gate C's partial-fill check compares against this
+    #: when no base quantity was requested.
+    requested_quote: Optional[float] = None
+    #: Commission per billed asset, and the quote value of the ones billed in a
+    #: third asset, priced at fill time. Replaying the book needs both.
+    fees: Optional[dict] = None
+    fee_quote_values: Optional[dict] = None
 
     @property
     def price_error(self) -> float:
@@ -546,12 +572,16 @@ class BinanceDemoExecutor:
     def client_order_id(self, side: int, key: str) -> str:
         """The id this order will carry however many times it is sent.
 
-        Binance enforces uniqueness of ``newClientOrderId`` per symbol, so an id
-        derived from *what the order is* rather than *when it was sent* makes the
-        exchange itself the duplicate guard: a resubmit — ours, the Lambda's or
-        the scheduler's — is refused instead of opening a second position. The
-        key is the decision (normally the bar), so one bar can produce at most
-        one BUY and one SELL, forever.
+        Derived from *what the order is* rather than *when it was sent*, so a
+        repeat of the same decision — ours, the Lambda's or the scheduler's —
+        can ask the venue about the order it may already have placed. The key is
+        the decision (normally the bar), so one bar names at most one BUY and one
+        SELL, forever.
+
+        The venue does NOT refuse the repeat on its own. Binance accepts a reused
+        ``newClientOrderId`` once the earlier order has filled (Spot REST API,
+        ``POST /api/v3/order``), and a MARKET order fills at once. The id is only
+        a guard because :meth:`_submit` looks it up before sending anything.
 
         Hashed rather than spelled out because a bar timestamp contains spaces
         and colons, which the venue's id alphabet does not allow.
@@ -648,43 +678,147 @@ class BinanceDemoExecutor:
         return float(weighted / total_qty), float(total_qty), len(fills)
 
     @staticmethod
-    def _commission(response: dict, base_asset: str) -> tuple[float, str, Decimal]:
-        """Total commission, plus how much of it was taken out of the base asset.
+    def _commission(response: dict, base_asset: str) -> tuple[dict, Decimal]:
+        """Commission per billed asset, plus how much was taken out of the base asset.
 
         Binance can charge in the asset received, or in BNB when the account holds
         it. That distinction is not cosmetic: a BUY charged in BTC leaves us
         holding *less BTC than we bought*, and selling the un-netted quantity later
-        fails on insufficient balance.
+        fails on insufficient balance. Amounts in different assets are never
+        added together.
         """
-        fills = response.get("fills") or []
-        if not fills:
-            return 0.0, "", Decimal("0")
-        total = Decimal("0")
-        base_taken = Decimal("0")
-        assets = set()
-        for f in fills:
-            amount = Decimal(f.get("commission", "0"))
+        per_asset: dict[str, Decimal] = {}
+        for f in response.get("fills") or []:
             asset = f.get("commissionAsset", "")
-            total += amount
-            assets.add(asset)
-            if asset == base_asset:
-                base_taken += amount
-        return float(total), "/".join(sorted(a for a in assets if a)), base_taken
+            per_asset[asset] = per_asset.get(asset, Decimal("0")) + Decimal(f.get("commission", "0"))
+        base_taken = per_asset.get(base_asset, Decimal("0"))
+        return {k: float(v) for k, v in per_asset.items() if v}, base_taken
+
+    def _price_third_asset_fees(self, fees: dict, rules: SymbolRules) -> Optional[dict]:
+        """Quote value of commission billed in neither leg of the pair, at fill time.
+
+        Asked straight after the fill, so the rate is the one the fee was really
+        worth. A failure here must never undo a trade that already happened: the
+        fee is then left unpriced and the book records it beside equity instead.
+        """
+        values = {}
+        for asset, amount in fees.items():
+            if asset in (rules.base_asset, rules.quote_asset) or not asset:
+                continue
+            try:
+                payload = self._request("GET", "/api/v3/ticker/price",
+                                        {"symbol": f"{asset}{rules.quote_asset}"},
+                                        signed=False)
+                values[asset] = amount * float(payload["price"])
+            except (BinanceAPIError, requests.RequestException, KeyError, ValueError) as exc:
+                logger.warning("could not price the %s commission (%s) — it stays "
+                               "outside the book", asset, exc)
+        return values or None
+
+    def plan_quote(self, budget: float) -> Decimal:
+        """Quote to spend on a BUY the book sized, within every limit we hold.
+
+        The book's cash is the budget; the account balance and the configured
+        ceiling can only lower it. Floored to the cent so the venue never rounds
+        it up past what the book has.
+        """
+        rules = self.rules()
+        quote = Decimal(str(budget))
+        quote = min(quote, self.free_balance(rules.quote_asset) * Decimal(str(self.quote_fraction)))
+        if self.max_notional is not None:
+            quote = min(quote, Decimal(str(self.max_notional)))
+        quote = quote.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        if quote <= 0 or (rules.min_notional_applies_to_market and quote < rules.min_notional):
+            raise OrderTooSmall(
+                f"quote {quote} is below the venue minimum {rules.min_notional} "
+                f"{rules.quote_asset} (book budget {budget})"
+            )
+        return quote
 
     def _submit(self, params: dict[str, Any], client_order_id: str,
                 order: Order, qty: Decimal) -> dict[str, Any]:
-        """Send the order once, and let the venue settle anything ambiguous.
+        """Send the order unless the venue already has it; settle anything ambiguous.
+
+        The venue is asked FIRST, by ``origClientOrderId``. That question is the
+        duplicate guard, and nothing else is: Binance refuses a reused id only
+        while the earlier order is still open, and a MARKET order is filled the
+        moment it is accepted. A run repeating a decision whose order already
+        executed — a scheduler retry, a save that never landed — would otherwise
+        be handed a second position by the venue without complaint. If the
+        question cannot be answered, nothing is sent.
+
+        An order found this way is returned as it stands. If it executed nothing,
+        the run that submitted it has already counted the refusal, so it is
+        raised here without being counted again.
+        """
+        existing = self.lookup_order(client_order_id)
+        if existing is not None:
+            logger.warning("venue already holds %s (%s) — using its own copy instead "
+                           "of sending the order again",
+                           client_order_id, existing.get("status"))
+            reason = self._not_executed(existing)
+            if reason:
+                raise OrderNotExecuted(str(existing.get("status", "")), reason)
+            return existing
+
+        response = self._send_new_order(params, client_order_id, order, qty)
+        reason = self._not_executed(response)
+        if reason:
+            self._record_rejection(order, qty, client_order_id, code=None,
+                                   message=reason, http_status=None,
+                                   status=str(response.get("status", "")))
+            raise OrderNotExecuted(str(response.get("status", "")), reason)
+        return response
+
+    @staticmethod
+    def _not_executed(response: dict[str, Any]) -> Optional[str]:
+        """Why an accepted order moved nothing, or ``None`` if it moved something.
+
+        A partial execution is not this case: it is a fill, and Gate C's C4
+        counts it. Only a terminal status with zero executed quantity is.
+        """
+        status = str(response.get("status", ""))
+        if status not in _NOT_EXECUTED:
+            return None
+        if Decimal(str(response.get("executedQty", "0") or "0")) > 0:
+            return None
+        cause = response.get("expiryReason")
+        return (f"MARKET order {response.get('orderId')} came back {status} "
+                f"with nothing executed" + (f" ({cause})" if cause else ""))
+
+    def _record_rejection(self, order: Order, qty: Decimal, client_order_id: str, *,
+                          code: Optional[int], message: str,
+                          http_status: Optional[int], status: str = "") -> None:
+        # Gate C criterion C3 counts venue refusals against submissions. Only an
+        # order this run submitted belongs here — errors from public GETs (rules,
+        # mark price) never do.
+        record = {
+            "time": order.time,
+            "side": order.side,
+            "requested_qty": float(qty),
+            "reference_price": order.reference_price,
+            "client_order_id": client_order_id,
+            "code": code,
+            "message": message,
+            "http_status": http_status,
+        }
+        if status:
+            record["status"] = status
+        self._rejections.append(record)
+
+    def _send_new_order(self, params: dict[str, Any], client_order_id: str,
+                        order: Order, qty: Decimal) -> dict[str, Any]:
+        """One POST, and the venue's word on anything it did not answer clearly.
 
         Three outcomes are possible and only one of them is "rejected":
 
-        * the submit answers — that is the fill;
+        * the submit answers — that is the order;
         * the submit fails ambiguously (timeout, 5xx) — the order may be live, so
           the venue is asked by ``origClientOrderId`` before anything else, and
           only if it truly never arrived is it sent again, with the same id;
-        * the venue refuses it — if it refuses because it already holds an order
-          with this id, then this run is a repeat of one that already traded and
-          that existing fill is the honest answer; anything else is a real
-          rejection and propagates.
+        * the venue refuses it — if it refuses because an order with this id
+          appeared since the lookup (it would have to still be open), that order
+          is the honest answer; anything else is a real rejection and propagates.
 
         The duplicate case is not detected by parsing the error message. The
         venue is asked instead: "duplicate" and "insufficient balance" arrive as
@@ -718,19 +852,8 @@ class BinanceDemoExecutor:
                 logger.warning("venue already holds %s (%s) — using its own copy "
                                "instead of trading again", client_order_id, exc)
                 return existing
-            # Gate C criterion C3 counts venue rejections against submissions.
-            # Only a failed order POST is a rejection — errors from public GETs
-            # (rules, mark price) never reach this handler.
-            self._rejections.append({
-                "time": order.time,
-                "side": order.side,
-                "requested_qty": float(qty),
-                "reference_price": order.reference_price,
-                "client_order_id": client_order_id,
-                "code": exc.code,
-                "message": exc.msg,
-                "http_status": exc.http_status,
-            })
+            self._record_rejection(order, qty, client_order_id, code=exc.code,
+                                   message=exc.msg, http_status=exc.http_status)
             raise
 
     def _settle_uncertain_submit(self, params: dict[str, Any], client_order_id: str,
@@ -770,28 +893,42 @@ class BinanceDemoExecutor:
         if not rules.tradable:
             raise SymbolNotTradable(f"{self.symbol} status is {rules.status}, not TRADING")
 
-        qty = Decimal(str(order.qty)) if order.qty is not None \
-            else self.plan_quantity(order.side, order.reference_price)
-        qty = self._floor_to_step(qty, rules.step_size)
-
         client_order_id = self.client_order_id(
             order.side, order.idempotency_key or order.time)
         params = {
             "symbol": self.symbol,
             "side": "BUY" if order.side == BUY else "SELL",
             "type": "MARKET",
-            "quantity": format(qty.normalize(), "f"),
             "newClientOrderId": client_order_id,
             "newOrderRespType": "FULL",   # we need the individual fills
         }
+        quote_budget = None
+        if order.side == BUY and order.qty is None and order.quote_budget is not None:
+            # Spend what the book has, and let the venue work out the quantity:
+            # a quantity computed at the decision price would overspend the
+            # book whenever the price moved up before the order landed.
+            quote_budget = self.plan_quote(order.quote_budget)
+            params["quoteOrderQty"] = format(quote_budget.normalize(), "f")
+            qty = self._floor_to_step(quote_budget / Decimal(str(order.reference_price)),
+                                      rules.step_size)
+        else:
+            qty = Decimal(str(order.qty)) if order.qty is not None \
+                else self.plan_quantity(order.side, order.reference_price)
+            qty = self._floor_to_step(qty, rules.step_size)
+            params["quantity"] = format(qty.normalize(), "f")
         mark_at_order = self.mark_price() if self.measure_drift else None
 
-        logger.info("submitting %s %s %s as %s", params["side"], params["quantity"],
+        logger.info("submitting %s %s %s as %s", params["side"],
+                    params.get("quantity") or f"{params['quoteOrderQty']} {rules.quote_asset} of",
                     self.symbol, client_order_id)
         response = self._submit(params, client_order_id, order, qty)
 
         avg_price, executed_qty, fill_count = self._average_fill_price(response)
-        fee_paid, fee_asset, base_fee = self._commission(response, rules.base_asset)
+        fees, base_fee = self._commission(response, rules.base_asset)
+        fee_paid = sum(fees.values()) if len(fees) == 1 else (
+            fees.get(rules.base_asset) or next(iter(fees.values()), 0.0))
+        fee_asset = "/".join(sorted(fees))
+        fee_quote_values = self._price_third_asset_fees(fees, rules) if fees else None
         status = response.get("status", "")
 
         if status not in ("FILLED", "PARTIALLY_FILLED"):
@@ -823,8 +960,11 @@ class BinanceDemoExecutor:
             fill_count=fill_count,
             status=status,
             mark_at_order=mark_at_order,
-            requested_qty=float(qty),
+            requested_qty=None if quote_budget is not None else float(qty),
             client_order_id=str(response.get("clientOrderId") or client_order_id),
+            requested_quote=float(quote_budget) if quote_budget is not None else None,
+            fees=fees or None,
+            fee_quote_values=fee_quote_values,
         )
         self._reconciliations.append(record)
         logger.info("filled %s @ %.2f (assumed %.2f, slippage %.5f%% vs %.5f%% assumed)",
@@ -841,6 +981,8 @@ class BinanceDemoExecutor:
             order_id=str(response.get("orderId", "")) or None,
             raw=response,
             base_asset=rules.base_asset,
+            fees=fees or None,
+            fee_quote_values=fee_quote_values,
         )
 
     # ----------------------------------------------------------------- reporting --

@@ -57,6 +57,11 @@ class Order:
     # caller passes something else only where a trade is not bar-driven, such as
     # the kill switch flattening a position.
     idempotency_key: Optional[str] = None
+    # The most quote currency a BUY may spend, from the book's own cash. A venue
+    # sizes the order from it instead of from the account balance, so a book that
+    # compounds is mirrored by orders that compound (audit 2026-09-04, HIGH-4).
+    # Simulation ignores it.
+    quote_budget: Optional[float] = None
 
     def __post_init__(self) -> None:
         if self.side not in (BUY, SELL):
@@ -65,6 +70,8 @@ class Order:
             raise ValueError(f"reference price must be positive, got {self.reference_price}")
         if self.qty is not None and self.qty <= 0:
             raise ValueError(f"quantity must be positive when given, got {self.qty}")
+        if self.quote_budget is not None and self.quote_budget <= 0:
+            raise ValueError(f"quote budget must be positive when given, got {self.quote_budget}")
 
 
 @dataclass(frozen=True)
@@ -83,6 +90,14 @@ class Fill:
     # commission billed in the asset just bought (which reduces the position)
     # from one billed in something else (which does not).
     base_asset: Optional[str] = None
+    # Commission per asset when the venue billed more than one, e.g.
+    # ``{"BNB": 0.0002, "BTC": 0.000001}``. ``fee_paid``/``fee_asset`` stay the
+    # single-asset summary older callers read.
+    fees: Optional[dict[str, float]] = None
+    # Quote-currency value of commission billed in a THIRD asset (BNB), priced by
+    # the venue at fill time, per asset. With it the book can charge the fee to
+    # equity; without it the fee can only be recorded beside the book.
+    fee_quote_values: Optional[dict[str, float]] = None
 
 
 class Executor(Protocol):

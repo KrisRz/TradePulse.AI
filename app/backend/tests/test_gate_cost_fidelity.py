@@ -289,3 +289,18 @@ def test_fill_and_rejection_records_survive_a_local_round_trip(tmp_path):
     assert len(fills) == 1 and len(rejections) == 1
     assert fills[0]["order_id"] == fill["order_id"]
     assert rejections[0]["code"] == -2010
+
+
+# ------------------------------------------ C4 for buys sized in quote currency --
+def test_c4_accepts_a_quote_sized_buy_that_spent_its_budget():
+    fill = make_fill(requested_qty=None, requested_quote=199.8, qty=0.0031,
+                     actual_price=64_452.4)
+    assert check_partial_fills(make_inputs(fills=[fill]))["status"] == "PASS"
+
+
+def test_c4_catches_a_quote_sized_buy_that_spent_too_little():
+    fill = make_fill(requested_qty=None, requested_quote=199.8, qty=0.0020,
+                     actual_price=64_452.4)
+    res = check_partial_fills(make_inputs(fills=[fill]))
+    assert res["status"] == "FAIL"
+    assert "asked to spend" in res["partials"][0]

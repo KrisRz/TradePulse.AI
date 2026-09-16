@@ -146,3 +146,50 @@ starym kodem należy wtedy odczytać ręcznie przez pryzmat B5/B6/B7 i zapisać 
 - Bailey & López de Prado (2012), *The Sharpe Ratio Efficient Frontier* — PSR, MinTRL
 - `gate.py:73-82` (pre-rejestrowane stałe), `:206` (`window_days`), `:236-251`
   (PSR/DSR dziś doradcze), `:264-286` (precedencja werdyktów)
+
+---
+
+## Aneks 2026-09-16 — moc bramki i decyzja usera (progi BEZ ZMIAN)
+
+Zmierzone przed jakimkolwiek rozstrzygającym wynikiem: dzień 62 okna, bot 1d bez
+zamkniętej transakcji, najwcześniejszy możliwy PASS (B7) = 2027-07-16. Reprodukcja:
+`PYTHONPATH=. .venv/bin/python scripts/research/gate_b_power.py`. Konfiguracja
+żywa (silnik produkcyjny, EMA20/100 long-only, stop F7 10%), dane BTC 1d 2018 →
+2026-07-15. Reguła aktywności i profit factor nie są modelowane, więc liczby to
+**górna granica** częstości PASS.
+
+**Kroczące okna prawdziwej historii** (start co 7 dni). Kolumny: sam zysk + DD ≤ próg
+/ + B5 / + B5 + B6:
+
+| okno | mediana DD strategii | próg 25% (obowiązuje) | próg 35% | próg 50% |
+|---|---|---|---|---|
+| 365 dni | −26% | 0,29 / 0,06 / **0,04** | 0,55 / 0,19 / 0,08 | 0,74 / 0,26 / 0,11 |
+| 730 dni | −41% | 0,02 / 0,00 / **0,00** | 0,40 / 0,22 / 0,05 | 0,92 / 0,51 / 0,23 |
+
+**Bootstrap blokowy** (20 dni, 3000 losowań, próg 25%). Kolumny: baza / + B5 / + B5 + B6
+/ samo B6:
+
+| świat | 365 dni | 730 dni |
+|---|---|---|
+| strategia tak dobra jak backtest | 0,36 / 0,19 / **0,15** / 0,62 | 0,12 / 0,11 / 0,10 / 0,71 |
+| nie lepsza od trzymania BTC | 0,27 / 0,11 / 0,08 / 0,46 | 0,06 / 0,05 / 0,04 / 0,47 |
+| zero umiejętności | 0,10 / 0,04 / 0,02 / 0,19 | 0,01 / 0,01 / 0,00 / 0,13 |
+
+**Co z tego wynika:**
+1. Główną blokadą nie jest B5/B6, tylko pierwotne kryterium **DD ≤ 25%** (pre-rejestracja
+   z 2026-07-25). Strategia typowo spada o 26% w roku i o 41% w dwóch latach
+   (cała historia: −47%). Przez 730 dni zaostrzona bramka nie przepuściłaby jej
+   w żadnym z 342 okien.
+2. B5 odróżnia strategię z przewagą od pozbawionej jej. B6 jest bliskie rzutu monetą
+   (0,62 wobec 0,46). Żadna konstrukcja tej bramki nie rozstrzygnie w 1–2 lata,
+   czy bot jest lepszy od trzymania BTC. To arytmetyka krótkiego okna.
+3. Ten sam próg 25% siedzi w kill-switchu kanału 4h (T1). Jego backtest miał DD −56%,
+   więc zwykły spadek najpewniej zatrzyma kanał demo. Taki halt to sygnał do
+   świadomego wznowienia, a nie błąd.
+
+**Decyzja usera (2026-09-16):** progi **zostają bez zmian**, łącznie z 25% w bramce
+i w kill-switchu. Bot zostaje na demo. **Celem pracy nad strategią staje się
+DD ≤ 25% w większości okien** przy zachowaniu przewagi. Tylko wtedy ta bramka staje
+się przejezdna uczciwie. Ewentualna zmiana progu wymagałaby nowej, osobnej
+pre-rejestracji przed 2027-07-16 i jest luzowaniem, więc wyłącznie świadomą
+decyzją usera.

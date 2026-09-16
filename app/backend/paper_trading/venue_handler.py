@@ -134,10 +134,9 @@ def attach_venue(bot, executor: BinanceDemoExecutor) -> dict:
         logger.error(record["error"])
         raise BookOutOfSync(record["error"])
 
-    # Direction 2 — quote currency. Inert while sizing comes from the account
-    # (the book's cash is presently negative for exactly that reason, audit
-    # HIGH-4), and load-bearing the moment a BUY is sized from ``book.cash``:
-    # an order the account cannot fund would be rejected mid-decision.
+    # Direction 2 — quote currency. Load-bearing since 2026-09-16, when BUYs
+    # started spending ``book.cash`` (audit HIGH-4): an order the account cannot
+    # fund would be rejected mid-decision, so refuse before deciding.
     if book_cash > venue_free_quote + float(rules.min_notional):
         record["error"] = (
             f"book thinks it holds {book_cash} {rules.quote_asset} but the account "
@@ -332,9 +331,8 @@ def handler(event, context):
     )
     executor.sync_time()
 
-    # The book's capital tracks the order ceiling so a "full equity" position in
-    # the book maps onto an order of roughly that size at the venue. Let them
-    # drift apart and the book would report a strategy sitting 99% in cash.
+    # The capital only seeds a brand-new book. Orders are sized from the book's
+    # own cash; ``max_notional`` above is a safety ceiling, not the order size.
     bot = build_bot(symbol=symbol, timeframe=timeframe, capital=capital)
     reconciliation = attach_venue(bot, executor)
 

@@ -42,7 +42,7 @@ flowchart LR
     L -->|orders| V[Binance demo venue]
     V -->|fills| L
     L --> D[(DynamoDB<br/>single table<br/>append-only fills)]
-    L --> CW[CloudWatch<br/>9 alarms → SNS]
+    L --> CW[CloudWatch<br/>10 alarms → SNS]
     D --> ST[Lambda status]
     ST --> CF[CloudFront] --> W[tradepulseai.co.uk]
     L -. same signal + cost code .- BT[Backtest engine]
@@ -74,10 +74,13 @@ Walk-forward, out-of-sample, BTCUSDT, realistic costs:
 | Naive long/short (EMA, RSI, regime) | ❌ loses to buy & hold in every regime |
 | Short timeframes (15m) | ❌ destroyed by fees |
 | Mean reversion, 1h | ❌ Sharpe −1.3 to −3.8, −100% return |
-| **Long-only EMA trend-following (1d)** | ✅ **OOS Sharpe 1.00–1.14 vs buy & hold 0.81–1.00**, in every fold layout |
+| **Long-only EMA trend-following (1d)** | ✅ **OOS Sharpe 0.96–1.16 vs buy & hold 0.81–1.00**, in every fold layout (the live parameters in one continuous run; stitching folds read 1.00–1.14) |
 
 It improves *risk-adjusted* return and cuts drawdown. It does **not** beat buy &
-hold on absolute return. Cost robustness is better than we first thought: at
+hold on absolute return. The parameters were never chosen by the walk-forward
+optimiser: on daily bars no combination trades often enough to be admissible in
+a training window, so the case for 20/100 rests on it sitting mid-plateau of 42
+fixed configurations, not on a selection (`docs/M4_EDGE_VALIDATION.md`). Cost robustness is better than we first thought: at
 0.5% per side Sharpe is still 0.96, because the strategy trades roughly twice a
 year — the old note that "the edge dies above 0.3% fees" came from a
 short-timeframe variant and was retired on 2026-07-28
@@ -103,17 +106,18 @@ Supporting machinery, all in `app/backend/paper_trading/`:
 - `position_risk.py` — per-trade stop and daily loss limit, thresholds
   pre-registered from measurement rather than chosen to look good
 - **idempotent order path** — the client order id is derived from the decision,
-  not the moment of sending, so the exchange itself refuses a second copy; an
-  unanswered submit is resolved by *asking* the venue rather than resending; and
-  a run that finds one of its own fills missing from the book stops instead of
-  deciding on a fiction
+  not the moment of sending, and the venue is asked for that id *before* anything
+  is sent (Binance accepts a reused id once the earlier order has filled, so the
+  exchange is not the guard); an unanswered submit is resolved by asking rather
+  than resending; and a run that finds one of its own fills missing from the
+  book stops instead of deciding on a fiction
 - `deadman.py` — a heartbeat to a service outside AWS, because every other alarm
   here lives in the account it is watching and cannot report that account's own
   disappearance
 
 ## What was tested and rejected
 
-Nine upgrades, each with real literature behind it, each pre-registered and
+Ten upgrades, each with real literature behind it, each pre-registered and
 each rejected out-of-sample. Keeping the list is cheaper than relearning it.
 
 | Candidate | Why it died |
@@ -127,6 +131,7 @@ each rejected out-of-sample. Keeping the list is cheaper than relearning it.
 | Maker-only orders | Worth nothing at this size and cadence |
 | Meta-labeler | Zero discrimination (ρ = −0.01); 0 of 128 events actually attenuated — the "filter" was a flat 1.3× leverage in disguise |
 | Trailing stop | The first candidate whose *premise* held — winners do peak ~40 pp above where they exit — and it fell anyway: the two horizons share one usable band value where three were required, and the apparent gain rests on a single trade |
+| Hysteresis band (4h) | Short-lived trades really are 40% of the losses, yet no band width beat the plain cross in more than 1 of 4 layouts at the 0.1% fee: fewer whipsaws, paid for with later entries and exits |
 
 Write-ups are in `docs/`. The strategy running today is the one from day one —
 not stubbornness, just the only candidate that has not yet failed a test.

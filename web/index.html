@@ -73,7 +73,7 @@
         A trend-following system that decides on its own schedule, sends its own
         orders to an exchange, and writes down what came back. Every proposed
         improvement gets pre-registered, measured out-of-sample, and usually
-        thrown away. Nine have been tested. Nine were rejected. It still runs
+        thrown away. Ten have been tested. Ten were rejected. It still runs
         the boring strategy — that is the one the evidence supports.
       </p>
 
@@ -118,8 +118,8 @@
 
       <p class="panel__note">
         Orders go to the Binance <strong>demo</strong> venue — real API, real
-        order ids, no real money. The position above is open right now; equity
-        is marked to the live price, not to the last close.
+        order ids, no real money. <span id="mPosNote">Equity is marked to the
+        live price, not to the last close.</span>
       </p>
     </aside>
   </div>
@@ -240,8 +240,9 @@
     <p class="eyebrow">03 — WHAT IT RUNS ON</p>
     <h2 class="sec-h sec-h--big">No servers, no babysitting</h2>
     <p class="sec-sub sec-sub--wide">
-      The whole system is four Lambda functions on a schedule, one DynamoDB
-      table, and enough alarms that it tells me before I notice. It is defined
+      The whole system is three Lambda functions on a schedule, two read-only
+      endpoints, one DynamoDB table, and enough alarms that it tells me before
+      I notice. It is defined
       in Terraform end to end, so it can be destroyed and rebuilt from nothing.
     </p>
   </header>
@@ -317,7 +318,7 @@
         </g>
         <g class="node" transform="translate(640,170)">
           <rect width="180" height="48" rx="3"/>
-          <text x="14" y="20">CloudWatch</text><text x="14" y="36" class="t2">9 alarms → SNS → me</text>
+          <text x="14" y="20">CloudWatch</text><text x="14" y="36" class="t2">10 alarms → SNS → me</text>
         </g>
 
         <g class="node" transform="translate(320,300)">
@@ -339,15 +340,15 @@
       <p>Venue bot, paper bot, shadow bot, and two read-only status endpoints. Nothing else is running.</p>
     </li>
     <li class="tile reveal">
-      <span class="tile__n" data-count="82">0</span>
+      <span class="tile__n" data-count="88">0</span>
       <span class="tile__l">Terraform resources</span>
       <p>Every queue, alarm, role and DNS record is code, across two independent
       roots. Remote state in S3.</p>
     </li>
     <li class="tile reveal">
-      <span class="tile__n" data-count="9">0</span>
+      <span class="tile__n" data-count="10">0</span>
       <span class="tile__l">CloudWatch alarms</span>
-      <p>Errors, silence and dead letters each page me by email. Silence is the one that matters.</p>
+      <p>Errors, silence, dead letters and a kill-switch halt each page me by email. Silence is the one that matters.</p>
     </li>
     <li class="tile reveal">
       <span class="tile__n" data-count="1">0</span>
@@ -423,7 +424,7 @@
 <section class="sec" id="evidence">
   <header class="sec-head reveal">
     <p class="eyebrow">05 — THE PART NOBODY PUTS ON A PORTFOLIO</p>
-    <h2 class="sec-h sec-h--big">Nine upgrades tested.<br>Nine rejected.</h2>
+    <h2 class="sec-h sec-h--big">Ten upgrades tested.<br>Ten rejected.</h2>
     <p class="sec-sub sec-sub--wide">
       Each of these was a good idea with real literature behind it. Each was
       pre-registered — the pass criteria written down before the result was
@@ -479,10 +480,15 @@
           <td>A model on top of the strategy, sizing each trade by predicted quality.</td>
           <td>Zero discrimination: correlation with outcomes −0.01. Not one of 128 events was actually attenuated — the "filter" was a flat 1.3× leverage in disguise, and the five biggest winners all landed at the bottom of its ranking.</td>
         </tr>
-        <tr class="ev__last">
+        <tr>
           <th scope="row">Trailing stop</th>
           <td>Give back less: exit on a retracement from the peak instead of waiting for the signal.</td>
           <td>The first candidate whose <em>premise</em> survived — winners really do peak about 40 points above where they exit — and it still died. The two horizons shared one usable band value where three were required, and the apparent improvement rested on a single trade.</td>
+        </tr>
+        <tr class="ev__last">
+          <th scope="row">Hysteresis band</th>
+          <td>Make the 4-hour signal wait for a clear margin before it flips, to stop paying for whipsaws.</td>
+          <td>The premise held again — short-lived trades carry 40% of the losses — and again it died. At the fee the account actually pays, no band width beat the plain crossover in more than one layout of four: every whipsaw avoided was paid back by a later entry or exit.</td>
         </tr>
       </tbody>
     </table>

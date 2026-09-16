@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-09-04**
+> Ostatnia aktualizacja: **2026-09-16**
 
 ---
 
@@ -22,6 +22,289 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
+---
+
+## 🧭 PODSUMOWANIE SESJI 2026-09-16 — czytaj najpierw
+
+### Tryb pracy: zostajemy na DEMO Binance (decyzja usera 2026-09-16)
+
+Bot handluje wyłącznie na **Binance Demo Trading** (`demo-api.binance.com`).
+Pracujemy nad botem i strategią. Realnych pieniędzy (M6) na razie nie planujemy.
+
+**Ograniczenia demo — o czym pamiętać przy czytaniu wyników:**
+- **Brak realnego ryzyka i realnego rynku zleceń.** Ceny demo odpowiadają rynkowi
+  (sprawdzone 25.08), ale głębokość arkusza i poślizg na demo nie muszą odpowiadać
+  realnej giełdzie. Mediana poślizgu z bramki C (0,00%) to optymistyczny odczyt
+  jakości wykonania, nie gwarancja na live.
+- **Prowizja na demo zawsze idzie w BNB** i nie da się tego wyłączyć. Od 16.09 księga
+  wycenia ją w chwili filla i odlicza od wyniku. Starsze 0,0014 BNB (~$1) zostaje
+  w `fees_external`.
+- **Jedno konto demo, dwa kanały:** venue 4h (`tpv4h-`) i heartbeat (`tpsh-`). Konto
+  ma zasilenie startowe (0,05 BTC, ~5000 USDT, ~2 BNB), które nie jest botowe. Bot
+  nigdy nie sprzedaje monet, których sam nie kupił. **Prefiksów nie zmieniać.**
+- **Klucze demo działają tylko na `demo-api.binance.com`.** `testnet.binance.vision`
+  ich nie przyjmuje, a `demo.binance.com/api` przekierowuje na PRODUKCJĘ.
+- **Na demo nie przetestujemy:**
+  - odsetek od gotówki (Simple Earn),
+  - kluczy Ed25519 i reguł IP konta live,
+  - ograniczeń regulacyjnych konta live.
+- **Tempo dowodów:** kanał 4h robi ~2 fille/mies. (bramka C 6/20 → ~2027-05). Bot 1d
+  (M5) robi ~1,7 transakcji rocznie.
+- **Kill-switch T1 = 25% DD** (decyzja: bez zmian). Backtest 4h miał −56%, więc
+  zwykły spadek może zatrzymać kanał demo. Wznawiamy go świadomie wg `docs/RUNBOOK.md`.
+
+**Konto LIVE (poza demo, stan 16.09, do wyjaśnienia przez usera przed M6):**
+- brak par USDT (BTC/USDT przekierowuje na BTC/USDC);
+- baner MiCA: brak nowych zleceń spot od 2026-07-01;
+- Simple Earn tylko USDC;
+- Default Security Controls odbierają handel także kluczom Ed25519 bez IP;
+- sub-konta dostępne (nieaktywowane);
+- BNB fee OFF, 0 kluczy API.
+
+Zapasowa giełda: **Kraken**. Licencja MiCA i rejestracja FCA, IP w kluczu opcjonalne,
+ale prowizja 0,40/0,80%: bot 1d przeżywa, kanał 4h nie.
+
+### Decyzje podjęte 2026-09-16
+
+| # | Decyzja | Kto | Gdzie zapisane |
+|---|---|---|---|
+| 1 | Zostajemy na **demo Binance**, dopracowujemy bota i strategię; M6 i wybór giełdy odłożone | user | ten blok |
+| 2 | **Bramka B: progi bez zmian** (DD ≤ 25%, B5/B6/B7, kill-switch 25%). **Cel pracy nad strategią = DD ≤ 25% w większości okien** przy zachowaniu przewagi | user | aneks w `docs/GATE_B_PREREGISTRATION_2026-09-05.md` |
+| 3 | Idempotencja po naszej stronie: pytanie o id **przed** wysłaniem zlecenia (giełda przyjmuje ponowione id po wypełnieniu) | zrobione, wdrożone | `docs/EXECUTION_SAFETY_2026-09-05.md` (sprostowanie) |
+| 4 | **Księga v2:** kupno za gotówkę księgi (reinwestycja jak w backteście), prowizja BNB w wyniku, sufit zlecenia 1000 / kapitał 200 | zrobione, wdrożone | commit `866e697` |
+| 5 | KROK 2 w `gate.py`: B5–B7 + `PROVISIONAL_PASS`, DSR, E1 (replay 4h przez fille), kryterium 6 z metryk | zrobione | `docs/GATE_EVAL_2026-09-16.md` |
+| 6 | Kandydaci **#10 (histereza)** i **#11 (koszyk 8 coinów)** odrzuceni → **bilans 11/11** | pomiar wg pre-rejestracji | `docs/HYSTERESIS_*`, `docs/PORTFOLIO_*` |
+| 7 | Następny kandydat: **#12 — wielkość pozycji wg zmienności z pasmem bez handlu**, oceniany po DD | plan | sekcja NASTĘPNA AKCJA |
+| 8 | KROK 0 (test klucza Ed25519) **zbędny**: UI konta odpowiada. Blokada stałego IP wraca przy M6 | ustalone w UI | pamięć `m6-ed25519…` |
+| 9 | Strona: naprawiona żywa cena (CSP vs port 9443), panel przy FLAT, liczby infrastruktury | zrobione, wdrożone | commity `dfb63e4`, `2178727` |
+
+### Co dziś zrobiliśmy (krótko)
+
+1. **Check-up + ocena bramek** kodem jak był (6 dni po terminie):
+   - wyniki: A PASS, B `INCONCLUSIVE_EXTEND`, C 6/20;
+   - kanał 4h zamknął transakcję +38,91 USDT, potem whipsaw −5,36;
+   - bot 1d −1,97%.
+2. **Research w sieci + GitHub** (agent) i weryfikacja tez u źródła. Znalazł fałszywe
+   założenie o duplikatach zleceń, więc je naprawiliśmy i wdrożyliśmy.
+3. **Porządki w walidacji (KROK 2):**
+   - Sharpe 4h był zaniżony √6 razy, a DSR zawsze 0;
+   - „adaptive 1,11–1,18” było stałym EMA10/50;
+   - historia alarmów CloudWatch żyje tylko 30 dni;
+   - wszystko poprawione i przetestowane mutacjami.
+4. **Dwa kandydaci strategii zmierzeni i odrzuceni:**
+   - #10: histereza nie pomaga przy prowizji 0,1%;
+   - #11: koszyk altów pogłębia spadki do −79%.
+5. **Przesłanka „odsetki od gotówki” przeszła** (bot flat 43–47% czasu). Na koncie live
+   dostępne tylko USDC, a na demo nie da się tego przetestować.
+6. **Binance live sprawdzony w przeglądarce** (tylko odczyt), wynik powyżej. Kraken
+   oceniony jako zapasowa giełda.
+7. **Księga v2 wdrożona** i sprawdzona wymuszonym heartbeatem (kupno za 10 USDT, prowizja
+   BNB zaksięgowana co do cyfry).
+8. **Decyzja o bramce B** na podstawie pomiaru: obecna bramka przepuściłaby żywą
+   strategię w 4% okien rocznych i 0% dwuletnich, bo blokuje ją DD ≤ 25%.
+9. **Strona:** wdrożona czterokrotnie, sprawdzona na żywo (desktop + 390 px).
+10. **Testy:** 471 → **521**. Wszystko na gałęzi `session/gate-eval-20260916` →
+    **PR #63** (otwarty na koniec sesji, pytest i gitleaks zielone).
+
+**Przy następnym otwarciu:** patrz sekcja „▶ NASTĘPNA SESJA” niżej.
+
+---
+
+## ▶ NASTĘPNA SESJA — od czego zacząć, co sprawdzić, co robić, na co uważać
+
+> Spisane 2026-09-16 na koniec sesji. Czas: user jest w BST (= UTC+1). Kanał 4h
+> odpala o :10 UTC co 4 h (01:10, 05:10, 09:10 … BST), bot 1d o 00:10 UTC,
+> heartbeat o 00:25 UTC.
+
+### 0. Zanim cokolwiek zmienisz — gałąź (NAJWAŻNIEJSZE)
+
+- Cała praca z 16.09 jest w **PR #63** (`session/gate-eval-20260916`, CI zielone,
+  otwarty na koniec sesji). Produkcja (venue-4h, shadow, strona) już chodzi na tym
+  kodzie.
+- **Najpierw:** `gh pr view 63 --json state,mergedAt`.
+  - **Zmergowany:** `git checkout main && git pull`, nowa gałąź sesji.
+  - **Otwarty:** zapytać usera o merge.
+- 🔴 **Dopóki #63 nie jest w `main`, nie buduj zipów ani nie deployuj z `main`**, bo po
+  cichu cofniesz idempotencję i księgę v2 na produkcji.
+
+### 1. Sprawdzić (kolejno, ~15 min, wszystko tylko odczyt)
+
+1. **Zdrowie Lambd.** Oczekiwane `CodeSha256`:
+   - M5 (`tradepulse-paper-bot`, `-status`): `r8LuxnoJgluluwOEuPP6tk5nRDrhpjNq4emap/stNq0=` — **inna wartość = STOP, powiedz userowi**;
+   - `tradepulse-venue-4h`: `VEyzVhC4bFcjXYhRmtPH1kZc4GFXso2wWN9Wr9yBHwE=`;
+   - `tradepulse-shadow-bot`: `4iIaTjkWqkNoNHaBgWQgI8vQRySiK57ThVuG/U/lojU=`;
+   - `tradepulse-site-status`: `Dx/BXSGDJpXs1uOJYMsH0A6l8o8FFWRbfUjZdPzmvrs=`.
+
+   Pętla jest w „Protokole wznowienia” niżej; dodaj `tradepulse-site-status`.
+2. **Alarmy i harmonogramy:** 10/10 `OK`, 3/3 `ENABLED`. Błędy i wywołania liczone
+   od 2026-09-16 20:14 UTC (venue: 6 dziennie, shadow i 1d: po 1).
+3. **Kill-switch 4h:**
+   `PAPER_STATE_BACKEND=dynamodb AWS_DEFAULT_REGION=eu-west-2 .venv/bin/python -m app.backend.paper_trading.run killswitch --timeframe 4h`.
+   Jeśli `halted: true`, to najpewniej T1 (DD > 25%). To **oczekiwane przy zwykłym
+   spadku** (decyzja 16.09). Przeczytaj powód, sprawdź pozycję u źródła i wznów
+   świadomie wg `docs/RUNBOOK.md`; nie „naprawiaj” progu.
+4. **Pozycja u źródła** (konto demo): saldo BTC = 0,05 + ilość z księgi, 0 otwartych
+   zleceń. Porównaj z `/api/state` (`venue.qty`, `cash`).
+5. **🆕 Czy kanał 4h zrobił pierwsze kupno na księdze v2?** Jeśli tak, sprawdź:
+   - log Lambdy: `submitting BUY <kwota> USDT of BTCUSDT` (kwota ≈ gotówka księgi,
+     przy starcie 231,48);
+   - fill-log (`fill#…` w DynamoDB): `requested_quote`, `fees`, `fee_quote_values`
+     wypełnione, `requested_qty` puste;
+   - księga: `cash` ≈ 0 (reszta < 1 lot), `fees_converted` rośnie, `fees_external`
+     stoi na 0,00139981 BNB (historyczne);
+   - `gate --source dynamodb --fidelity --pk BTCUSDT_4h` → **PASS** (replay przez fille,
+     także z wycenioną prowizją);
+   - `gate --source dynamodb --cost-fidelity` → C4 i C5 bez FAIL (C4 dla kupna za
+     kwotę toleruje jeden lot niewydanej gotówki).
+
+   Jeśli kupna nie było: nic do sprawdzenia, kanał czeka na sygnał.
+6. **Bramki:** `gate --source dynamodb` (B 1d), `--fidelity` (A 1d), `--pk BTCUSDT_4h`
+   (B 4h, tylko poglądowo), `--cost-fidelity` (C).
+7. **Testy:** `.venv/bin/pytest app/backend/tests/ -q` → **521 passed** (lub więcej).
+
+### 2. Co robić (kolejność)
+
+1. **Jeśli było kupno na księdze v2** — punkt 1.5 do końca, wynik zapisać w statusie.
+2. **Kandydat #12 — wielkość pozycji wg zmienności z pasmem bez handlu (cel: DD ≤ 25%).**
+   - **Najpierw pre-rejestracja** (`docs/VOLBAND_DESIGN_<data>.md`), **commit PRZED
+     jakimkolwiek wynikiem**. Tak samo jak #10 i #11.
+   - **Punkt wyjścia:** `scripts/research/vol_targeting_study.py` (kandydat #1, M4/F2).
+     Liczy na poziomie zwrotów z ułamkową wagą, bo silnik i księga znają tylko 0/1.
+     #1 odpadł, bo spadł Sharpe po 2022 i podwoił się obrót. Pasmo ma ograniczyć
+     obrót: zmiana wagi tylko, gdy odchylenie od celu > X.
+   - **Metryka pierwotna** (decyzja 16.09): **odsetek kroczących okien 365/730 dni
+     z DD ≤ 25%**, liczony jak w `scripts/research/gate_b_power.py`. Wtórne:
+     Sharpe ≥ baza − 0,10, bije B&H, obrót. Parametry (cel zmienności, szerokość
+     pasma) jako **mała siatka ustalona z góry**, z wymogiem pasma sąsiednich
+     wartości (lekcja #9/#10). DSR liczyć inaczej niż z wariancji siatki (lekcja #10):
+     SPA z `arch` albo wprost N prób.
+   - **Konsekwencja akceptacji:** potrzebna obsługa ułamkowej pozycji w silniku,
+     księdze i executorze. Po księdze v2 venue jest na to gotowe
+     (`quote_budget = cash × waga`). M5 (1d) nietykalne, więc test na kanale 4h
+     demo, z osobną pre-rejestracją okna.
+3. **Ocena bramek 2026-10-08** (cykl 28 dni): uruchomić obecnym kodem, raport
+   `docs/GATE_EVAL_2026-10-08.md`. Spodziewane: B `INCONCLUSIVE_EXTEND` (bot 1d bez
+   zamkniętych transakcji). Od tej oceny B5–B7 formalnie wiążą; w kodzie działają już.
+4. **Opcjonalnie:** retro SPA (`arch`) na 11 dotychczasowych próbach — ile przewagi
+   bazy przetrwa wielokrotne testowanie.
+
+### 3. Na co zwrócić uwagę (pułapki, które już raz ugryzły)
+
+- **M5 nietykalne:** zipy tylko `build_lambda_package.sh --venue-4h` / `--shadow`.
+  `ignore_changes` chroni Lambdy M5; przy M6 usunąć go świadomie.
+- **Terraform:** zawsze `plan -target=… -out=tfplan` → `apply tfplan`. Po apply
+  porównać `CodeSha256` i env **poza** terraformem. Stare `tfplan` usuwać.
+- **Pre-rejestracja:** projekt w commicie przed wynikiem. Progów bramki B nigdy nie
+  luzować; zmiana progu DD = nowa pre-rejestracja i decyzja usera.
+- **„Przesłanka przeszła” ≠ „kandydat przejdzie”** (#9, #10). Dywersyfikacja altami
+  pogłębia DD (#11). Szukamy niższego DD, nie trafniejszych wejść.
+- **Giełda nie jest strażnikiem duplikatów:** Binance przyjmuje powtórzone
+  `newClientOrderId` po wypełnieniu. Chroni nas lookup przed wysłaniem i skan sierot.
+- **Demo ≠ rynek:** poślizg 0,00% na demo nie przenosi się na live.
+- **Historia alarmów CloudWatch = 30 dni.** Twierdzenia „nic nie odpaliło od X”
+  starsze niż 30 dni opierać na metrykach (`Errors`, `KillSwitchHalts`).
+- **Research:** skrypty w `scripts/research/` uruchamiać z `PYTHONPATH=.`; dane tylko
+  `< 2026-07-16`. Fold-stitching zawyża Sharpe'a, więc parametry stałe liczyć ciągłym
+  przebiegiem.
+- **zsh:** zmienna bez cudzysłowu się nie rozbija (`${=var}`); nie ma `timeout`.
+- **Przeglądarka:** karta automatyzacji jest `document.hidden`, więc animacje
+  `.reveal` i WebSocket strony nie ruszają; `resize_window` nie działa; strona ma
+  `frame-ancestors 'none'`; JS jest w cache 1 h. Szczegóły w pamięci `portfolio-site`.
+- **Konto LIVE Binance:** nic nie klikamy, żadnych zleceń, żadnych zmian ustawień
+  (Activate sub-kont, Default Security Controls) bez wyraźnej zgody usera.
+- **Sekrety:** klucze demo z SSM prosto do procesu, nigdy na ekran ani do repo.
+
+---
+
+**Stan na 2026-09-16 (sesja: OCENA BRAMEK + IDEMPOTENCJA + KROK 2 — dzień 62 okna M5).**
+Check-up: sha M5 `r8Luxno…tNq0=` nietknięte, 10/10 alarmów OK, 0 błędów od 05.09,
+11/11 + 11/11 + 65/65 wywołań, 471 → **504 testów** zielonych. Bot 1d LONG od 22.08,
+**−1,97%** (B&H w oknie +16,5%). Kanał 4h **FLAT**: RT2 zamknięty 13.09
+(**+38,91 USDT**, +19,5% ceny), potem whipsaw 14→15.09 (−5,36). Equity 231,48, po BNB
+≈ 230,48 (+15,2%) vs B&H +17,6%. Pozycja potwierdzona u źródła (0,05 BTC = baza).
+
+Zrobione 2026-09-16 — **`docs/GATE_EVAL_2026-09-16.md`** (branch `session/gate-eval-20260916`):
+- ✅ **Ocena bramek kodem JAK JEST** (spóźniona o 6 dni względem 10.09): A PASS 6/6,
+  B `INCONCLUSIVE_EXTEND` (0 RT), C `COLLECTING` 6/20 (wszystko PASS, 0 odrzuceń).
+- 🔴 **„Giełda sama odrzuca duplikat" było NIEPRAWDĄ.** Binance przyjmuje ten sam
+  `newClientOrderId`, gdy poprzednie zlecenie jest wypełnione (MARKET — od razu).
+  Test „dowodził" odmowy, bo skryptował odpowiedź giełdy. Naprawione: executor
+  **pyta o id PRZED pierwszym POST** i przejmuje istniejące zlecenie; zlecenie
+  `EXPIRED` bez wykonania liczy się do C3 (`OrderNotExecuted`). Testy na atrapie
+  `Venue` modelującej regułę z dokumentacji, mutacja 4/4. **Zdeployowane 16:31 UTC**
+  (venue `aPQYSTHl…`, shadow `rBVsyTUq…`, M5 nietknięte, `-target`), na żywo:
+  nowa ścieżka przejęła realne zlecenie 64998483743 bez POST, wymuszony heartbeat
+  zgodny u źródła.
+- ✅ **KROK 2 audytu w `gate.py`** (mutacja 17/17): B5/B6/B7 + `PROVISIONAL_PASS`;
+  B&H z kosztami; DSR w jednostkach per bar (1d: **0,259** zamiast 0,000);
+  Sharpe annualizowany wg interwału (4h: **3,84**, a nie 1,57); CI Sharpe'a,
+  czas trwania DD; MEDIUM-5 (otwarta pozycja musi przejść też jako zamknięta);
+  `fee_drag` na księdze ilościowej = nieinterpretowalne (4h odczyt: FAIL, nie PASS).
+- ✅ **E1 ZAMKNIĘTE:** `gate --fidelity --pk BTCUSDT_4h` — replay księgi 4h przez
+  jej własne fille: **246 barów co do centa, PASS 6/6**. Parytet sygnału czyta
+  `strategy_target` (F7). Świece stronicowane ponad 1000.
+- 🔴 **Kryterium 6 było ślepe:** CloudWatch trzyma historię alarmów **30 dni**
+  (dokumentacja + pomiar). Teraz błędy i halty z metryk (15 mies.) za całe okno.
+- ✅ **Walk-forward HIGH-1 + MEDIUM-3:** „adaptive 1,11–1,18" to był stały EMA10/50
+  (w 3/4 układów żaden fold nic nie wybrał). Uczciwe, ciągłe 20/100:
+  **0,96 / 1,07 / 1,16 / 1,04** vs B&H 0,87 / 0,97 / 1,00 / 0,81 — nadal 4/4.
+- 📐 Research (agent + własny pomiar): przesłanka whipsawów na 4h **przeszła**
+  (trejdy ≤ 4 dni = 25/91 i 40% wszystkich strat, 0 wygranych wśród ≤ 1 dnia),
+  ale top-3 trejdy = 58% wyniku → pułapka #9. Moc zaostrzonej bramki B przy prawdziwym
+  edge'u: P(PSR≥0,95) = 0,22, P(Sharpe≥B&H) = 0,54 po 365 dniach — **decyzja usera**.
+- 🔴 **Kandydat #10 (histereza, 4h) ODRZUCONY** wg pre-rejestracji (projekt w commicie
+  `2074f03` przed testem): przy prowizji 0,1% żadne pasmo nie bije bazy w więcej niż
+  1 z 4 układów — mniej whipsawów, ale spóźnione wejścia/wyjścia oddają całość.
+  **Bilans 10/10 odrzuconych.** Przy okazji: „4h 0/4 przy 0,3%" z 06.08 było
+  artefaktem sklejania foldów — ciągle baza 4h bije B&H 4/4 także przy 0,3%.
+  `docs/HYSTERESIS_RESULTS_2026-09-16.md`. README i `web/index.html` zaktualizowane
+  („Ten upgrades tested"), **strona NIE wdrożona** — czeka na zgodę.
+- 🔴 **Binance (sprawdzone w UI konta LIVE 16.09):** „Default Security Controls"
+  (zaznaczone) **odbierają handel także kluczom Ed25519/RSA bez ograniczenia IP**
+  („periodically or immediately revoked… if enabled with trading"). Zapis z 04.09
+  „Ed25519 znosi blocker stałego IP" jest **nieaktualny** — bez IP tylko po
+  świadomym wyłączeniu tych zabezpieczeń (decyzja usera przy M6) albo stały IPv4
+  (~$80/rok NAT instance; API Binance nie ma IPv6). KROK 0 jako test klucza —
+  zbędny, UI odpowiada. **Sub-konta dostępne** dla zwykłych użytkowników (FAQ z
+  03.09: KYC + 2FA, do 5), na koncie jest przycisk Activate (nie klikany). Konto
+  LIVE: Regular, 0,10%/0,10%, **BNB Fee Discount OFF**, 0 BNB, 0 kluczy API.
+- 📒 **KSIĘGA v2 (audyt §10 KROK 3) ZROBIONA I WDROŻONA 20:14 UTC** (venue
+  `VEyzVhC4…`, shadow `4iIaTjkW…`, M5 nietknięte, `-target`, sufit zlecenia
+  200 → 1000, kapitał 200 bez zmian): long kupowany za **gotówkę księgi**
+  (`quoteOrderQty`, więc kanał reinwestuje jak backtest), prowizja BNB **wyceniana
+  przy fillu i odliczana od wyniku**, resztki BTC nie znikają, prowizje per aktywo.
+  Mutacje 8/8, złoty wzorzec 11/11, replay E1 prawdziwej księgi 246/246. Na żywo:
+  wymuszony heartbeat kupił za `origQuoteOrderQty` 10 USDT, prowizja
+  2,064e-5 BNB = 0,01485 USDT zaksięgowana (u źródła 0,014854), konto flat.
+  Pierwsze prawdziwe kupno kanału 4h wyda całą gotówkę (231,48), gdy przyjdzie sygnał.
+- 🔬 **Kandydat #11 (ta sama reguła na koszyku 8 majorsów) ODRZUCONY** — koszyk
+  POGŁĘBIA drawdown (U8 −79%, U6 −59% vs BTC −50%); alty w tej regule −63…−93%,
+  DOGE w szczycie = 77% portfela. **Bilans 11/11.** `docs/PORTFOLIO_RESULTS_2026-09-16.md`.
+- 💡 **Przesłanka „gotówka zarabia, gdy bot stoi" PRZESZŁA:** flat 43% (1d) / 47% (4h)
+  czasu; 4% APR = +0,04 Sharpe'a, +2,3–2,7 pp CAGR, +$3,4–3,8/rok na $200 (≈ połowa
+  kosztu bota). Na koncie LIVE w Simple Earn jest **tylko USDC** (3,36–7,48% flexible).
+- 🔴🔴 **BLOCKER M6 — dostęp do rynku:** konto LIVE **nie widzi żadnych par USDT**
+  (BTC_USDT → przekierowanie na BTC_USDC) i ma baner: od **2026-07-01** brak nowych
+  zleceń na „odpowiednich" produktach Spot (Binance wycofał wniosek MiCA, wpis
+  z 24.06 „Important Update for Our European Users"). **Niesprawdzone, czy konto może
+  dziś złożyć JAKIEKOLWIEK zlecenie spot** — wie to tylko Binance (mail/powiadomienia/
+  support). Konsekwencja: M6 na tym koncie = BTCUSDC w najlepszym razie, a w
+  najgorszym inna giełda (licencja MiCA) i nowy executor.
+- 🧭 **Kraken jako zapasowa giełda dla M6 (ocena 16.09):** licencja MiCA (Irlandia)
+  + rejestracja FCA, **ograniczenie IP w kluczu opcjonalne** (znika problem stałego
+  IP), min. zlecenie 0,00005 BTC. Ale Kraken Pro na starcie: **0,40% maker / 0,80%
+  taker** (niższe progi od $2,5K wolumenu/mies. albo $20K aktywów). Zmierzone:
+  **bot 1d przeżywa 0,80%** (4/4 układów bije B&H), **kanał 4h nie** (0/4). Brak
+  darmowego demo spot. Kolejność: najpierw odpowiedź Binance (BTC/USDC = 8× taniej,
+  executor gotowy); Kraken dopiero, jeśli Binance odpada — nowy executor, tylko 1d,
+  zlecenia post-only mają tam sens (maker = połowa takera).
+- 🔴 **Strona: żywa cena NIGDY nie działała na produkcji** (od 08.08): `chart.js`
+  łączył się z `stream.binance.com:9443`, a CSP dopuszcza host bez portu = tylko 443
+  → naruszenie `connect-src` u każdego odwiedzającego. Naprawione (port 443),
+  plus panel przy FLAT (cena wejścia i zdanie „position is open" były nieprawdą).
+  **Wdrożone 3× i sprawdzone na żywo** (status `live`, 0 naruszeń CSP, 24 h z tickera;
+  mobile 390 px bez przewijania poziomego).
+
 **Stan na 2026-09-05 (sesja: BEZPIECZEŃSTWO EGZEKUCJI — dzień 51/56 okna M5).**
 Check-up przed pracą: sha M5 `r8Luxno…tNq0=` nietknięte, 9/9 alarmów OK, 0 błędów
 przez 14 dni, 7/7 + 42/42 + 7/7 wywołań, 3/3 harmonogramy ENABLED. Kanał 4h wciąż
@@ -31,8 +314,10 @@ zaksięgowane), bot 1d LONG od 22.08 (equity 10 323,10 = +3,23%), bramka C 3/20.
 Zrobione 2026-09-05 — **`docs/EXECUTION_SAFETY_2026-09-05.md`** (audyt §10
 KROK 1, branch `session/exec-safety-20260905`). Zamknięte 2× CRITICAL + 3× HIGH
 + MEDIUM-3/4 + E3, **zero zmian księgowania, zero zasobów M5 w planie**:
-- **CRITICAL-1**: deterministyczny `newClientOrderId` z (symbol, strona, decyzja)
-  → giełda sama odrzuca duplikat. `POST /order` nie jest już ślepo powtarzany —
+- **CRITICAL-1**: deterministyczny `newClientOrderId` z (symbol, strona, decyzja).
+  ~~→ giełda sama odrzuca duplikat~~ — 🔴 **NIEPRAWDA (sprostowanie 2026-09-16)**:
+  Binance przyjmuje ten sam id, gdy poprzednie zlecenie jest wypełnione, a MARKET
+  wypełnia się od razu; od 2026-09-16 executor pyta o id PRZED wysłaniem. `POST /order` nie jest już ślepo powtarzany —
   po timeoucie/5xx pytamy przez `origClientOrderId`, resend tylko po odpowiedzi
   „nie ma takiego zlecenia", dwa razy bez odpowiedzi → `OrderSubmissionUncertain`.
   Duplikat rozpoznajemy pytaniem, nie treścią błędu (−2010 = i duplikat, i brak
@@ -315,10 +600,13 @@ Zmierzone po kursach BNB z chwili każdego filla:
 | Kiedy | Co | Blokada |
 |---|---|---|
 | ✅ 2026-09-05 | KROK 1 (bezpieczeństwo egzekucji), KROK 4 (operacje), pre-rejestracja bramki B, E2 + E3 z audytu E2E | zrobione, zdeployowane, zweryfikowane |
-| 🔴 **dowolny dzień, USER** | **KROK 0** — jednorazowy klucz **Ed25519** na LIVE (Reading + Spot Trading, BEZ IP, wypłaty OFF) | **nic nie blokuje** — jedyna otwarta rzecz niezależna od kalendarza; rozstrzyga, czy M6 kosztuje $0 czy ~$40/rok |
-| **2026-09-10** | Ocena bramek **kodem JAK JEST** (pre-rejestracja). Raport do `docs/`. Werdykt B **już przesądzony**: `INCONCLUSIVE_EXTEND` (0 < 2 round-tripów) | `EARLIEST_EVAL` w `gate.py` |
-| zaraz po 10.09 | **KROK 2** — cała robota w `gate.py`: **E1** (parytet księgi per kanał), DSR `0,3/365`, walk-forward `no_admissible_combo`, diagnostyki (B&H, CI Lo, N_eff, DD), MEDIUM-5, oraz implementacja **B5/B6/B7 + `PROVISIONAL_PASS`** | `gate.py` zamrożone do 10.09 |
-| po E1 | **KROK 3** — księga v2 (sizing z `book.cash`, prowizja BNB do equity, resztka qty) pod dyscypliną złotego wzorca | **wymaga E1**: bez „księga == replay" nie ma czym złapać błędu w przepisywaniu księgowania |
+| ✅ 2026-09-16 | Ocena bramek kodem JAK JEST (`GATE_EVAL_2026-09-16.md`), idempotencja po naszej stronie (deploy), **KROK 2** (B5–B7, DSR, E1, MEDIUM-5, walk-forward) | zrobione; KROK 2 nie wymaga deployu (narzędzie lokalne) |
+| ✅ 2026-09-16, USER | **Decyzja o bramce B: progi bez zmian, demo.** Zmierzone: przy DD ≤ 25% bramka przepuściłaby żywą konfigurację w 4% okien rocznych i 0% dwuletnich — **celem pracy nad strategią jest DD ≤ 25%** (aneks w `GATE_B_PREREGISTRATION_2026-09-05.md`) | — |
+| ~~dowolny dzień, USER~~ ✅ 16.09 | ~~KROK 0 — klucz Ed25519 bez IP~~ — **rozstrzygnięte z UI**: Default Security Controls odbierają handel także Ed25519 bez IP. Przy M6: wyłączyć DSC świadomie **albo** stały IPv4 (~$80/rok) | decyzja przy M6, nie teraz |
+| ~~2026-09-10~~ ✅ 16.09 | Ocena bramek kodem JAK JEST — A PASS, B `INCONCLUSIVE_EXTEND`, C 6/20 | — |
+| ~~zaraz po 10.09~~ ✅ 16.09 | KROK 2 w `gate.py` (E1, DSR, walk-forward, diagnostyki, MEDIUM-5, B5/B6/B7) | — |
+| **następna sesja** | **KROK 3** — księga v2 (sizing z `book.cash`, prowizja BNB do equity, resztka qty) pod dyscypliną złotego wzorca; E1 jest siatką: po zmianie replay przez fille musi dalej dawać PASS na nowej arytmetyce | E1 gotowe od 16.09 — blokada zdjęta |
+| dowolna sesja | Research „trafniej": pre-rejestracja kandydata #10 (histereza, tylko 4h) i #11 (portfel 8 majorsów, cel = DD) + retro SPA (`arch`) / PBO (`purgedcv`) na 10 próbach | M5-safe, dane sprzed holdoutu |
 | **2026-10-08** | Kolejna ocena (cykl 28 dni) — **PIERWSZA rządzona zaostrzoną bramką B** | `REEVALUATE_EVERY_DAYS = 28` |
 | 2026-11-05, 12-03, … | kolejne oceny co 28 dni | — |
 | **~2027-05/06** | Bramka C rozstrzygalna (20 filli; dziś **3**, kanał 4h robi ~2 fille/mies.) | kalendarz |
@@ -329,7 +617,52 @@ Zmierzone po kursach BNB z chwili każdego filla:
 
 ---
 
-### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-05)
+### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-16)
+
+**0. LISTA AKCJI USERA:**
+- [ ] **Przed M6 (nie pilne — zostajemy na demo): co konto LIVE może handlować?**
+      Sprawdzić maile/powiadomienia Binance o MiCA (baner: brak nowych zleceń spot
+      od 2026-07-01; brak par USDT). Od odpowiedzi zależy, czy M6 może iść na Binance,
+      czy na Krakena.
+- [x] ~~Decyzja przed 08.10: moc bramki B~~ — **PODJĘTA 16.09: progi bez zmian, demo,
+      cel strategii = DD ≤ 25%** (aneks w pre-rejestracji). Stary opis zostaje niżej.
+- [ ] (archiwum) **Decyzja przed 08.10: moc bramki B.** Przy strategii dokładnie tak dobrej jak
+      backtest zaostrzona bramka przechodzi po 365 dniach w ~16–22% przypadków
+      (bootstrap blokowy, `docs/GATE_EVAL_2026-09-16.md` + raport researchu).
+      Rekomendacja: **nie luzować** (fałszywy negatyw kosztuje czas, nie pieniądze),
+      dopisać analizę mocy do pre-rejestracji jako oczekiwany czas czekania.
+      Świadomie: przy tej regule M6 może się odsunąć o lata.
+- [x] ~~KROK 0 + sub-konta~~ — **sprawdzone w UI 16.09** (patrz STATUS): sub-konta
+      dostępne (Activate, nie klikane — potrzebne dopiero przy M6); Ed25519 bez IP
+      NIE omija Default Security Controls → przy M6 decyzja: wyłączyć DSC albo stały IP.
+- [x] ~~Wdrożenie strony~~ — **zrobione 16.09** (3 wdrożenia: „Ten upgrades",
+      panel przy FLAT, żywa cena przez port 443), sprawdzone na żywo.
+- [ ] Okna checków healthchecks.io: venue 5h/1h, shadow 25h/2h (nie da się
+      sprawdzić z tej strony).
+- [x] ~~`./scripts/deploy_site.sh`~~ — strona wdrożona 2026-09-05 19:52 UTC
+      (`last-modified` z CloudFronta).
+
+**1. ~~KSIĘGA v2~~ — ZROBIONA 16.09** (patrz STATUS). Do obejrzenia przy następnym
+otwarciu: pierwsze kupno kanału 4h na nowym kodzie (w logu „submitting BUY 231.48
+USDT of", w fill-logu `requested_quote`, `fee_quote_values`), potem
+`gate --fidelity --pk BTCUSDT_4h` i `--cost-fidelity` — oba muszą przejść.
+
+**2. RESEARCH — CEL: DD ≤ 25% przy zachowaniu przewagi** (decyzja 16.09; wtedy bramka B
+staje się przejezdna uczciwie). Następny kandydat: **#12 — wielkość pozycji wg zmienności
+z pasmem bez handlu**, oceniany przede wszystkim po odsetku okien z DD ≤ 25%.
+~~#10 histereza~~ **ODRZUCONA 16.09**.
+Dalej: pre-rejestracja #11 portfel 8 majorsów (cel = płytszy DD, nie Sharpe; wariant
+bez SOL/DOGE; ciągłe spany) oraz retro SPA (`arch`) zamiast DSR z wariancji siatki
+(R4 w #10 pokazał, że ta nie filtruje). Nie warto: funding/basis, pora dnia,
+piramidowanie, sizing wg siły trendu, rotacja, Donchian, kolejne „opóźnienia"
+sygnału (histereza zmierzyła całą tę rodzinę).
+
+**3. Sprawdzić przy otwarciu:** pierwszy zaplanowany run venue-4h na nowym kodzie
+(2026-09-16 20:10 UTC) — `aws logs` bez `ERROR`, `gate --fidelity --pk BTCUSDT_4h` PASS.
+
+---
+
+#### (poprzednia NASTĘPNA AKCJA z 2026-09-05 — zachowana dla kontekstu)
 
 > **DECYZJA 2026-09-05:** KROK 1 audytu ZROBIONY. Kolejność dalej wg
 > `docs/AUDIT_2026-09-04.md` §10. Do 10.09 nie ruszamy M5 ani `gate.py`.
@@ -521,10 +854,13 @@ docs/MEAN_REVERSION_2026-08-08.md).
    „od czego zacząć" jest tam — nie pytaj o nią usera.
 2. **Zacznij z `main`** (`git pull`), zrób nowy feature branch. PR dopiero na
    końcu zadania; **user mergeuje ręcznie**, ja nie mergeuję.
+   ⚠️ **Wyjątek (stan 2026-09-16):** jeśli poprzednia gałąź sesji nie jest jeszcze
+   w `main` (patrz „▶ NASTĘPNA SESJA”, punkt 0), najpierw ustal z userem push/PR —
+   produkcja chodzi na kodzie z tamtej gałęzi.
 3. **Sprawdź zdrowie** przed zmianami — 4 Lambdy jedną pętlą:
    ```bash
    for f in tradepulse-paper-bot tradepulse-paper-bot-status \
-            tradepulse-shadow-bot tradepulse-venue-4h; do
+            tradepulse-shadow-bot tradepulse-venue-4h tradepulse-site-status; do
      printf "%-32s " $f
      aws lambda get-function-configuration --function-name $f \
        --region eu-west-2 --query '[State,CodeSha256]' --output text
@@ -552,7 +888,14 @@ docs/MEAN_REVERSION_2026-08-08.md).
   --region eu-west-2 --cli-binary-format raw-in-base64-out
   --payload '{"force":true}' /tmp/o.json`
 - Warsztat scenariuszy: `.venv/bin/python scripts/research/scenario_lab.py --list`
-- **Terraform:** ja robię `plan -out=tfplan`, **`apply` robi user** (mnie blokuje
+- Bramka A kanału 4h (replay przez fille):
+  `.venv/bin/python -m app.backend.paper_trading.gate --source dynamodb --fidelity --pk BTCUSDT_4h`
+- Audyt kalibracji: `PYTHONPATH=. .venv/bin/python scripts/research/calibration_audit.py`
+- **Terraform: ZAWSZE `-target=`** (reguła globalna z 14.09) —
+  `terraform plan -target=aws_lambda_function.venue_4h -target=aws_lambda_function.shadow_bot -out=tfplan`,
+  potem `terraform apply tfplan`; po apply porównać `CodeSha256` poza terraformem.
+  2026-09-16 apply przeszedł z mojej strony bez blokady.
+- **Terraform (stary zapis):** ja robię `plan -out=tfplan`, **`apply` robi user** (mnie blokuje
   klasyfikator uprawnień). Dawaj mu `terraform apply tfplan` — samo `apply`
   pyta interaktywnie i wisi bez odpowiedzi.
 - Klucze demo: SSM `/tradepulse/demo/{key,secret}` (SecureString). Lokalnie
@@ -1184,6 +1527,13 @@ Walk-forward, OOS, BTCUSDT, realne koszty:
 - Krótkie TF (15m) → ❌ zabite przez fee (+146% fee drag).
 - **Long-only EMA trend-following (1d) → ✅ edge potwierdzony.**
   Redukuje DD (−49% vs −77%), bije risk-adjusted; NIE bije absolutnego zwrotu.
+
+> 🔴 **SPROSTOWANIE 2026-09-16:** „adaptive" w tabeli niżej to **stały backtest
+> EMA10/50**, nie strategia przestrajana — w 3 z 4 układów żaden fold nie miał
+> dopuszczalnej kombinacji (13/13, 21/21, 31/31) i dostawał po cichu `combos[0]`.
+> Naprawione w `walkforward.py` (`no_admissible_combo`, fold flat). Uczciwe liczby
+> dla produkcji to przebieg **ciągły** stałego 20/100: **0,96 / 1,07 / 1,16 / 1,04**
+> vs B&H 0,87 / 0,97 / 1,00 / 0,81 — nadal 4/4. Szczegóły: `docs/M4_EDGE_VALIDATION.md`.
 
 **Liczby dla TEGO, CO LATA NA ŻYWO** (stałe EMA20/100, zmierzone 2026-07-28 —
 wcześniej raportowaliśmy tylko wariant przestrajany co fold, patrz niżej):
@@ -2009,3 +2359,43 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   regułami — na realnym logu pokazał, że reguła 30-dniowa dotyczy tego bota
   (sprzedaż 12.08 / odkupienie 18.08). `fees_external` na stronie. 27 nowych
   testów, suite 471. Terraform 2 add + 4 change, zero M5.
+- 2026-09-16 — OCENA BRAMEK + IDEMPOTENCJA + KROK 2 (branch
+  session/gate-eval-20260916). Ocena kodem JAK JEST (6 dni po terminie): A PASS,
+  B INCONCLUSIVE_EXTEND, C 6/20. Kanał 4h zamknął RT2 (+38,91) i złapał whipsaw
+  (−5,36). 🔴 Research zweryfikowany u źródła: Binance PRZYJMUJE ten sam
+  `newClientOrderId` po wypełnieniu — „giełda odrzuca duplikat" było fałszem, a test
+  to „potwierdzał" skryptem → lookup przed pierwszym POST + `OrderNotExecuted` dla
+  EXPIRED (C3), zdeployowane `-target`, zweryfikowane na żywo. KROK 2: B5–B7 +
+  PROVISIONAL_PASS, B&H z kosztami, DSR per bar, Sharpe wg interwału (4h był
+  zaniżony √6), MEDIUM-5, fee_drag nieinterpretowalne na księdze ilościowej, E1
+  (replay 4h przez fille: 246/246), kryterium 6 z metryk (historia alarmów = 30 dni),
+  walk-forward `no_admissible_combo` (adaptive = stały 10/50 w 3/4 układów), ciągły
+  OOS 20/100 0,96–1,16 vs B&H 0,81–1,00. Mutacje 4/4 + 17/17 + 1/1. Suite 504.
+  Sprostowane: EXECUTION_SAFETY, M4_EDGE_VALIDATION, README, plan, RUNBOOK.
+- 2026-09-16 (cd.) — KANDYDAT #10 + BINANCE. Projekt histerezy zacommitowany
+  przed testem (`2074f03`), wynik REJECT (R1: przy 0,1% max 1/4 układów; R2 okazał
+  się niespełnialny, bo ciągła baza 4h bije B&H 4/4 nawet przy 0,3% — sprostowanie
+  notatki z 06.08; R4 nie filtruje). Bilans 10/10. W UI Binance: Default Security
+  Controls odbierają handel również kluczom Ed25519 bez IP → blocker stałego IP
+  wraca do M6 jako decyzja; sub-konta dostępne; BNB fee OFF; 0 kluczy. README
+  i strona: „Ten upgrades", strona niewdrożona.
+- 2026-09-16 (cd. 2) — STRONA. Wdrożona z #10; przy weryfikacji na żywo znalezione:
+  żywa cena nigdy nie działała (CSP bez portu vs `:9443`) i panel kłamał przy FLAT.
+  Oba naprawione, wdrożone, sprawdzone w przeglądarce (override `document.hidden`,
+  nasłuch `securitypolicyviolation`, mobile w ramce z jednego originu).
+- 2026-09-16 (cd. 3) — #11 KOSZYK + GOTÓWKA + DOSTĘP DO BINANCE. #11 pre-rejestrowany
+  (`76df464`) i odrzucony (koszyk pogłębia DD) → 11/11. Przesłanka odsetek od
+  gotówki przeszła (flat 43–47% czasu). W UI konta LIVE: brak par USDT, Simple Earn
+  tylko USDC, baner MiCA o braku nowych zleceń spot od 01.07 → M6 venue do
+  wyjaśnienia przez usera.
+- 2026-09-16 (cd. 4) — KSIĘGA v2 wdrożona. Run 20:10 UTC na kodzie z 16:31: held,
+  0 błędów, skan sierot czysty. Potem KROK 3: kupno za gotówkę księgi
+  (`quoteOrderQty`), prowizja BNB wyceniona i odliczona, resztki i prowizje per
+  aktywo; C4 i E1 rozumieją nowe pola; Terraform rozdziela kapitał (200) od sufitu
+  (1000). Mutacje 8/8, suite 521, wymuszony heartbeat zgodny u źródła co do prowizji.
+  User: zostajemy na demo Binance i dopracowujemy bota i strategię.
+- 2026-09-16 (cd. 5) — DECYZJA O BRAMCE B. Zmierzone na żywej konfiguracji (F7):
+  obecna bramka przepuszcza ją w 4% okien rocznych i 0% dwuletnich; główna blokada to
+  pierwotne DD ≤ 25% (mediana DD 26% / 41%), B6 to prawie rzut monetą. User wybrał:
+  progi bez zmian, demo, cel strategii = DD ≤ 25%. Aneks w pre-rejestracji,
+  `scripts/research/gate_b_power.py`.

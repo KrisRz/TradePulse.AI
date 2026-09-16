@@ -294,7 +294,9 @@ dotknąć Lambd M5.
   deploy po cichu nic nie zrobi.
 - **Nie zmieniaj `gate.py`** przed oceną. Progi są pre-rejestrowane; zaostrzenie
   wolno zapowiedzieć przed danymi (`docs/GATE_B_PREREGISTRATION_2026-09-05.md`),
-  poluzowanie nigdy.
+  poluzowanie nigdy. B5/B6/B7 + `PROVISIONAL_PASS` są w kodzie od 2026-09-16.
+  Bramka A dla kanału 4h: `gate --source dynamodb --fidelity --pk BTCUSDT_4h`
+  (replay księgi przez jej własne fille).
 - **Nie kasuj stanu w DynamoDB**, żeby „odblokować" bota. Stan JEST księgą.
 - **Nie ufaj księdze przy rozjeździe.** Giełda jest źródłem prawdy dla tego, co
   posiadasz; księga jest źródłem prawdy dla tego, co zamierzaliśmy.

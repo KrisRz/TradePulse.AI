@@ -14,10 +14,12 @@ import pandas as pd
 import pytest
 
 from app.backend.backtesting.strategies import EmaCrossover
+from app.backend.paper_trading import gate
+from app.backend.paper_trading.execution import Fill
 from app.backend.paper_trading.gate import (
     FidelityInputs, check_accounting_parity, check_infrastructure,
     check_log_completeness, check_no_lookahead, check_price_parity,
-    check_signal_parity, evaluate_fidelity)
+    check_signal_parity, evaluate_fidelity, fetch_reference_bars, load_infra_aws)
 from app.backend.paper_trading.portfolio import PaperPortfolio
 
 AS_OF = date(2026, 9, 10)
@@ -93,7 +95,8 @@ def corrupt(inputs: FidelityInputs, **changes) -> FidelityInputs:
     fields = {"decisions": [dict(d) for d in inputs.decisions],
               "state": inputs.state, "bars": inputs.bars,
               "strategy": inputs.strategy, "timeframe": inputs.timeframe,
-              "lookback_bars": inputs.lookback_bars, "infra": inputs.infra}
+              "lookback_bars": inputs.lookback_bars, "infra": inputs.infra,
+              "fills": inputs.fills, "window_start": inputs.window_start}
     fields.update(changes)
     return FidelityInputs(**fields)
 
@@ -339,3 +342,213 @@ def test_flat_window_caveat_reaches_the_verdict(faithful):
 
 def test_active_window_has_no_caveats(faithful):
     assert evaluate_fidelity(faithful, AS_OF)["caveats"] == []
+
+
+# --------------------------------------------------------------------------- #
+# E1 — the venue channel: a quantity-backed book replayed through its fills
+# --------------------------------------------------------------------------- #
+class _Venue:
+    """Fills at a price a little off the reference, billed in BNB, like demo."""
+
+    def __init__(self, notional=200.0, priced=False):
+        self.notional = notional
+        self.priced = priced
+        self.records = []
+
+    def execute(self, order):
+        price = order.reference_price * (1 + 0.0004 * order.side)
+        if order.side > 0:
+            qty = round(self.notional / price, 5)
+        else:
+            qty = self.records[-1]["qty"]
+        values = {"BNB": 0.2} if self.priced else None
+        fees = {"BNB": 0.00025} if self.priced else None
+        self.records.append({
+            "bar": order.time, "side": order.side, "qty": qty, "actual_price": price,
+            "fee_paid": 0.00025, "fee_asset": "BNB", "base_asset": "BTC",
+            "fees": fees, "fee_quote_values": values,
+            "order_id": str(1000 + len(self.records)),
+            "recorded_at": f"2026-08-{10 + len(self.records):02d}T00:00:00+00:00"})
+        return Fill(price=price, side=order.side, time=order.time, qty=qty,
+                    fee_paid=0.00025, fee_asset="BNB", base_asset="BTC",
+                    order_id=self.records[-1]["order_id"], fees=fees,
+                    fee_quote_values=values)
+
+
+def _venue_channel(priced: bool):
+    bars = make_bars(n=60)
+    strategy = EmaCrossover(fast=3, slow=8, allow_short=False)
+    venue = _Venue(priced=priced)
+    book = PaperPortfolio(fee_rate=FEE, slippage=SLIP, initial_capital=200.0)
+    book.set_executor(venue)
+    decisions = []
+    for pos in range(len(bars) - 25, len(bars)):
+        bar = bars.index[pos]
+        history = bars.iloc[max(0, pos + 1 - (LOOKBACK - 1)): pos + 1]
+        target = int(strategy.target_positions(history).iloc[-1])
+        price = float(bars["close"].iloc[pos])
+        book.reconcile(target, price, str(bar))
+        decisions.append({"bar": str(bar), "price": price, "target": target,
+                          "equity": round(book.equity(price), 2),
+                          "realized": round(book.realized, 2),
+                          "processed_at": (bar + pd.Timedelta(days=1)).isoformat()})
+    assert book.quantity_backed and len(book.trades) >= 1
+    return FidelityInputs(decisions=decisions, state={"portfolio": book.to_dict()},
+                          bars=bars, strategy=strategy, timeframe="1d",
+                          lookback_bars=LOOKBACK, infra=None, fills=venue.records)
+
+
+@pytest.fixture
+def venue_channel():
+    return _venue_channel(priced=False)
+
+
+def test_a_book_that_charged_its_bnb_fees_replays_through_its_fills():
+    """Book v2 puts the priced fee into equity; the replay must do the same."""
+    channel = _venue_channel(priced=True)
+    assert channel.state["portfolio"]["fees_converted"]
+    res = check_accounting_parity(channel)
+    assert res["status"] == "PASS", res
+
+
+def test_a_quantity_backed_book_replays_through_its_own_fills(venue_channel):
+    res = check_accounting_parity(venue_channel)
+    assert res["status"] == "PASS", res
+    assert res["mode"] == "recorded fills"
+
+
+def test_the_modelled_replay_would_have_failed_it(venue_channel):
+    """The E1 finding: a slippage-model replay disagrees with a venue book."""
+    state = {"portfolio": dict(venue_channel.state["portfolio"], quantity_backed=False)}
+    res = check_accounting_parity(corrupt(venue_channel, state=state))
+    assert res["status"] == "FAIL"
+
+
+def test_a_fill_that_differs_from_the_book_is_caught(venue_channel):
+    fills = [dict(f) for f in venue_channel.fills]
+    fills[0]["actual_price"] *= 1.01
+    res = check_accounting_parity(corrupt(venue_channel, fills=fills))
+    assert res["status"] == "FAIL"
+
+
+def test_a_traded_bar_without_a_fill_record_is_caught(venue_channel):
+    res = check_accounting_parity(corrupt(venue_channel, fills=venue_channel.fills[1:]))
+    assert res["status"] == "FAIL"
+    assert any("no fill record" in d for d in res["drifts"])
+
+
+def test_a_fill_the_book_never_took_is_caught(venue_channel):
+    stray = dict(venue_channel.fills[0], bar="2026-07-29 00:00:00+00:00",
+                 order_id="9999")
+    res = check_accounting_parity(corrupt(venue_channel,
+                                          fills=venue_channel.fills + [stray]))
+    assert res["status"] == "FAIL"
+    assert any("never reached the book" in d for d in res["drifts"])
+
+
+def test_a_quantity_backed_book_without_fills_is_not_waved_through(venue_channel):
+    assert check_accounting_parity(corrupt(venue_channel, fills=None))["status"] == "SKIPPED"
+
+
+def test_signal_parity_judges_the_strategy_not_the_risk_overlay(faithful):
+    """F7 may flatten a position the strategy still wants; that is not drift."""
+    tampered = [dict(d) for d in faithful.decisions]
+    held = next(i for i, d in enumerate(tampered) if int(d["target"]) == 1)
+    tampered[held]["strategy_target"] = 1
+    tampered[held]["target"] = 0
+    assert check_signal_parity(corrupt(faithful, decisions=tampered))["status"] == "PASS"
+
+
+# --------------------------------------------------------------------------- #
+# Criterion 6 over a long window
+# --------------------------------------------------------------------------- #
+CLEAN_INFRA = {"days_checked": 15, "days_without_invocation": [],
+               "dlq_messages_max": 0.0, "alarms_fired": []}
+
+
+def test_infrastructure_catches_function_errors_the_alarm_history_forgot(faithful):
+    res = check_infrastructure(corrupt(faithful, infra=dict(
+        CLEAN_INFRA, function_errors=2.0, alarm_history_complete=False,
+        alarm_history_from="2026-08-17")))
+    assert res["status"] == "FAIL"
+    assert "function error" in res["detail"]
+
+
+def test_infrastructure_catches_a_kill_switch_halt(faithful):
+    res = check_infrastructure(corrupt(faithful, infra=dict(
+        CLEAN_INFRA, function_errors=0.0,
+        halts={"TradePulse/venue-4h/KillSwitchHalts": 1.0})))
+    assert res["status"] == "FAIL"
+
+
+def test_infrastructure_says_how_far_the_alarm_history_reaches(faithful):
+    res = check_infrastructure(corrupt(faithful, infra=dict(
+        CLEAN_INFRA, function_errors=0.0, alarm_history_complete=False,
+        alarm_history_from="2026-08-17 00:00:00+00:00")))
+    assert res["status"] == "PASS"
+    assert "30 days" in res["detail"] and "2026-08-17" in res["detail"]
+
+
+class _CloudWatch:
+    """Hourly invocations at :10 past every 4th hour, except one gap."""
+
+    def __init__(self, gap):
+        self.gap = gap
+        self.calls = []
+
+    def get_metric_statistics(self, **kw):
+        self.calls.append(kw)
+        start, end = pd.Timestamp(kw["StartTime"]), pd.Timestamp(kw["EndTime"])
+        if kw["MetricName"] != "Invocations":
+            return {"Datapoints": []}
+        # A run at hh:10 lands in the hourly datapoint stamped hh:00.
+        hours = pd.date_range(start.floor("4h"), end, freq="4h", inclusive="left")
+        return {"Datapoints": [{"Timestamp": h.to_pydatetime(), "Sum": 1.0}
+                               for h in hours
+                               if h != self.gap and h + pd.Timedelta(minutes=10) >= start]}
+
+    def describe_alarm_history(self, **kw):
+        return {"AlarmHistoryItems": []}
+
+
+def test_the_four_hour_channel_is_checked_period_by_period(monkeypatch):
+    import boto3
+
+    gap = pd.Timestamp("2026-08-20 08:00", tz="UTC")
+    cw = _CloudWatch(gap)
+    monkeypatch.setattr(boto3, "client", lambda *a, **k: cw)
+    infra = load_infra_aws("tradepulse-venue-4h", "dlq", ["a"],
+                           start=pd.Timestamp("2026-08-06 20:10", tz="UTC"),
+                           end=date(2026, 9, 16), period=pd.Timedelta(hours=4),
+                           now=pd.Timestamp("2026-09-16 16:00", tz="UTC"))
+    assert infra["days_without_invocation"] == [gap]
+    assert infra["days_checked"] == 241
+    assert infra["period_label"] == "4h period"
+    assert infra["alarm_history_complete"] is False
+    assert infra["alarm_history_from"].startswith("2026-08-17")
+    assert all(c["Period"] == 3600 for c in cw.calls if c["MetricName"] == "Invocations")
+
+
+def test_reference_bars_page_past_the_exchange_limit(monkeypatch):
+    import requests
+
+    from app.backend.paper_trading import feed
+
+    newest = make_bars(n=1000, start="2026-01-01")
+    monkeypatch.setattr(feed, "fetch_klines", lambda *a, **k: newest.iloc[:-1])
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            idx = pd.date_range(end=newest.index[0] - pd.Timedelta(days=1),
+                                periods=300, freq="D", tz="UTC")
+            return [[int(t.timestamp() * 1000), "1", "2", "0.5", "1.5", "10"]
+                    for t in idx]
+
+    monkeypatch.setattr(requests, "get", lambda *a, **k: Resp())
+    bars = fetch_reference_bars("BTCUSDT", "1d", 1_200)
+    assert len(bars) == 999 + 300
+    assert bars.index.is_monotonic_increasing and bars.index.is_unique
+    assert list(bars.columns) == ["open", "high", "low", "close", "volume"]
