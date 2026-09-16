@@ -74,6 +74,19 @@ Zrobione 2026-09-16 — **`docs/GATE_EVAL_2026-09-16.md`** (branch `session/gate
   zbędny, UI odpowiada. **Sub-konta dostępne** dla zwykłych użytkowników (FAQ z
   03.09: KYC + 2FA, do 5), na koncie jest przycisk Activate (nie klikany). Konto
   LIVE: Regular, 0,10%/0,10%, **BNB Fee Discount OFF**, 0 BNB, 0 kluczy API.
+- 🔬 **Kandydat #11 (ta sama reguła na koszyku 8 majorsów) ODRZUCONY** — koszyk
+  POGŁĘBIA drawdown (U8 −79%, U6 −59% vs BTC −50%); alty w tej regule −63…−93%,
+  DOGE w szczycie = 77% portfela. **Bilans 11/11.** `docs/PORTFOLIO_RESULTS_2026-09-16.md`.
+- 💡 **Przesłanka „gotówka zarabia, gdy bot stoi" PRZESZŁA:** flat 43% (1d) / 47% (4h)
+  czasu; 4% APR = +0,04 Sharpe'a, +2,3–2,7 pp CAGR, +$3,4–3,8/rok na $200 (≈ połowa
+  kosztu bota). Na koncie LIVE w Simple Earn jest **tylko USDC** (3,36–7,48% flexible).
+- 🔴🔴 **BLOCKER M6 — dostęp do rynku:** konto LIVE **nie widzi żadnych par USDT**
+  (BTC_USDT → przekierowanie na BTC_USDC) i ma baner: od **2026-07-01** brak nowych
+  zleceń na „odpowiednich" produktach Spot (Binance wycofał wniosek MiCA, wpis
+  z 24.06 „Important Update for Our European Users"). **Niesprawdzone, czy konto może
+  dziś złożyć JAKIEKOLWIEK zlecenie spot** — wie to tylko Binance (mail/powiadomienia/
+  support). Konsekwencja: M6 na tym koncie = BTCUSDC w najlepszym razie, a w
+  najgorszym inna giełda (licencja MiCA) i nowy executor.
 - 🔴 **Strona: żywa cena NIGDY nie działała na produkcji** (od 08.08): `chart.js`
   łączył się z `stream.binance.com:9443`, a CSP dopuszcza host bez portu = tylko 443
   → naruszenie `connect-src` u każdego odwiedzającego. Naprawione (port 443),
@@ -396,6 +409,9 @@ Zmierzone po kursach BNB z chwili każdego filla:
 ### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-16)
 
 **0. LISTA AKCJI USERA:**
+- [ ] 🔴 **Binance: co to konto może dziś handlować?** Sprawdzić maile/powiadomienia
+      Binance o MiCA (baner: brak nowych zleceń spot od 2026-07-01; brak par USDT).
+      Od odpowiedzi zależy, czy M6 w ogóle może iść na Binance.
 - [ ] **Decyzja przed 08.10: moc bramki B.** Przy strategii dokładnie tak dobrej jak
       backtest zaostrzona bramka przechodzi po 365 dniach w ~16–22% przypadków
       (bootstrap blokowy, `docs/GATE_EVAL_2026-09-16.md` + raport researchu).
@@ -2147,3 +2163,8 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   żywa cena nigdy nie działała (CSP bez portu vs `:9443`) i panel kłamał przy FLAT.
   Oba naprawione, wdrożone, sprawdzone w przeglądarce (override `document.hidden`,
   nasłuch `securitypolicyviolation`, mobile w ramce z jednego originu).
+- 2026-09-16 (cd. 3) — #11 KOSZYK + GOTÓWKA + DOSTĘP DO BINANCE. #11 pre-rejestrowany
+  (`76df464`) i odrzucony (koszyk pogłębia DD) → 11/11. Przesłanka odsetek od
+  gotówki przeszła (flat 43–47% czasu). W UI konta LIVE: brak par USDT, Simple Earn
+  tylko USDC, baner MiCA o braku nowych zleceń spot od 01.07 → M6 venue do
+  wyjaśnienia przez usera.
