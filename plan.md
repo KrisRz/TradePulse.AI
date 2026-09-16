@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-09-04**
+> Ostatnia aktualizacja: **2026-09-16**
 
 ---
 
@@ -22,6 +22,43 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
+**Stan na 2026-09-16 (sesja: OCENA BRAMEK + IDEMPOTENCJA + KROK 2 — dzień 62 okna M5).**
+Check-up: sha M5 `r8Luxno…tNq0=` nietknięte, 10/10 alarmów OK, 0 błędów od 05.09,
+11/11 + 11/11 + 65/65 wywołań, 471 → **504 testów** zielonych. Bot 1d LONG od 22.08,
+**−1,97%** (B&H w oknie +16,5%). Kanał 4h **FLAT**: RT2 zamknięty 13.09
+(**+38,91 USDT**, +19,5% ceny), potem whipsaw 14→15.09 (−5,36). Equity 231,48, po BNB
+≈ 230,48 (+15,2%) vs B&H +17,6%. Pozycja potwierdzona u źródła (0,05 BTC = baza).
+
+Zrobione 2026-09-16 — **`docs/GATE_EVAL_2026-09-16.md`** (branch `session/gate-eval-20260916`):
+- ✅ **Ocena bramek kodem JAK JEST** (spóźniona o 6 dni względem 10.09): A PASS 6/6,
+  B `INCONCLUSIVE_EXTEND` (0 RT), C `COLLECTING` 6/20 (wszystko PASS, 0 odrzuceń).
+- 🔴 **„Giełda sama odrzuca duplikat" było NIEPRAWDĄ.** Binance przyjmuje ten sam
+  `newClientOrderId`, gdy poprzednie zlecenie jest wypełnione (MARKET — od razu).
+  Test „dowodził" odmowy, bo skryptował odpowiedź giełdy. Naprawione: executor
+  **pyta o id PRZED pierwszym POST** i przejmuje istniejące zlecenie; zlecenie
+  `EXPIRED` bez wykonania liczy się do C3 (`OrderNotExecuted`). Testy na atrapie
+  `Venue` modelującej regułę z dokumentacji, mutacja 4/4. **Zdeployowane 16:31 UTC**
+  (venue `aPQYSTHl…`, shadow `rBVsyTUq…`, M5 nietknięte, `-target`), na żywo:
+  nowa ścieżka przejęła realne zlecenie 64998483743 bez POST, wymuszony heartbeat
+  zgodny u źródła.
+- ✅ **KROK 2 audytu w `gate.py`** (mutacja 17/17): B5/B6/B7 + `PROVISIONAL_PASS`;
+  B&H z kosztami; DSR w jednostkach per bar (1d: **0,259** zamiast 0,000);
+  Sharpe annualizowany wg interwału (4h: **3,84**, a nie 1,57); CI Sharpe'a,
+  czas trwania DD; MEDIUM-5 (otwarta pozycja musi przejść też jako zamknięta);
+  `fee_drag` na księdze ilościowej = nieinterpretowalne (4h odczyt: FAIL, nie PASS).
+- ✅ **E1 ZAMKNIĘTE:** `gate --fidelity --pk BTCUSDT_4h` — replay księgi 4h przez
+  jej własne fille: **246 barów co do centa, PASS 6/6**. Parytet sygnału czyta
+  `strategy_target` (F7). Świece stronicowane ponad 1000.
+- 🔴 **Kryterium 6 było ślepe:** CloudWatch trzyma historię alarmów **30 dni**
+  (dokumentacja + pomiar). Teraz błędy i halty z metryk (15 mies.) za całe okno.
+- ✅ **Walk-forward HIGH-1 + MEDIUM-3:** „adaptive 1,11–1,18" to był stały EMA10/50
+  (w 3/4 układów żaden fold nic nie wybrał). Uczciwe, ciągłe 20/100:
+  **0,96 / 1,07 / 1,16 / 1,04** vs B&H 0,87 / 0,97 / 1,00 / 0,81 — nadal 4/4.
+- 📐 Research (agent + własny pomiar): przesłanka whipsawów na 4h **przeszła**
+  (trejdy ≤ 4 dni = 25/91 i 40% wszystkich strat, 0 wygranych wśród ≤ 1 dnia),
+  ale top-3 trejdy = 58% wyniku → pułapka #9. Moc zaostrzonej bramki B przy prawdziwym
+  edge'u: P(PSR≥0,95) = 0,22, P(Sharpe≥B&H) = 0,54 po 365 dniach — **decyzja usera**.
+
 **Stan na 2026-09-05 (sesja: BEZPIECZEŃSTWO EGZEKUCJI — dzień 51/56 okna M5).**
 Check-up przed pracą: sha M5 `r8Luxno…tNq0=` nietknięte, 9/9 alarmów OK, 0 błędów
 przez 14 dni, 7/7 + 42/42 + 7/7 wywołań, 3/3 harmonogramy ENABLED. Kanał 4h wciąż
@@ -31,8 +68,10 @@ zaksięgowane), bot 1d LONG od 22.08 (equity 10 323,10 = +3,23%), bramka C 3/20.
 Zrobione 2026-09-05 — **`docs/EXECUTION_SAFETY_2026-09-05.md`** (audyt §10
 KROK 1, branch `session/exec-safety-20260905`). Zamknięte 2× CRITICAL + 3× HIGH
 + MEDIUM-3/4 + E3, **zero zmian księgowania, zero zasobów M5 w planie**:
-- **CRITICAL-1**: deterministyczny `newClientOrderId` z (symbol, strona, decyzja)
-  → giełda sama odrzuca duplikat. `POST /order` nie jest już ślepo powtarzany —
+- **CRITICAL-1**: deterministyczny `newClientOrderId` z (symbol, strona, decyzja).
+  ~~→ giełda sama odrzuca duplikat~~ — 🔴 **NIEPRAWDA (sprostowanie 2026-09-16)**:
+  Binance przyjmuje ten sam id, gdy poprzednie zlecenie jest wypełnione, a MARKET
+  wypełnia się od razu; od 2026-09-16 executor pyta o id PRZED wysłaniem. `POST /order` nie jest już ślepo powtarzany —
   po timeoucie/5xx pytamy przez `origClientOrderId`, resend tylko po odpowiedzi
   „nie ma takiego zlecenia", dwa razy bez odpowiedzi → `OrderSubmissionUncertain`.
   Duplikat rozpoznajemy pytaniem, nie treścią błędu (−2010 = i duplikat, i brak
@@ -315,10 +354,13 @@ Zmierzone po kursach BNB z chwili każdego filla:
 | Kiedy | Co | Blokada |
 |---|---|---|
 | ✅ 2026-09-05 | KROK 1 (bezpieczeństwo egzekucji), KROK 4 (operacje), pre-rejestracja bramki B, E2 + E3 z audytu E2E | zrobione, zdeployowane, zweryfikowane |
+| ✅ 2026-09-16 | Ocena bramek kodem JAK JEST (`GATE_EVAL_2026-09-16.md`), idempotencja po naszej stronie (deploy), **KROK 2** (B5–B7, DSR, E1, MEDIUM-5, walk-forward) | zrobione; KROK 2 nie wymaga deployu (narzędzie lokalne) |
+| 🔴 **przed 2026-10-08, USER** | Decyzja o **mocy bramki B** (P(PASS) ≈ 0,16–0,22 przy prawdziwym edge'u po roku). Rekomendacja: nie luzować, dopisać analizę do pre-rejestracji | pre-rejestracja: zaostrzać wolno, luzować nigdy |
 | 🔴 **dowolny dzień, USER** | **KROK 0** — jednorazowy klucz **Ed25519** na LIVE (Reading + Spot Trading, BEZ IP, wypłaty OFF) | **nic nie blokuje** — jedyna otwarta rzecz niezależna od kalendarza; rozstrzyga, czy M6 kosztuje $0 czy ~$40/rok |
-| **2026-09-10** | Ocena bramek **kodem JAK JEST** (pre-rejestracja). Raport do `docs/`. Werdykt B **już przesądzony**: `INCONCLUSIVE_EXTEND` (0 < 2 round-tripów) | `EARLIEST_EVAL` w `gate.py` |
-| zaraz po 10.09 | **KROK 2** — cała robota w `gate.py`: **E1** (parytet księgi per kanał), DSR `0,3/365`, walk-forward `no_admissible_combo`, diagnostyki (B&H, CI Lo, N_eff, DD), MEDIUM-5, oraz implementacja **B5/B6/B7 + `PROVISIONAL_PASS`** | `gate.py` zamrożone do 10.09 |
-| po E1 | **KROK 3** — księga v2 (sizing z `book.cash`, prowizja BNB do equity, resztka qty) pod dyscypliną złotego wzorca | **wymaga E1**: bez „księga == replay" nie ma czym złapać błędu w przepisywaniu księgowania |
+| ~~2026-09-10~~ ✅ 16.09 | Ocena bramek kodem JAK JEST — A PASS, B `INCONCLUSIVE_EXTEND`, C 6/20 | — |
+| ~~zaraz po 10.09~~ ✅ 16.09 | KROK 2 w `gate.py` (E1, DSR, walk-forward, diagnostyki, MEDIUM-5, B5/B6/B7) | — |
+| **następna sesja** | **KROK 3** — księga v2 (sizing z `book.cash`, prowizja BNB do equity, resztka qty) pod dyscypliną złotego wzorca; E1 jest siatką: po zmianie replay przez fille musi dalej dawać PASS na nowej arytmetyce | E1 gotowe od 16.09 — blokada zdjęta |
+| dowolna sesja | Research „trafniej": pre-rejestracja kandydata #10 (histereza, tylko 4h) i #11 (portfel 8 majorsów, cel = DD) + retro SPA (`arch`) / PBO (`purgedcv`) na 10 próbach | M5-safe, dane sprzed holdoutu |
 | **2026-10-08** | Kolejna ocena (cykl 28 dni) — **PIERWSZA rządzona zaostrzoną bramką B** | `REEVALUATE_EVERY_DAYS = 28` |
 | 2026-11-05, 12-03, … | kolejne oceny co 28 dni | — |
 | **~2027-05/06** | Bramka C rozstrzygalna (20 filli; dziś **3**, kanał 4h robi ~2 fille/mies.) | kalendarz |
@@ -329,7 +371,40 @@ Zmierzone po kursach BNB z chwili każdego filla:
 
 ---
 
-### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-05)
+### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-16)
+
+**0. LISTA AKCJI USERA:**
+- [ ] **Decyzja przed 08.10: moc bramki B.** Przy strategii dokładnie tak dobrej jak
+      backtest zaostrzona bramka przechodzi po 365 dniach w ~16–22% przypadków
+      (bootstrap blokowy, `docs/GATE_EVAL_2026-09-16.md` + raport researchu).
+      Rekomendacja: **nie luzować** (fałszywy negatyw kosztuje czas, nie pieniądze),
+      dopisać analizę mocy do pre-rejestracji jako oczekiwany czas czekania.
+      Świadomie: przy tej regule M6 może się odsunąć o lata.
+- [ ] **KROK 0 (wciąż):** klucz Ed25519 na LIVE bez IP. **Plus nowe:** sprawdzić w UI
+      Binance „Profile → Sub Accounts", czy konto osobiste ma sub-konta (skróty FAQ
+      mówią o VIP1+; niezweryfikowane — strona supportu nie renderuje się z UK).
+      Plan M6 zakłada sub-konto.
+- [ ] Okna checków healthchecks.io: venue 5h/1h, shadow 25h/2h (nie da się
+      sprawdzić z tej strony).
+- [x] ~~`./scripts/deploy_site.sh`~~ — strona wdrożona 2026-09-05 19:52 UTC
+      (`last-modified` z CloudFronta).
+
+**1. KSIĘGA v2 (audyt §10 KROK 3)** — E1 jest gotowe, blokada zdjęta. Kolejność:
+zamroź złoty wzorzec → sizing z `book.cash` (cap `max_notional`) → prowizja BNB do
+equity po kursie z chwili filla → resztka qty → `gate --fidelity --pk BTCUSDT_4h`
+musi dalej dawać PASS (po przeliczeniu historii nową arytmetyką) → deploy venue.
+
+**2. RESEARCH „TRAFNIEJ"** (M5-safe): pre-rejestracja #10 histereza (tylko 4h,
+jedno `b` z góry, reguła z siatką prowizji, DSR za 11 prób) i #11 portfel 8
+majorsów (cel = płytszy DD, nie Sharpe); retro SPA/PBO na 10 próbach. Nie warto:
+funding/basis, pora dnia, piramidowanie, sizing wg siły trendu, rotacja, Donchian.
+
+**3. Sprawdzić przy otwarciu:** pierwszy zaplanowany run venue-4h na nowym kodzie
+(2026-09-16 20:10 UTC) — `aws logs` bez `ERROR`, `gate --fidelity --pk BTCUSDT_4h` PASS.
+
+---
+
+#### (poprzednia NASTĘPNA AKCJA z 2026-09-05 — zachowana dla kontekstu)
 
 > **DECYZJA 2026-09-05:** KROK 1 audytu ZROBIONY. Kolejność dalej wg
 > `docs/AUDIT_2026-09-04.md` §10. Do 10.09 nie ruszamy M5 ani `gate.py`.
@@ -552,7 +627,14 @@ docs/MEAN_REVERSION_2026-08-08.md).
   --region eu-west-2 --cli-binary-format raw-in-base64-out
   --payload '{"force":true}' /tmp/o.json`
 - Warsztat scenariuszy: `.venv/bin/python scripts/research/scenario_lab.py --list`
-- **Terraform:** ja robię `plan -out=tfplan`, **`apply` robi user** (mnie blokuje
+- Bramka A kanału 4h (replay przez fille):
+  `.venv/bin/python -m app.backend.paper_trading.gate --source dynamodb --fidelity --pk BTCUSDT_4h`
+- Audyt kalibracji: `PYTHONPATH=. .venv/bin/python scripts/research/calibration_audit.py`
+- **Terraform: ZAWSZE `-target=`** (reguła globalna z 14.09) —
+  `terraform plan -target=aws_lambda_function.venue_4h -target=aws_lambda_function.shadow_bot -out=tfplan`,
+  potem `terraform apply tfplan`; po apply porównać `CodeSha256` poza terraformem.
+  2026-09-16 apply przeszedł z mojej strony bez blokady.
+- **Terraform (stary zapis):** ja robię `plan -out=tfplan`, **`apply` robi user** (mnie blokuje
   klasyfikator uprawnień). Dawaj mu `terraform apply tfplan` — samo `apply`
   pyta interaktywnie i wisi bez odpowiedzi.
 - Klucze demo: SSM `/tradepulse/demo/{key,secret}` (SecureString). Lokalnie
@@ -1184,6 +1266,13 @@ Walk-forward, OOS, BTCUSDT, realne koszty:
 - Krótkie TF (15m) → ❌ zabite przez fee (+146% fee drag).
 - **Long-only EMA trend-following (1d) → ✅ edge potwierdzony.**
   Redukuje DD (−49% vs −77%), bije risk-adjusted; NIE bije absolutnego zwrotu.
+
+> 🔴 **SPROSTOWANIE 2026-09-16:** „adaptive" w tabeli niżej to **stały backtest
+> EMA10/50**, nie strategia przestrajana — w 3 z 4 układów żaden fold nie miał
+> dopuszczalnej kombinacji (13/13, 21/21, 31/31) i dostawał po cichu `combos[0]`.
+> Naprawione w `walkforward.py` (`no_admissible_combo`, fold flat). Uczciwe liczby
+> dla produkcji to przebieg **ciągły** stałego 20/100: **0,96 / 1,07 / 1,16 / 1,04**
+> vs B&H 0,87 / 0,97 / 1,00 / 0,81 — nadal 4/4. Szczegóły: `docs/M4_EDGE_VALIDATION.md`.
 
 **Liczby dla TEGO, CO LATA NA ŻYWO** (stałe EMA20/100, zmierzone 2026-07-28 —
 wcześniej raportowaliśmy tylko wariant przestrajany co fold, patrz niżej):
@@ -2009,3 +2098,16 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   regułami — na realnym logu pokazał, że reguła 30-dniowa dotyczy tego bota
   (sprzedaż 12.08 / odkupienie 18.08). `fees_external` na stronie. 27 nowych
   testów, suite 471. Terraform 2 add + 4 change, zero M5.
+- 2026-09-16 — OCENA BRAMEK + IDEMPOTENCJA + KROK 2 (branch
+  session/gate-eval-20260916). Ocena kodem JAK JEST (6 dni po terminie): A PASS,
+  B INCONCLUSIVE_EXTEND, C 6/20. Kanał 4h zamknął RT2 (+38,91) i złapał whipsaw
+  (−5,36). 🔴 Research zweryfikowany u źródła: Binance PRZYJMUJE ten sam
+  `newClientOrderId` po wypełnieniu — „giełda odrzuca duplikat" było fałszem, a test
+  to „potwierdzał" skryptem → lookup przed pierwszym POST + `OrderNotExecuted` dla
+  EXPIRED (C3), zdeployowane `-target`, zweryfikowane na żywo. KROK 2: B5–B7 +
+  PROVISIONAL_PASS, B&H z kosztami, DSR per bar, Sharpe wg interwału (4h był
+  zaniżony √6), MEDIUM-5, fee_drag nieinterpretowalne na księdze ilościowej, E1
+  (replay 4h przez fille: 246/246), kryterium 6 z metryk (historia alarmów = 30 dni),
+  walk-forward `no_admissible_combo` (adaptive = stały 10/50 w 3/4 układów), ciągły
+  OOS 20/100 0,96–1,16 vs B&H 0,81–1,00. Mutacje 4/4 + 17/17 + 1/1. Suite 504.
+  Sprostowane: EXECUTION_SAFETY, M4_EDGE_VALIDATION, README, plan, RUNBOOK.
