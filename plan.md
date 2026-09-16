@@ -103,8 +103,8 @@ ale prowizja 0,40/0,80%: bot 1d przeżywa, kanał 4h nie.
 8. **Decyzja o bramce B** na podstawie pomiaru: obecna bramka przepuściłaby żywą
    strategię w 4% okien rocznych i 0% dwuletnich, bo blokuje ją DD ≤ 25%.
 9. **Strona:** wdrożona czterokrotnie, sprawdzona na żywo (desktop + 390 px).
-10. **Testy:** 471 → **521**. Wszystko na gałęzi `session/gate-eval-20260916`,
-    zacommitowane, bez pusha i bez PR (decyzja usera).
+10. **Testy:** 471 → **521**. Wszystko na gałęzi `session/gate-eval-20260916` →
+    **PR #63** (otwarty na koniec sesji, pytest i gitleaks zielone).
 
 **Przy następnym otwarciu:** patrz sekcja „▶ NASTĘPNA SESJA” niżej.
 
@@ -118,14 +118,14 @@ ale prowizja 0,40/0,80%: bot 1d przeżywa, kanał 4h nie.
 
 ### 0. Zanim cokolwiek zmienisz — gałąź (NAJWAŻNIEJSZE)
 
-- Cała praca z 16.09 leży na **`session/gate-eval-20260916`**: 17+ commitów, **bez pusha
-  i bez PR** (decyzja usera). **`main` jej nie ma**, a produkcja (venue-4h, shadow,
-  strona) już chodzi na tym kodzie.
-- 🔴 **Nie buduj zipów ani nie deployuj z `main`**, bo po cichu cofniesz
-  idempotencję i księgę v2 na produkcji.
-- **Pierwsze pytanie do usera:** robimy teraz push + PR tej gałęzi (i merge), czy
-  pracujemy dalej na niej? Reguła: jeden PR na sesję. Nowa gałąź dopiero z `main`
-  po merge'u.
+- Cała praca z 16.09 jest w **PR #63** (`session/gate-eval-20260916`, CI zielone,
+  otwarty na koniec sesji). Produkcja (venue-4h, shadow, strona) już chodzi na tym
+  kodzie.
+- **Najpierw:** `gh pr view 63 --json state,mergedAt`.
+  - **Zmergowany:** `git checkout main && git pull`, nowa gałąź sesji.
+  - **Otwarty:** zapytać usera o merge.
+- 🔴 **Dopóki #63 nie jest w `main`, nie buduj zipów ani nie deployuj z `main`**, bo po
+  cichu cofniesz idempotencję i księgę v2 na produkcji.
 
 ### 1. Sprawdzić (kolejno, ~15 min, wszystko tylko odczyt)
 
