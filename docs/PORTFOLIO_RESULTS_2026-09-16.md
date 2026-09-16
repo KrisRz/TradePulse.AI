@@ -36,10 +36,12 @@ SOL 1,38/−69%.
 
 - **Ta sama reguła na altach ma dużo głębsze spadki niż na BTC** (−63…−93% wobec −50%).
   Najprostsze wyjaśnienie (niezmierzone osobno): filtr trendu wychodzi z rynku
-  dopiero po potwierdzeniu, a alty zdążą przez ten czas spaść mocniej. Dywersyfikacja z rynkami, które same mają gorsze drawdowny i spadają
-  razem z BTC, nie spłaca się.
+  dopiero po potwierdzeniu, a alty zdążą przez ten czas spaść mocniej.
+  Dywersyfikacja z rynkami, które same mają gorsze drawdowny i spadają razem
+  z BTC, nie spłaca się.
 - **Brak rebalansowania koncentruje ryzyko.** Część, która urosła najbardziej
   (DOGE w 2021), staje się większością portfela i ciągnie go w dół przy krachu.
+  Zmierzone: w szczycie portfela (2021-05-07) część DOGE to **77%** jego wartości.
   Portfel U8 bez DOGE ma −55,3% zamiast −78,8%. H3 istniało właśnie po to, żeby
   złapać taki efekt jednego rynku.
 - Wynik literatury (Zarattini i in.: niższy DD) opierał się na wielkości pozycji wg
