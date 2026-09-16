@@ -22,6 +22,97 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
+---
+
+## 🧭 PODSUMOWANIE SESJI 2026-09-16 — czytaj najpierw
+
+### Tryb pracy: zostajemy na DEMO Binance (decyzja usera 2026-09-16)
+
+Bot handluje wyłącznie na **Binance Demo Trading** (`demo-api.binance.com`).
+Pracujemy nad botem i strategią. Realnych pieniędzy (M6) na razie nie planujemy.
+
+**Ograniczenia demo — o czym pamiętać przy czytaniu wyników:**
+- **Brak realnego ryzyka i realnego rynku zleceń.** Ceny demo odpowiadają rynkowi
+  (sprawdzone 25.08), ale głębokość arkusza i poślizg na demo nie muszą odpowiadać
+  realnej giełdzie. Mediana poślizgu z bramki C (0,00%) to optymistyczny odczyt
+  jakości wykonania, nie gwarancja na live.
+- **Prowizja na demo zawsze idzie w BNB** i nie da się tego wyłączyć. Od 16.09 księga
+  wycenia ją w chwili filla i odlicza od wyniku. Starsze 0,0014 BNB (~$1) zostaje
+  w `fees_external`.
+- **Jedno konto demo, dwa kanały:** venue 4h (`tpv4h-`) i heartbeat (`tpsh-`). Konto
+  ma zasilenie startowe (0,05 BTC, ~5000 USDT, ~2 BNB), które nie jest botowe. Bot
+  nigdy nie sprzedaje monet, których sam nie kupił. **Prefiksów nie zmieniać.**
+- **Klucze demo działają tylko na `demo-api.binance.com`.** `testnet.binance.vision`
+  ich nie przyjmuje, a `demo.binance.com/api` przekierowuje na PRODUKCJĘ.
+- **Na demo nie przetestujemy:**
+  - odsetek od gotówki (Simple Earn),
+  - kluczy Ed25519 i reguł IP konta live,
+  - ograniczeń regulacyjnych konta live.
+- **Tempo dowodów:** kanał 4h robi ~2 fille/mies. (bramka C 6/20 → ~2027-05). Bot 1d
+  (M5) robi ~1,7 transakcji rocznie.
+- **Kill-switch T1 = 25% DD** (decyzja: bez zmian). Backtest 4h miał −56%, więc
+  zwykły spadek może zatrzymać kanał demo. Wznawiamy go świadomie wg `docs/RUNBOOK.md`.
+
+**Konto LIVE (poza demo, stan 16.09, do wyjaśnienia przez usera przed M6):**
+- brak par USDT (BTC/USDT przekierowuje na BTC/USDC);
+- baner MiCA: brak nowych zleceń spot od 2026-07-01;
+- Simple Earn tylko USDC;
+- Default Security Controls odbierają handel także kluczom Ed25519 bez IP;
+- sub-konta dostępne (nieaktywowane);
+- BNB fee OFF, 0 kluczy API.
+
+Zapasowa giełda: **Kraken**. Licencja MiCA i rejestracja FCA, IP w kluczu opcjonalne,
+ale prowizja 0,40/0,80%: bot 1d przeżywa, kanał 4h nie.
+
+### Decyzje podjęte 2026-09-16
+
+| # | Decyzja | Kto | Gdzie zapisane |
+|---|---|---|---|
+| 1 | Zostajemy na **demo Binance**, dopracowujemy bota i strategię; M6 i wybór giełdy odłożone | user | ten blok |
+| 2 | **Bramka B: progi bez zmian** (DD ≤ 25%, B5/B6/B7, kill-switch 25%). **Cel pracy nad strategią = DD ≤ 25% w większości okien** przy zachowaniu przewagi | user | aneks w `docs/GATE_B_PREREGISTRATION_2026-09-05.md` |
+| 3 | Idempotencja po naszej stronie: pytanie o id **przed** wysłaniem zlecenia (giełda przyjmuje ponowione id po wypełnieniu) | zrobione, wdrożone | `docs/EXECUTION_SAFETY_2026-09-05.md` (sprostowanie) |
+| 4 | **Księga v2:** kupno za gotówkę księgi (reinwestycja jak w backteście), prowizja BNB w wyniku, sufit zlecenia 1000 / kapitał 200 | zrobione, wdrożone | commit `866e697` |
+| 5 | KROK 2 w `gate.py`: B5–B7 + `PROVISIONAL_PASS`, DSR, E1 (replay 4h przez fille), kryterium 6 z metryk | zrobione | `docs/GATE_EVAL_2026-09-16.md` |
+| 6 | Kandydaci **#10 (histereza)** i **#11 (koszyk 8 coinów)** odrzuceni → **bilans 11/11** | pomiar wg pre-rejestracji | `docs/HYSTERESIS_*`, `docs/PORTFOLIO_*` |
+| 7 | Następny kandydat: **#12 — wielkość pozycji wg zmienności z pasmem bez handlu**, oceniany po DD | plan | sekcja NASTĘPNA AKCJA |
+| 8 | KROK 0 (test klucza Ed25519) **zbędny**: UI konta odpowiada. Blokada stałego IP wraca przy M6 | ustalone w UI | pamięć `m6-ed25519…` |
+| 9 | Strona: naprawiona żywa cena (CSP vs port 9443), panel przy FLAT, liczby infrastruktury | zrobione, wdrożone | commity `dfb63e4`, `2178727` |
+
+### Co dziś zrobiliśmy (krótko)
+
+1. **Check-up + ocena bramek** kodem jak był (6 dni po terminie):
+   - wyniki: A PASS, B `INCONCLUSIVE_EXTEND`, C 6/20;
+   - kanał 4h zamknął transakcję +38,91 USDT, potem whipsaw −5,36;
+   - bot 1d −1,97%.
+2. **Research w sieci + GitHub** (agent) i weryfikacja tez u źródła. Znalazł fałszywe
+   założenie o duplikatach zleceń, więc je naprawiliśmy i wdrożyliśmy.
+3. **Porządki w walidacji (KROK 2):**
+   - Sharpe 4h był zaniżony √6 razy, a DSR zawsze 0;
+   - „adaptive 1,11–1,18” było stałym EMA10/50;
+   - historia alarmów CloudWatch żyje tylko 30 dni;
+   - wszystko poprawione i przetestowane mutacjami.
+4. **Dwa kandydaci strategii zmierzeni i odrzuceni:**
+   - #10: histereza nie pomaga przy prowizji 0,1%;
+   - #11: koszyk altów pogłębia spadki do −79%.
+5. **Przesłanka „odsetki od gotówki” przeszła** (bot flat 43–47% czasu). Na koncie live
+   dostępne tylko USDC, a na demo nie da się tego przetestować.
+6. **Binance live sprawdzony w przeglądarce** (tylko odczyt), wynik powyżej. Kraken
+   oceniony jako zapasowa giełda.
+7. **Księga v2 wdrożona** i sprawdzona wymuszonym heartbeatem (kupno za 10 USDT, prowizja
+   BNB zaksięgowana co do cyfry).
+8. **Decyzja o bramce B** na podstawie pomiaru: obecna bramka przepuściłaby żywą
+   strategię w 4% okien rocznych i 0% dwuletnich, bo blokuje ją DD ≤ 25%.
+9. **Strona:** wdrożona czterokrotnie, sprawdzona na żywo (desktop + 390 px).
+10. **Testy:** 471 → **521**. Wszystko na gałęzi `session/gate-eval-20260916`,
+    zacommitowane, bez pusha i bez PR (decyzja usera).
+
+**Przy następnym otwarciu sprawdzić najpierw:**
+- czy kanał 4h zrobił pierwsze kupno na księdze v2 (log: „submitting BUY … USDT of”;
+  fill-log: `requested_quote`, `fee_quote_values`);
+- potem `gate --fidelity --pk BTCUSDT_4h` i `--cost-fidelity`.
+
+---
+
 **Stan na 2026-09-16 (sesja: OCENA BRAMEK + IDEMPOTENCJA + KROK 2 — dzień 62 okna M5).**
 Check-up: sha M5 `r8Luxno…tNq0=` nietknięte, 10/10 alarmów OK, 0 błędów od 05.09,
 11/11 + 11/11 + 65/65 wywołań, 471 → **504 testów** zielonych. Bot 1d LONG od 22.08,
@@ -426,9 +517,10 @@ Zmierzone po kursach BNB z chwili każdego filla:
 ### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-16)
 
 **0. LISTA AKCJI USERA:**
-- [ ] 🔴 **Binance: co to konto może dziś handlować?** Sprawdzić maile/powiadomienia
-      Binance o MiCA (baner: brak nowych zleceń spot od 2026-07-01; brak par USDT).
-      Od odpowiedzi zależy, czy M6 w ogóle może iść na Binance.
+- [ ] **Przed M6 (nie pilne — zostajemy na demo): co konto LIVE może handlować?**
+      Sprawdzić maile/powiadomienia Binance o MiCA (baner: brak nowych zleceń spot
+      od 2026-07-01; brak par USDT). Od odpowiedzi zależy, czy M6 może iść na Binance,
+      czy na Krakena.
 - [x] ~~Decyzja przed 08.10: moc bramki B~~ — **PODJĘTA 16.09: progi bez zmian, demo,
       cel strategii = DD ≤ 25%** (aneks w pre-rejestracji). Stary opis zostaje niżej.
 - [ ] (archiwum) **Decyzja przed 08.10: moc bramki B.** Przy strategii dokładnie tak dobrej jak
