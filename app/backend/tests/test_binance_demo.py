@@ -77,7 +77,12 @@ class FakeResponse:
 
 
 class FakeSession:
-    """Records every request and answers from a queue keyed by path."""
+    """Records every request and answers from a queue keyed by path.
+
+    A ``(method, path)`` key, when present, wins over the bare path. That is how
+    the lookup the executor makes before every submit (``GET /api/v3/order``) is
+    kept apart from the submit itself (``POST`` on the same path).
+    """
 
     def __init__(self, responses: dict[str, list]):
         self.responses = {k: list(v) for k, v in responses.items()}
@@ -88,7 +93,7 @@ class FakeSession:
         params = dict(parse_qsl(parsed.query))
         self.requests.append((method, parsed.path, params))
         self.requests[-1][2]["__headers__"] = headers or {}
-        queue = self.responses.get(parsed.path)
+        queue = self.responses.get((method, parsed.path)) or self.responses.get(parsed.path)
         if not queue:
             raise AssertionError(f"unexpected request to {parsed.path}")
         item = queue.pop(0) if len(queue) > 1 else queue[0]
@@ -110,6 +115,9 @@ def make_executor(responses=None, **kwargs):
     responses.setdefault("/api/v3/exchangeInfo", [EXCHANGE_INFO])
     responses.setdefault("/api/v3/account", [ACCOUNT])
     responses.setdefault("/api/v3/time", [{"serverTime": 1_786_045_000_000}])
+    # The pre-submit lookup of a fresh client order id finds nothing.
+    responses.setdefault(("GET", "/api/v3/order"), [FakeResponse(
+        {"code": -2013, "msg": "Order does not exist."}, status_code=400)])
     session = FakeSession(responses)
     kwargs.setdefault("sleep", lambda _s: None)
     ex = BinanceDemoExecutor(KEY, SECRET, session=session, **kwargs)
@@ -448,8 +456,18 @@ def test_order_reporting_no_execution_is_an_error_not_a_silent_zero():
     empty = {"symbol": "BTCUSDT", "orderId": 1, "status": "EXPIRED",
              "executedQty": "0", "cummulativeQuoteQty": "0", "fills": []}
     ex, _session = make_executor(responses={"/api/v3/order": [empty]})
+    with pytest.raises(BinanceAPIError, match="EXPIRED with nothing executed"):
+        ex.execute(Order(side=BUY, reference_price=100_000.0, time="t"))
+
+
+def test_a_non_terminal_order_with_nothing_executed_is_still_an_error():
+    """Not a refusal (the order may yet run), but never booked as a zero fill."""
+    pending = {"symbol": "BTCUSDT", "orderId": 2, "status": "NEW",
+               "executedQty": "0", "cummulativeQuoteQty": "0", "fills": []}
+    ex, _session = make_executor(responses={"/api/v3/order": [pending]})
     with pytest.raises(BinanceAPIError, match="no executed quantity"):
         ex.execute(Order(side=BUY, reference_price=100_000.0, time="t"))
+    assert ex.rejections() == []
 
 
 def test_average_price_falls_back_to_the_fills_when_no_aggregate_is_reported():

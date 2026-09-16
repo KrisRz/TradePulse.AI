@@ -16,6 +16,12 @@ HIGH-1      the kill switch's execution drag was computed BEFORE the step that
             produced the fill, so T2 could never accumulate and stood at 0.0 on
             production after three real fills;
 HIGH-2      a book that disagreed with the account only logged a warning.
+
+Correction 2026-09-16: the fix for CRITICAL-1 leaned on the venue refusing a
+reused client order id. Binance refuses one only while the earlier order is
+still open, and a MARKET order does not stay open. The executor now looks the id
+up before the first submit; ``Venue`` below models the documented rule, and the
+replay tests run against it instead of a script that said what we hoped.
 """
 
 from __future__ import annotations
@@ -32,6 +38,7 @@ from app.backend.paper_trading import venue_handler
 from app.backend.paper_trading.binance_demo import (
     BinanceAPIError,
     BinanceDemoExecutor,
+    OrderNotExecuted,
     OrderSubmissionUncertain,
     Reconciliation,
 )
@@ -118,14 +125,77 @@ def filled_order(order_id=999, client_id=None, qty="0.0031", price="64000.00",
     return body
 
 
+def not_found():
+    return Response({"code": -2013, "msg": "Order does not exist."}, 400)
+
+
 def make_executor(routes, **kwargs):
     routes.setdefault(("GET", "/api/v3/exchangeInfo"), [EXCHANGE_INFO])
     routes.setdefault(("GET", "/api/v3/account"), [ACCOUNT])
     routes.setdefault(("GET", "/api/v3/time"), [{"serverTime": 1_786_045_000_000}])
+    # Every submit is preceded by a lookup of its id; a fresh id is unknown.
+    routes.setdefault(("GET", ORDER_PATH), [not_found()])
     session = Session(routes)
     kwargs.setdefault("sleep", lambda _s: None)
     kwargs.setdefault("client_prefix", "tpv4h")
     return BinanceDemoExecutor("k", "s", session=session, **kwargs), session
+
+
+class Venue:
+    """Binance as its own documentation describes client order ids.
+
+    "Orders with the same ``newClientOrderID`` can be accepted only when the
+    previous one is filled, otherwise the order will be rejected" (Spot REST API,
+    ``POST /api/v3/order``). A MARKET order fills the moment it is accepted, so a
+    resend with the same id is simply a second order. The scripted ``Session``
+    above cannot express that — it answers whatever it was told to — which is how
+    a test once "proved" the venue would refuse such a copy.
+    """
+
+    def __init__(self, price="64000.00"):
+        self.price = price
+        self.orders: dict[str, dict] = {}
+        self.posts: list[dict] = []
+        self.net_base = Decimal("0")
+        self._next_id = 5000
+
+    def seed_filled(self, client_id, side, qty):
+        """An order an earlier run placed, whose result that run never kept."""
+        self._next_id += 1
+        self.orders[client_id] = filled_order(order_id=self._next_id, client_id=client_id,
+                                              qty=str(qty), price=self.price)
+        self.net_base += Decimal(str(qty)) if side == "BUY" else -Decimal(str(qty))
+
+    def request(self, method, url, headers=None, timeout=None):
+        parsed = urlparse(url)
+        query = dict(parse_qsl(parsed.query))
+        path = parsed.path
+        if path == "/api/v3/exchangeInfo":
+            return Response(EXCHANGE_INFO)
+        if path == "/api/v3/account":
+            return Response(ACCOUNT)
+        if path == "/api/v3/time":
+            return Response({"serverTime": 1_786_045_000_000})
+        if path == "/api/v3/ticker/price":
+            return Response({"symbol": "BTCUSDT", "price": self.price})
+        if path == ORDER_PATH and method == "GET":
+            known = self.orders.get(query["origClientOrderId"])
+            return Response(known) if known else not_found()
+        if path == ORDER_PATH and method == "POST":
+            client_id = query["newClientOrderId"]
+            earlier = self.orders.get(client_id)
+            if earlier is not None and earlier["status"] != "FILLED":
+                return Response({"code": -2010, "msg": "Duplicate order sent."}, 400)
+            self.posts.append(query)
+            self.seed_filled(client_id, query["side"], query["quantity"])
+            return Response(self.orders[client_id])
+        raise AssertionError(f"unexpected {method} {path}")
+
+
+def venue_executor(venue, **kwargs):
+    kwargs.setdefault("sleep", lambda _s: None)
+    kwargs.setdefault("client_prefix", "tpv4h")
+    return BinanceDemoExecutor("k", "s", session=venue, **kwargs)
 
 
 # ------------------------------------------------------- the idempotency key --
@@ -167,6 +237,52 @@ def test_every_order_carries_its_id_to_the_venue():
     assert sent["newClientOrderId"] == ex.client_order_id(BUY, bar)
 
 
+def test_the_id_is_looked_up_before_the_order_is_sent():
+    """Binance refuses a reused id only while the first order is still open.
+
+    A MARKET order is never open for long, so the only duplicate guard this bot
+    has is its own question, asked before the first submit and by the same id.
+    """
+    ex, session = make_executor({("POST", ORDER_PATH): [filled_order()]})
+    bar = "2026-09-05 12:00:00+00:00"
+    ex.execute(Order(side=BUY, reference_price=64_000.0, time=bar, qty=0.0031))
+
+    order_calls = [(m, q) for m, p, q in session.log if p == ORDER_PATH]
+    assert [m for m, _q in order_calls] == ["GET", "POST"]
+    assert order_calls[0][1]["origClientOrderId"] == order_calls[1][1]["newClientOrderId"]
+
+
+def test_an_order_that_already_filled_is_never_sent_again():
+    """The venue WOULD accept the copy — the executor must not offer it one."""
+    venue = Venue()
+    bar = "2026-09-05 12:00:00+00:00"
+    first = venue_executor(venue)
+    first_fill = first.execute(Order(side=BUY, reference_price=64_000.0, time=bar,
+                                     qty=0.0031))
+
+    again = venue_executor(venue)
+    second_fill = again.execute(Order(side=BUY, reference_price=64_000.0, time=bar,
+                                      qty=0.0031))
+
+    assert len(venue.posts) == 1
+    assert venue.net_base == Decimal("0.0031")
+    assert second_fill.order_id == first_fill.order_id
+    assert again.rejections() == []
+
+
+def test_a_lookup_that_cannot_be_answered_sends_nothing():
+    """Not knowing whether the order exists is not permission to send it."""
+    ex, session = make_executor({
+        ("POST", ORDER_PATH): [filled_order()],
+        ("GET", ORDER_PATH): [Response({"code": -1003, "msg": "Too many requests."}, 400)],
+    })
+    with pytest.raises(BinanceAPIError):
+        ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1", qty=0.0031))
+
+    assert session.count("POST", ORDER_PATH) == 0
+    assert ex.rejections() == []          # nothing was submitted, nothing refused
+
+
 def test_the_key_can_be_given_explicitly_for_a_trade_that_is_not_bar_driven():
     """A kill-switch flatten happens at the clock, so it names its own key."""
     ex, session = make_executor({("POST", ORDER_PATH): [filled_order()]})
@@ -188,7 +304,7 @@ def test_a_timeout_after_the_order_filled_does_not_send_a_second_one():
     """
     ex, session = make_executor({
         ("POST", ORDER_PATH): [requests.ConnectionError("connection reset")],
-        ("GET", ORDER_PATH): [filled_order(order_id=999, with_fills=False)],
+        ("GET", ORDER_PATH): [not_found(), filled_order(order_id=999, with_fills=False)],
         ("GET", "/api/v3/myTrades"): [[
             {"price": "64000.00", "qty": "0.0031", "commission": "0.0002",
              "commissionAsset": "BNB"}]],
@@ -208,7 +324,6 @@ def test_a_timeout_before_the_order_arrived_is_resent_once_with_the_same_id():
     """Having *asked*, resending is safe — and must reuse the id, not mint a new one."""
     ex, session = make_executor({
         ("POST", ORDER_PATH): [requests.ConnectTimeout("timed out"), filled_order()],
-        ("GET", ORDER_PATH): [Response({"code": -2013, "msg": "Order does not exist."}, 400)],
     })
     ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1", qty=0.0031))
 
@@ -220,7 +335,6 @@ def test_a_timeout_before_the_order_arrived_is_resent_once_with_the_same_id():
 def test_twice_unanswered_stops_the_run_instead_of_guessing():
     ex, session = make_executor({
         ("POST", ORDER_PATH): [requests.ConnectTimeout("timed out")],
-        ("GET", ORDER_PATH): [Response({"code": -2013, "msg": "Order does not exist."}, 400)],
     })
     with pytest.raises(OrderSubmissionUncertain, match="reconcile"):
         ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1", qty=0.0031))
@@ -232,7 +346,7 @@ def test_a_server_error_on_the_order_is_not_retried_blindly():
     """A 5xx used to be retried up to ``max_retries`` times, four orders deep."""
     ex, session = make_executor({
         ("POST", ORDER_PATH): [Response({"code": -1000, "msg": "boom"}, 503)],
-        ("GET", ORDER_PATH): [filled_order(order_id=1001)],
+        ("GET", ORDER_PATH): [not_found(), filled_order(order_id=1001)],
     })
     fill = ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1",
                             qty=0.0031))
@@ -242,14 +356,17 @@ def test_a_server_error_on_the_order_is_not_retried_blindly():
 
 
 def test_a_duplicate_rejection_resolves_to_the_order_the_venue_already_has():
-    """The retried-bar case: the venue refuses the copy, and its fill is the answer.
+    """An order with this id appeared between the lookup and the submit.
 
-    Not decided by reading the message — "duplicate" and "insufficient balance"
-    are both ``-2010``. The venue is asked instead.
+    Binance refuses the copy only while that order is still open, and nothing
+    in this deployment can open one in that gap (one concurrent run). The branch
+    stays because being wrong here costs a second position. Not decided by
+    reading the message — "duplicate" and "insufficient balance" are both
+    ``-2010``. The venue is asked instead.
     """
     ex, session = make_executor({
         ("POST", ORDER_PATH): [Response({"code": -2010, "msg": "Duplicate order sent."}, 400)],
-        ("GET", ORDER_PATH): [filled_order(order_id=777)],
+        ("GET", ORDER_PATH): [not_found(), filled_order(order_id=777)],
     })
     fill = ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1",
                             qty=0.0031))
@@ -264,7 +381,6 @@ def test_a_real_rejection_is_still_a_rejection():
     ex, _session = make_executor({
         ("POST", ORDER_PATH): [Response(
             {"code": -2010, "msg": "Account has insufficient balance."}, 400)],
-        ("GET", ORDER_PATH): [Response({"code": -2013, "msg": "Order does not exist."}, 400)],
     })
     with pytest.raises(BinanceAPIError) as err:
         ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1", qty=0.0031))
@@ -278,7 +394,7 @@ def test_the_rejection_survives_a_probe_that_also_fails():
     """Evidence must not evaporate because the second request failed too."""
     ex, _session = make_executor({
         ("POST", ORDER_PATH): [Response({"code": -1013, "msg": "Filter failure"}, 400)],
-        ("GET", ORDER_PATH): [requests.ConnectionError("down")],
+        ("GET", ORDER_PATH): [not_found(), requests.ConnectionError("down")],
     })
     with pytest.raises(BinanceAPIError):
         ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1", qty=0.0031))
@@ -309,26 +425,117 @@ def test_replaying_the_same_bar_books_the_venue_fill_exactly_once():
     bar = "2026-09-05 12:00:00+00:00"
     before = PaperPortfolio(initial_capital=200.0).to_dict()
 
-    first_ex, first_session = make_executor({("POST", ORDER_PATH): [filled_order(order_id=555)]})
+    venue = Venue()
+
+    first_ex = venue_executor(venue)
     first_book = PaperPortfolio.from_dict(before)
     first_book.set_executor(first_ex)
     first_book.reconcile(1, 64_000.0, bar)
 
-    # Same bar again, from the state the crash left behind. The venue refuses
-    # the duplicate and reports the order it already holds.
-    retry_ex, retry_session = make_executor({
-        ("POST", ORDER_PATH): [Response({"code": -2010, "msg": "Duplicate order sent."}, 400)],
-        ("GET", ORDER_PATH): [filled_order(order_id=555)],
-    })
+    # Same bar again, from the state the crash left behind. Binance would take a
+    # second order under this id — the first one has filled — so nothing but
+    # the executor's own lookup stands between this retry and a double position.
+    retry_ex = venue_executor(venue)
     retry_book = PaperPortfolio.from_dict(before)
     retry_book.set_executor(retry_ex)
     retry_book.reconcile(1, 64_000.0, bar)
 
-    assert first_session.count("POST", ORDER_PATH) == 1
-    assert retry_session.count("POST", ORDER_PATH) == 1
+    assert len(venue.posts) == 1
+    assert venue.net_base == Decimal(str(first_book.qty))
     assert retry_book.qty == pytest.approx(first_book.qty)
     assert retry_book.cash == pytest.approx(first_book.cash)
-    assert retry_ex.reconciliations()[-1].order_id == "555"
+    assert retry_ex.reconciliations()[-1].order_id == first_ex.reconciliations()[-1].order_id
+
+
+def test_a_heartbeat_that_lost_its_state_does_not_strand_a_second_buy():
+    """The heartbeat has no orphan scan; the lookup is all it has.
+
+    An earlier run bought, then died before recording anything. Its retry starts
+    from an empty state and decides the same round-trip. Had the BUY been sent
+    again, the venue would have filled it, the SELL would have closed only one of
+    the two, and the other would sit on the account for good.
+    """
+    class Store:
+        def __init__(self):
+            self.state = None
+            self.decisions = []
+
+        def has_decision(self, day):
+            return False
+
+        def load(self):
+            return self.state
+
+        def save(self, state):
+            self.state = dict(state)
+
+        def append_decision(self, record):
+            self.decisions.append(record)
+
+    venue = Venue()
+    ex = venue_executor(venue, client_prefix="tpsh", max_notional=10.0)
+    now = datetime(2026, 9, 16, 0, 25, tzinfo=timezone.utc)
+    keys = ShadowRunner._order_keys("2026-09-16", now, force=False)
+    qty = ex.plan_quantity(BUY, 64_000.0)
+    venue.seed_filled(ex.client_order_id(BUY, keys["trip"]), "BUY", qty)
+
+    record = ShadowRunner(ex, Store()).run_once(now=now)
+
+    assert record["status"] == "ok"
+    assert [p["side"] for p in venue.posts] == ["SELL"]
+    assert venue.net_base == Decimal("0")
+
+
+# ------------------------------------ an accepted MARKET order that never ran --
+def expired_order(order_id=4242, client_id=None):
+    body = {"symbol": "BTCUSDT", "orderId": order_id, "status": "EXPIRED",
+            "executedQty": "0.00000000", "cummulativeQuoteQty": "0.00000000",
+            "fills": [], "expiryReason": "PRICE_RANGE_EXECUTION"}
+    if client_id:
+        body["clientOrderId"] = client_id
+    return body
+
+
+def test_an_expired_market_order_is_counted_as_a_rejection():
+    """HTTP 200 with nothing executed is a refusal all the same (Gate C, C3).
+
+    Binance can expire a MARKET order it could not execute within its price
+    range rule, and says so in ``expiryReason``. It used to surface as a bare
+    "no executed quantity" error that C3 never saw.
+    """
+    ex, _session = make_executor({("POST", ORDER_PATH): [expired_order()]})
+    with pytest.raises(OrderNotExecuted, match="EXPIRED"):
+        ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1", qty=0.0031))
+
+    rejection = ex.rejections()[-1]
+    assert rejection["status"] == "EXPIRED"
+    assert "PRICE_RANGE_EXECUTION" in rejection["message"]
+    assert rejection["client_order_id"] == ex.client_order_id(BUY, "bar-1")
+    assert ex.reconciliations() == []
+
+
+def test_an_expired_order_found_by_a_retry_is_not_counted_twice():
+    """The run that submitted it already recorded the refusal."""
+    ex, session = make_executor({
+        ("GET", ORDER_PATH): [expired_order()],
+        ("POST", ORDER_PATH): [filled_order()],
+    })
+    with pytest.raises(OrderNotExecuted):
+        ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1", qty=0.0031))
+
+    assert session.count("POST", ORDER_PATH) == 0
+    assert ex.rejections() == []
+
+
+def test_a_partial_execution_is_a_fill_not_a_rejection():
+    """C4 counts partial fills; C3 must not count the same order again."""
+    partial = filled_order(order_id=4343, qty="0.0015")
+    partial["status"] = "EXPIRED"
+    ex, _session = make_executor({("POST", ORDER_PATH): [partial]})
+    fill = ex.execute(Order(side=BUY, reference_price=64_000.0, time="bar-1", qty=0.0031))
+
+    assert fill.qty == pytest.approx(0.0015)
+    assert ex.rejections() == []
 
 
 # ------------------------------------------- CRITICAL-2: the book vs the venue --

@@ -12,10 +12,21 @@
 Kanał, który 6 razy dziennie składa prawdziwe zlecenia, mógł je złożyć dwa razy
 (retry POST bez identyfikatora klienta) i mógł podjąć decyzję na księdze, która
 nie opisywała już konta (zlecenie szło przed zapisem `last_bar`) — i **żadna z
-tych awarii nie zapaliłaby alarmu**. Obie są zamknięte: giełda sama odrzuca
-duplikat, bo identyfikator zlecenia wynika z decyzji, a nie z chwili wysyłki; a
-run, który zastanie na koncie nasz wykonany fill nieobecny w księdze, zatrzymuje
-się głośno zamiast handlować dalej. Do tego ożył T2 kill-switcha (liczył drag
+tych awarii nie zapaliłaby alarmu**. Obie są zamknięte: identyfikator zlecenia
+wynika z decyzji, a nie z chwili wysyłki, a run, który zastanie na koncie nasz
+wykonany fill nieobecny w księdze, zatrzymuje się głośno zamiast handlować dalej.
+
+> 🔴 **SPROSTOWANIE 2026-09-16.** Pierwotnie stało tu „giełda sama odrzuca
+> duplikat". **To nieprawda.** Binance: *„Orders with the same newClientOrderID can
+> be accepted only when the previous one is filled, otherwise the order will be
+> rejected"* (Spot REST API, `POST /api/v3/order`). Zlecenie MARKET wypełnia się
+> od razu, więc powtórka z tym samym id jest **przyjmowana**. Test, który „udowadniał"
+> odmowę, skryptował odpowiedź giełdy zgodnie z naszym życzeniem. Podwójnej pozycji
+> na kanale 4h i tak nie było — powtórkę łapał skan sierot (halt), a nie giełda;
+> heartbeat nie miał nawet tego. **Od 2026-09-16 executor pyta giełdę o id PRZED
+> pierwszym wysłaniem** (`_submit`) i przejmuje istniejące zlecenie zamiast wysyłać
+> drugie; testy chodzą na atrapie `Venue`, która modeluje regułę z dokumentacji.
+> Szczegóły: `docs/GATE_EVAL_2026-09-16.md` i log sesji w `plan.md`. Do tego ożył T2 kill-switcha (liczył drag
 przed fillem, więc po trzech realnych fillach stał na 0,0), rekoncyliacja jest
 fail-closed w obie strony, a stan w DynamoDB ma warunkowy zapis.
 
@@ -35,11 +46,13 @@ strategia.
 
 | Sytuacja | Zachowanie |
 |---|---|
+| **przed pierwszym POST** (od 2026-09-16) | pytamy giełdę o `origClientOrderId`; jeśli zlecenie już jest — przejmujemy je, **żadnego POST** |
 | POST odpowiada | to jest fill |
 | timeout / 5xx | pytamy giełdę o `origClientOrderId`; jeśli zlecenie jest — jego fill jest odpowiedzią, **żadnego drugiego zlecenia** |
 | timeout, a giełda mówi „nie ma takiego zlecenia" (-2013) | resend **raz**, z tym samym id |
 | dwa razy bez odpowiedzi | `OrderSubmissionUncertain` — run pada, alarm, zero zgadywania |
-| odrzucenie „duplikat" | pytamy giełdę; jeśli ma zlecenie o tym id, jego fill jest odpowiedzią |
+| odrzucenie „duplikat" | możliwe tylko, gdy zlecenie o tym id jest wciąż **otwarte**; pytamy giełdę, jego fill jest odpowiedzią |
+| zlecenie przyjęte, ale nic nie wykonane (`EXPIRED` itp., od 2026-09-16) | rekord do C3 + `OrderNotExecuted`; przejęte przy powtórce — wyjątek bez drugiego rekordu |
 | odrzucenie prawdziwe | rekord do C3 + wyjątek, jak dotąd |
 
 Identyfikator: `tpv4h-<20 znaków sha256(symbol|strona|decyzja)>` (26 znaków,

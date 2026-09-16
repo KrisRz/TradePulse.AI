@@ -73,6 +73,10 @@ _ERR_ORDER_DOES_NOT_EXIST = -2013
 #: HTTP statuses that mean "slow down" (429) or "you have been IP-banned" (418).
 _RATE_LIMITED = (429, 418)
 
+#: Terminal order states that, with nothing executed, mean the venue did not
+#: carry the order out. ``EXPIRED_IN_MATCH`` is self-trade prevention.
+_NOT_EXECUTED = frozenset({"EXPIRED", "EXPIRED_IN_MATCH", "REJECTED", "CANCELED"})
+
 #: A client order id must fit ``^[\.A-Za-z0-9_-]{1,36}$``; the prefix is the part
 #: we choose per channel, so it is kept plainly alphanumeric and short.
 _CLIENT_PREFIX_RE = re.compile(r"^[A-Za-z0-9]{1,12}$")
@@ -106,6 +110,20 @@ class OrderTooSmall(ValueError):
     Raised *before* anything is sent. The exchange would reject it as ``-1013``
     anyway; failing locally keeps the reason legible and costs no rate limit.
     """
+
+
+class OrderNotExecuted(BinanceAPIError):
+    """The venue accepted a MARKET order and executed none of it.
+
+    Binance answers such an order with HTTP 200 and a terminal status —
+    typically ``EXPIRED``, with the cause in ``expiryReason`` (its price range
+    execution rule, or no liquidity). Nothing moved, so there is no fill to book;
+    for Gate C it is a refusal like any other.
+    """
+
+    def __init__(self, status: str, msg: str, endpoint: str = "/api/v3/order") -> None:
+        self.status = status
+        super().__init__(-1, msg, None, endpoint)
 
 
 class OrderSubmissionUncertain(RuntimeError):
@@ -546,12 +564,16 @@ class BinanceDemoExecutor:
     def client_order_id(self, side: int, key: str) -> str:
         """The id this order will carry however many times it is sent.
 
-        Binance enforces uniqueness of ``newClientOrderId`` per symbol, so an id
-        derived from *what the order is* rather than *when it was sent* makes the
-        exchange itself the duplicate guard: a resubmit — ours, the Lambda's or
-        the scheduler's — is refused instead of opening a second position. The
-        key is the decision (normally the bar), so one bar can produce at most
-        one BUY and one SELL, forever.
+        Derived from *what the order is* rather than *when it was sent*, so a
+        repeat of the same decision — ours, the Lambda's or the scheduler's —
+        can ask the venue about the order it may already have placed. The key is
+        the decision (normally the bar), so one bar names at most one BUY and one
+        SELL, forever.
+
+        The venue does NOT refuse the repeat on its own. Binance accepts a reused
+        ``newClientOrderId`` once the earlier order has filled (Spot REST API,
+        ``POST /api/v3/order``), and a MARKET order fills at once. The id is only
+        a guard because :meth:`_submit` looks it up before sending anything.
 
         Hashed rather than spelled out because a bar timestamp contains spaces
         and colons, which the venue's id alphabet does not allow.
@@ -673,18 +695,88 @@ class BinanceDemoExecutor:
 
     def _submit(self, params: dict[str, Any], client_order_id: str,
                 order: Order, qty: Decimal) -> dict[str, Any]:
-        """Send the order once, and let the venue settle anything ambiguous.
+        """Send the order unless the venue already has it; settle anything ambiguous.
+
+        The venue is asked FIRST, by ``origClientOrderId``. That question is the
+        duplicate guard, and nothing else is: Binance refuses a reused id only
+        while the earlier order is still open, and a MARKET order is filled the
+        moment it is accepted. A run repeating a decision whose order already
+        executed — a scheduler retry, a save that never landed — would otherwise
+        be handed a second position by the venue without complaint. If the
+        question cannot be answered, nothing is sent.
+
+        An order found this way is returned as it stands. If it executed nothing,
+        the run that submitted it has already counted the refusal, so it is
+        raised here without being counted again.
+        """
+        existing = self.lookup_order(client_order_id)
+        if existing is not None:
+            logger.warning("venue already holds %s (%s) — using its own copy instead "
+                           "of sending the order again",
+                           client_order_id, existing.get("status"))
+            reason = self._not_executed(existing)
+            if reason:
+                raise OrderNotExecuted(str(existing.get("status", "")), reason)
+            return existing
+
+        response = self._send_new_order(params, client_order_id, order, qty)
+        reason = self._not_executed(response)
+        if reason:
+            self._record_rejection(order, qty, client_order_id, code=None,
+                                   message=reason, http_status=None,
+                                   status=str(response.get("status", "")))
+            raise OrderNotExecuted(str(response.get("status", "")), reason)
+        return response
+
+    @staticmethod
+    def _not_executed(response: dict[str, Any]) -> Optional[str]:
+        """Why an accepted order moved nothing, or ``None`` if it moved something.
+
+        A partial execution is not this case: it is a fill, and Gate C's C4
+        counts it. Only a terminal status with zero executed quantity is.
+        """
+        status = str(response.get("status", ""))
+        if status not in _NOT_EXECUTED:
+            return None
+        if Decimal(str(response.get("executedQty", "0") or "0")) > 0:
+            return None
+        cause = response.get("expiryReason")
+        return (f"MARKET order {response.get('orderId')} came back {status} "
+                f"with nothing executed" + (f" ({cause})" if cause else ""))
+
+    def _record_rejection(self, order: Order, qty: Decimal, client_order_id: str, *,
+                          code: Optional[int], message: str,
+                          http_status: Optional[int], status: str = "") -> None:
+        # Gate C criterion C3 counts venue refusals against submissions. Only an
+        # order this run submitted belongs here — errors from public GETs (rules,
+        # mark price) never do.
+        record = {
+            "time": order.time,
+            "side": order.side,
+            "requested_qty": float(qty),
+            "reference_price": order.reference_price,
+            "client_order_id": client_order_id,
+            "code": code,
+            "message": message,
+            "http_status": http_status,
+        }
+        if status:
+            record["status"] = status
+        self._rejections.append(record)
+
+    def _send_new_order(self, params: dict[str, Any], client_order_id: str,
+                        order: Order, qty: Decimal) -> dict[str, Any]:
+        """One POST, and the venue's word on anything it did not answer clearly.
 
         Three outcomes are possible and only one of them is "rejected":
 
-        * the submit answers — that is the fill;
+        * the submit answers — that is the order;
         * the submit fails ambiguously (timeout, 5xx) — the order may be live, so
           the venue is asked by ``origClientOrderId`` before anything else, and
           only if it truly never arrived is it sent again, with the same id;
-        * the venue refuses it — if it refuses because it already holds an order
-          with this id, then this run is a repeat of one that already traded and
-          that existing fill is the honest answer; anything else is a real
-          rejection and propagates.
+        * the venue refuses it — if it refuses because an order with this id
+          appeared since the lookup (it would have to still be open), that order
+          is the honest answer; anything else is a real rejection and propagates.
 
         The duplicate case is not detected by parsing the error message. The
         venue is asked instead: "duplicate" and "insufficient balance" arrive as
@@ -718,19 +810,8 @@ class BinanceDemoExecutor:
                 logger.warning("venue already holds %s (%s) — using its own copy "
                                "instead of trading again", client_order_id, exc)
                 return existing
-            # Gate C criterion C3 counts venue rejections against submissions.
-            # Only a failed order POST is a rejection — errors from public GETs
-            # (rules, mark price) never reach this handler.
-            self._rejections.append({
-                "time": order.time,
-                "side": order.side,
-                "requested_qty": float(qty),
-                "reference_price": order.reference_price,
-                "client_order_id": client_order_id,
-                "code": exc.code,
-                "message": exc.msg,
-                "http_status": exc.http_status,
-            })
+            self._record_rejection(order, qty, client_order_id, code=exc.code,
+                                   message=exc.msg, http_status=exc.http_status)
             raise
 
     def _settle_uncertain_submit(self, params: dict[str, Any], client_order_id: str,
