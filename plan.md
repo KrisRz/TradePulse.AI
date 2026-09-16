@@ -106,10 +106,113 @@ ale prowizja 0,40/0,80%: bot 1d przeżywa, kanał 4h nie.
 10. **Testy:** 471 → **521**. Wszystko na gałęzi `session/gate-eval-20260916`,
     zacommitowane, bez pusha i bez PR (decyzja usera).
 
-**Przy następnym otwarciu sprawdzić najpierw:**
-- czy kanał 4h zrobił pierwsze kupno na księdze v2 (log: „submitting BUY … USDT of”;
-  fill-log: `requested_quote`, `fee_quote_values`);
-- potem `gate --fidelity --pk BTCUSDT_4h` i `--cost-fidelity`.
+**Przy następnym otwarciu:** patrz sekcja „▶ NASTĘPNA SESJA” niżej.
+
+---
+
+## ▶ NASTĘPNA SESJA — od czego zacząć, co sprawdzić, co robić, na co uważać
+
+> Spisane 2026-09-16 na koniec sesji. Czas: user jest w BST (= UTC+1). Kanał 4h
+> odpala o :10 UTC co 4 h (01:10, 05:10, 09:10 … BST), bot 1d o 00:10 UTC,
+> heartbeat o 00:25 UTC.
+
+### 0. Zanim cokolwiek zmienisz — gałąź (NAJWAŻNIEJSZE)
+
+- Cała praca z 16.09 leży na **`session/gate-eval-20260916`**: 17+ commitów, **bez pusha
+  i bez PR** (decyzja usera). **`main` jej nie ma**, a produkcja (venue-4h, shadow,
+  strona) już chodzi na tym kodzie.
+- 🔴 **Nie buduj zipów ani nie deployuj z `main`**, bo po cichu cofniesz
+  idempotencję i księgę v2 na produkcji.
+- **Pierwsze pytanie do usera:** robimy teraz push + PR tej gałęzi (i merge), czy
+  pracujemy dalej na niej? Reguła: jeden PR na sesję. Nowa gałąź dopiero z `main`
+  po merge'u.
+
+### 1. Sprawdzić (kolejno, ~15 min, wszystko tylko odczyt)
+
+1. **Zdrowie Lambd.** Oczekiwane `CodeSha256`:
+   - M5 (`tradepulse-paper-bot`, `-status`): `r8LuxnoJgluluwOEuPP6tk5nRDrhpjNq4emap/stNq0=` — **inna wartość = STOP, powiedz userowi**;
+   - `tradepulse-venue-4h`: `VEyzVhC4bFcjXYhRmtPH1kZc4GFXso2wWN9Wr9yBHwE=`;
+   - `tradepulse-shadow-bot`: `4iIaTjkWqkNoNHaBgWQgI8vQRySiK57ThVuG/U/lojU=`;
+   - `tradepulse-site-status`: `Dx/BXSGDJpXs1uOJYMsH0A6l8o8FFWRbfUjZdPzmvrs=`.
+
+   Pętla jest w „Protokole wznowienia” niżej; dodaj `tradepulse-site-status`.
+2. **Alarmy i harmonogramy:** 10/10 `OK`, 3/3 `ENABLED`. Błędy i wywołania liczone
+   od 2026-09-16 20:14 UTC (venue: 6 dziennie, shadow i 1d: po 1).
+3. **Kill-switch 4h:**
+   `PAPER_STATE_BACKEND=dynamodb AWS_DEFAULT_REGION=eu-west-2 .venv/bin/python -m app.backend.paper_trading.run killswitch --timeframe 4h`.
+   Jeśli `halted: true`, to najpewniej T1 (DD > 25%). To **oczekiwane przy zwykłym
+   spadku** (decyzja 16.09). Przeczytaj powód, sprawdź pozycję u źródła i wznów
+   świadomie wg `docs/RUNBOOK.md`; nie „naprawiaj” progu.
+4. **Pozycja u źródła** (konto demo): saldo BTC = 0,05 + ilość z księgi, 0 otwartych
+   zleceń. Porównaj z `/api/state` (`venue.qty`, `cash`).
+5. **🆕 Czy kanał 4h zrobił pierwsze kupno na księdze v2?** Jeśli tak, sprawdź:
+   - log Lambdy: `submitting BUY <kwota> USDT of BTCUSDT` (kwota ≈ gotówka księgi,
+     przy starcie 231,48);
+   - fill-log (`fill#…` w DynamoDB): `requested_quote`, `fees`, `fee_quote_values`
+     wypełnione, `requested_qty` puste;
+   - księga: `cash` ≈ 0 (reszta < 1 lot), `fees_converted` rośnie, `fees_external`
+     stoi na 0,00139981 BNB (historyczne);
+   - `gate --source dynamodb --fidelity --pk BTCUSDT_4h` → **PASS** (replay przez fille,
+     także z wycenioną prowizją);
+   - `gate --source dynamodb --cost-fidelity` → C4 i C5 bez FAIL (C4 dla kupna za
+     kwotę toleruje jeden lot niewydanej gotówki).
+
+   Jeśli kupna nie było: nic do sprawdzenia, kanał czeka na sygnał.
+6. **Bramki:** `gate --source dynamodb` (B 1d), `--fidelity` (A 1d), `--pk BTCUSDT_4h`
+   (B 4h, tylko poglądowo), `--cost-fidelity` (C).
+7. **Testy:** `.venv/bin/pytest app/backend/tests/ -q` → **521 passed** (lub więcej).
+
+### 2. Co robić (kolejność)
+
+1. **Jeśli było kupno na księdze v2** — punkt 1.5 do końca, wynik zapisać w statusie.
+2. **Kandydat #12 — wielkość pozycji wg zmienności z pasmem bez handlu (cel: DD ≤ 25%).**
+   - **Najpierw pre-rejestracja** (`docs/VOLBAND_DESIGN_<data>.md`), **commit PRZED
+     jakimkolwiek wynikiem**. Tak samo jak #10 i #11.
+   - **Punkt wyjścia:** `scripts/research/vol_targeting_study.py` (kandydat #1, M4/F2).
+     Liczy na poziomie zwrotów z ułamkową wagą, bo silnik i księga znają tylko 0/1.
+     #1 odpadł, bo spadł Sharpe po 2022 i podwoił się obrót. Pasmo ma ograniczyć
+     obrót: zmiana wagi tylko, gdy odchylenie od celu > X.
+   - **Metryka pierwotna** (decyzja 16.09): **odsetek kroczących okien 365/730 dni
+     z DD ≤ 25%**, liczony jak w `scripts/research/gate_b_power.py`. Wtórne:
+     Sharpe ≥ baza − 0,10, bije B&H, obrót. Parametry (cel zmienności, szerokość
+     pasma) jako **mała siatka ustalona z góry**, z wymogiem pasma sąsiednich
+     wartości (lekcja #9/#10). DSR liczyć inaczej niż z wariancji siatki (lekcja #10):
+     SPA z `arch` albo wprost N prób.
+   - **Konsekwencja akceptacji:** potrzebna obsługa ułamkowej pozycji w silniku,
+     księdze i executorze. Po księdze v2 venue jest na to gotowe
+     (`quote_budget = cash × waga`). M5 (1d) nietykalne, więc test na kanale 4h
+     demo, z osobną pre-rejestracją okna.
+3. **Ocena bramek 2026-10-08** (cykl 28 dni): uruchomić obecnym kodem, raport
+   `docs/GATE_EVAL_2026-10-08.md`. Spodziewane: B `INCONCLUSIVE_EXTEND` (bot 1d bez
+   zamkniętych transakcji). Od tej oceny B5–B7 formalnie wiążą; w kodzie działają już.
+4. **Opcjonalnie:** retro SPA (`arch`) na 11 dotychczasowych próbach — ile przewagi
+   bazy przetrwa wielokrotne testowanie.
+
+### 3. Na co zwrócić uwagę (pułapki, które już raz ugryzły)
+
+- **M5 nietykalne:** zipy tylko `build_lambda_package.sh --venue-4h` / `--shadow`.
+  `ignore_changes` chroni Lambdy M5; przy M6 usunąć go świadomie.
+- **Terraform:** zawsze `plan -target=… -out=tfplan` → `apply tfplan`. Po apply
+  porównać `CodeSha256` i env **poza** terraformem. Stare `tfplan` usuwać.
+- **Pre-rejestracja:** projekt w commicie przed wynikiem. Progów bramki B nigdy nie
+  luzować; zmiana progu DD = nowa pre-rejestracja i decyzja usera.
+- **„Przesłanka przeszła” ≠ „kandydat przejdzie”** (#9, #10). Dywersyfikacja altami
+  pogłębia DD (#11). Szukamy niższego DD, nie trafniejszych wejść.
+- **Giełda nie jest strażnikiem duplikatów:** Binance przyjmuje powtórzone
+  `newClientOrderId` po wypełnieniu. Chroni nas lookup przed wysłaniem i skan sierot.
+- **Demo ≠ rynek:** poślizg 0,00% na demo nie przenosi się na live.
+- **Historia alarmów CloudWatch = 30 dni.** Twierdzenia „nic nie odpaliło od X”
+  starsze niż 30 dni opierać na metrykach (`Errors`, `KillSwitchHalts`).
+- **Research:** skrypty w `scripts/research/` uruchamiać z `PYTHONPATH=.`; dane tylko
+  `< 2026-07-16`. Fold-stitching zawyża Sharpe'a, więc parametry stałe liczyć ciągłym
+  przebiegiem.
+- **zsh:** zmienna bez cudzysłowu się nie rozbija (`${=var}`); nie ma `timeout`.
+- **Przeglądarka:** karta automatyzacji jest `document.hidden`, więc animacje
+  `.reveal` i WebSocket strony nie ruszają; `resize_window` nie działa; strona ma
+  `frame-ancestors 'none'`; JS jest w cache 1 h. Szczegóły w pamięci `portfolio-site`.
+- **Konto LIVE Binance:** nic nie klikamy, żadnych zleceń, żadnych zmian ustawień
+  (Activate sub-kont, Default Security Controls) bez wyraźnej zgody usera.
+- **Sekrety:** klucze demo z SSM prosto do procesu, nigdy na ekran ani do repo.
 
 ---
 
@@ -751,10 +854,13 @@ docs/MEAN_REVERSION_2026-08-08.md).
    „od czego zacząć" jest tam — nie pytaj o nią usera.
 2. **Zacznij z `main`** (`git pull`), zrób nowy feature branch. PR dopiero na
    końcu zadania; **user mergeuje ręcznie**, ja nie mergeuję.
+   ⚠️ **Wyjątek (stan 2026-09-16):** jeśli poprzednia gałąź sesji nie jest jeszcze
+   w `main` (patrz „▶ NASTĘPNA SESJA”, punkt 0), najpierw ustal z userem push/PR —
+   produkcja chodzi na kodzie z tamtej gałęzi.
 3. **Sprawdź zdrowie** przed zmianami — 4 Lambdy jedną pętlą:
    ```bash
    for f in tradepulse-paper-bot tradepulse-paper-bot-status \
-            tradepulse-shadow-bot tradepulse-venue-4h; do
+            tradepulse-shadow-bot tradepulse-venue-4h tradepulse-site-status; do
      printf "%-32s " $f
      aws lambda get-function-configuration --function-name $f \
        --region eu-west-2 --query '[State,CodeSha256]' --output text
