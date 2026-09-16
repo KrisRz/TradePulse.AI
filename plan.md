@@ -74,6 +74,15 @@ Zrobione 2026-09-16 — **`docs/GATE_EVAL_2026-09-16.md`** (branch `session/gate
   zbędny, UI odpowiada. **Sub-konta dostępne** dla zwykłych użytkowników (FAQ z
   03.09: KYC + 2FA, do 5), na koncie jest przycisk Activate (nie klikany). Konto
   LIVE: Regular, 0,10%/0,10%, **BNB Fee Discount OFF**, 0 BNB, 0 kluczy API.
+- 📒 **KSIĘGA v2 (audyt §10 KROK 3) ZROBIONA I WDROŻONA 20:14 UTC** (venue
+  `VEyzVhC4…`, shadow `4iIaTjkW…`, M5 nietknięte, `-target`, sufit zlecenia
+  200 → 1000, kapitał 200 bez zmian): long kupowany za **gotówkę księgi**
+  (`quoteOrderQty`, więc kanał reinwestuje jak backtest), prowizja BNB **wyceniana
+  przy fillu i odliczana od wyniku**, resztki BTC nie znikają, prowizje per aktywo.
+  Mutacje 8/8, złoty wzorzec 11/11, replay E1 prawdziwej księgi 246/246. Na żywo:
+  wymuszony heartbeat kupił za `origQuoteOrderQty` 10 USDT, prowizja
+  2,064e-5 BNB = 0,01485 USDT zaksięgowana (u źródła 0,014854), konto flat.
+  Pierwsze prawdziwe kupno kanału 4h wyda całą gotówkę (231,48), gdy przyjdzie sygnał.
 - 🔬 **Kandydat #11 (ta sama reguła na koszyku 8 majorsów) ODRZUCONY** — koszyk
   POGŁĘBIA drawdown (U8 −79%, U6 −59% vs BTC −50%); alty w tej regule −63…−93%,
   DOGE w szczycie = 77% portfela. **Bilans 11/11.** `docs/PORTFOLIO_RESULTS_2026-09-16.md`.
@@ -436,10 +445,10 @@ Zmierzone po kursach BNB z chwili każdego filla:
 - [x] ~~`./scripts/deploy_site.sh`~~ — strona wdrożona 2026-09-05 19:52 UTC
       (`last-modified` z CloudFronta).
 
-**1. KSIĘGA v2 (audyt §10 KROK 3)** — E1 jest gotowe, blokada zdjęta. Kolejność:
-zamroź złoty wzorzec → sizing z `book.cash` (cap `max_notional`) → prowizja BNB do
-equity po kursie z chwili filla → resztka qty → `gate --fidelity --pk BTCUSDT_4h`
-musi dalej dawać PASS (po przeliczeniu historii nową arytmetyką) → deploy venue.
+**1. ~~KSIĘGA v2~~ — ZROBIONA 16.09** (patrz STATUS). Do obejrzenia przy następnym
+otwarciu: pierwsze kupno kanału 4h na nowym kodzie (w logu „submitting BUY 231.48
+USDT of", w fill-logu `requested_quote`, `fee_quote_values`), potem
+`gate --fidelity --pk BTCUSDT_4h` i `--cost-fidelity` — oba muszą przejść.
 
 **2. RESEARCH „TRAFNIEJ"** (M5-safe): ~~#10 histereza~~ **ODRZUCONA 16.09**.
 Dalej: pre-rejestracja #11 portfel 8 majorsów (cel = płytszy DD, nie Sharpe; wariant
@@ -2176,3 +2185,9 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   gotówki przeszła (flat 43–47% czasu). W UI konta LIVE: brak par USDT, Simple Earn
   tylko USDC, baner MiCA o braku nowych zleceń spot od 01.07 → M6 venue do
   wyjaśnienia przez usera.
+- 2026-09-16 (cd. 4) — KSIĘGA v2 wdrożona. Run 20:10 UTC na kodzie z 16:31: held,
+  0 błędów, skan sierot czysty. Potem KROK 3: kupno za gotówkę księgi
+  (`quoteOrderQty`), prowizja BNB wyceniona i odliczona, resztki i prowizje per
+  aktywo; C4 i E1 rozumieją nowe pola; Terraform rozdziela kapitał (200) od sufitu
+  (1000). Mutacje 8/8, suite 521, wymuszony heartbeat zgodny u źródła co do prowizji.
+  User: zostajemy na demo Binance i dopracowujemy bota i strategię.
