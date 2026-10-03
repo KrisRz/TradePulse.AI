@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-09-16**
+> Ostatnia aktualizacja: **2026-10-03** (check-up stanu bota, sekcja „📊 STAN BOTA 2026-10-03”)
 
 ---
 
@@ -21,6 +21,97 @@
 > Nie pytaj „od czego zacząć" — odpowiedź jest tu. Wykonaj protokół i ruszaj.
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
+
+---
+
+## 📊 STAN BOTA 2026-10-03 (check-up, tylko odczyt, dzień 79 okna M5)
+
+**Zdrowie — wszystko zielone:**
+- 5/5 Lambd `Active`, `CodeSha256` zgodne z listą w „▶ NASTĘPNA SESJA” (M5
+  `r8Luxno…tNq0=` nietknięte, venue `VEyzVh…`, shadow `4iIaTj…`);
+- 10/10 alarmów `tradepulse-*` OK, 3/3 harmonogramy `ENABLED`;
+- od deployu 16.09 20:14 UTC: venue 101/101 wywołań, bot 1d 17/17, shadow 17/17,
+  **0 błędów**;
+- kill-switch 4h `halted: false`, 0 re-armów;
+- testy **521 passed**.
+
+**Bot 1d (M5, EMA20/100):**
+- LONG od 22.08, 0 zamkniętych transakcji;
+- equity $10 952,54 (**+9,53%**), maxDD −6,92%;
+- B&H w oknie **+30,20%**, więc bot zostaje w tyle (wszedł późno w rajd, typowe dla
+  trendu);
+- bramka A **PASS 6/6** (80 barów co do centa);
+- bramka B `INCONCLUSIVE_EXTEND` (0 RT); B5/B6/B7 niespełnione.
+
+**Kanał 4h (demo Binance, księga v2):**
+- ✅ **Pierwsze kupno na księdze v2 zrobione** (bar 2026-09-18 16:00, zlecenie
+  65867104624). Punkt 1.5 z „▶ NASTĘPNA SESJA” sprawdzony:
+  - `requested_quote` 231,47, `requested_qty` puste;
+  - prowizja 0,00022662 BNB wyceniona na 0,1733 USDT;
+  - `cash` 0,41 (< 1 lot), `fees_external` stoi na 0,00139981 BNB.
+- Pozycja: LONG 0,00285 BTC po 81 016,44; cena na barze 12:00 UTC 84 867,28.
+- Equity **242,28 (+21,14%)**, szczyt 250,40 (−3,2% od szczytu), maxDD −8,58%.
+  B&H w oknie +31,37%.
+- 3 zamknięte RT, PF 5,96.
+- Bramka A 4h (replay przez fille) **PASS 6/6**, 348 barów, 3 RT.
+- Bramka C `COLLECTING` **7/20**, wszystkie C1–C5 PASS; C5: 6 filli zgodnych z
+  saldem giełdy, 1 historyczny bez zrzutu salda.
+- B 4h (poglądowo) `FAIL` tylko na `fee_drag` — znany, nieinterpretowalny odczyt
+  księgi ilościowej.
+  - ⚠️ Do poprawy przy okazji: komunikat w `gate.py:355` („fees are booked outside
+    equity”) jest od 16.09 nieaktualny dla filli v2, bo te mają prowizję w equity.
+    Księga jest mieszana (stare BNB ~$1 poza equity), więc samo `FAIL` zostaje
+    zasadne.
+- `venue.last_order_id` (69791541178) > ostatni fill: to normalne, bo znacznik
+  skanu sierot przesuwa się też po zleceniach heartbeatu (`venue_handler.py:214`).
+
+**Co z tego wynika:**
+- Mechanika działa: zero błędów, replay co do centa, koszty zgodne.
+- Strategia w tym oknie nie bije B&H. Na rosnącym rynku to oczekiwane — przewagą ma
+  być płytszy DD przy spadkach, a tego to okno jeszcze nie sprawdziło.
+- Dalej: ocena bramek **2026-10-08** + kandydat **#12**, bez zmian w kolejności.
+
+### 🏷️ Tagi AWS i śledzenie kosztów (zrobione 2026-10-03)
+
+- Schemat: `Project=tradepulse` + `Stack` + `ManagedBy`. Terraform nadaje go przez
+  `default_tags` w `infra-serverless/` i `infra-site/` (od początku).
+- Ręcznie dotagowane (`ManagedBy=manual`), bo powstały poza Terraformem:
+  - 4 parametry SSM `/tradepulse/...`;
+  - bucket `tradepulse-tfstate-590183672693`;
+  - budżet `monthly-tradepulse-limit`.
+
+  Nowy zasób zakładany ręcznie trzeba otagować tak samo.
+- `Project` i `Stack` **włączone jako cost allocation tags** (całe konto). W Cost
+  Explorerze: Group by → Tag → Project. Dane liczą się od 2026-10-03 i pojawiają
+  się z ~24 h opóźnieniem.
+- Weryfikacja: `aws resourcegroupstaggingapi get-resources --tag-filters
+  Key=Project,Values=tradepulse` → 31 zasobów w eu-west-2 + 7 w us-east-1.
+  Kod Lambd M5 bez zmian (`r8Luxno…`).
+- ⚠️ Budżet `monthly-tradepulse-limit` ($50) **nie ma filtra**, więc pilnuje całego
+  konta, nie TradePulse. **Decyzja usera 2026-10-03: zostaje tak, jak jest.**
+
+### 🔭 Na przyszłość — zewnętrzne źródła (ocenione 2026-10-03)
+
+Ocenione na prośbę usera. Zapisane tylko to, co może się przydać:
+- **Do zmierzenia jako nowy kandydat, dopiero po #12** (wg reguł researchu:
+  pre-rejestracja, przesłanka najpierw):
+  - **dzienne przepływy do spot-ETF-ów BTC** (np. IBIT): dane dzienne, bez 45 dni
+    opóźnienia. Hipoteza do sprawdzenia: czy przepływy wyprzedzają cenę, czy tylko
+    za nią idą;
+  - **publiczne portfele na Hyperliquid / on-chain** (widać pozycje dużych graczy
+    na żywo). Uwaga na survivorship: wybieramy portfele, które już wygrały.
+- **Darmowe źródła, gdyby kiedyś powstał osobny eksperyment na akcjach**
+  (nie dla bota BTC; Binance nie ma akcji):
+  - transakcje polityków USA: rejestry Izby/Senatu, do 45 dni opóźnienia;
+  - insiderzy: SEC EDGAR Form 4, 2 dni robocze;
+  - fundusze: SEC EDGAR 13F, do 45 dni po kwartale.
+
+  QuiverQuant ($25–62,50/mies., API płatne) tylko to agreguje. Dowody za kopiowaniem
+  Kongresu są mieszane (Eggers–Hainmueller 2004–08: −2–3%/rok; ETF NANC lekko nad
+  S&P, GOP/KRUZ pod).
+- **Odrzucone:** Liquid (liquid.trade) — nakładka na perpsy z dźwignią
+  (Hyperliquid/Ostium), „akcje” to syntetyki, brak licencji, FCA zakazuje retailowi
+  derywatów krypto. Dźwignia pogłębia DD, czyli działa wbrew celowi.
 
 ---
 
@@ -145,7 +236,7 @@ ale prowizja 0,40/0,80%: bot 1d przeżywa, kanał 4h nie.
    świadomie wg `docs/RUNBOOK.md`; nie „naprawiaj” progu.
 4. **Pozycja u źródła** (konto demo): saldo BTC = 0,05 + ilość z księgi, 0 otwartych
    zleceń. Porównaj z `/api/state` (`venue.qty`, `cash`).
-5. **🆕 Czy kanał 4h zrobił pierwsze kupno na księdze v2?** Jeśli tak, sprawdź:
+5. **✅ ZROBIONE 2026-10-03 — pierwsze kupno na księdze v2 (bar 18.09 16:00) sprawdzone, wynik w „📊 STAN BOTA 2026-10-03”.** Przy kolejnym kupnie/sprzedaży powtórz te same kontrole:
    - log Lambdy: `submitting BUY <kwota> USDT of BTCUSDT` (kwota ≈ gotówka księgi,
      przy starcie 231,48);
    - fill-log (`fill#…` w DynamoDB): `requested_quote`, `fees`, `fee_quote_values`
@@ -164,7 +255,7 @@ ale prowizja 0,40/0,80%: bot 1d przeżywa, kanał 4h nie.
 
 ### 2. Co robić (kolejność)
 
-1. **Jeśli było kupno na księdze v2** — punkt 1.5 do końca, wynik zapisać w statusie.
+1. ~~Jeśli było kupno na księdze v2~~ — ✅ zrobione 2026-10-03 (pierwsza SPRZEDAŻ na v2 będzie następną rzeczą do sprawdzenia tą samą listą).
 2. **Kandydat #12 — wielkość pozycji wg zmienności z pasmem bez handlu (cel: DD ≤ 25%).**
    - **Najpierw pre-rejestracja** (`docs/VOLBAND_DESIGN_<data>.md`), **commit PRZED
      jakimkolwiek wynikiem**. Tak samo jak #10 i #11.
@@ -2399,3 +2490,9 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   pierwotne DD ≤ 25% (mediana DD 26% / 41%), B6 to prawie rzut monetą. User wybrał:
   progi bez zmian, demo, cel strategii = DD ≤ 25%. Aneks w pre-rejestracji,
   `scripts/research/gate_b_power.py`.
+- 2026-10-03 — CHECK-UP + TAGI AWS. Wszystko zielone: 0 błędów od 16.09, sha M5
+  nietknięte, A PASS (1d i 4h), C 7/20 bez odrzuceń, 521 testów. Pierwsze kupno 4h na
+  księdze v2 (18.09) sprawdzone u źródła. Bot 1d +9,53%, kanał 4h +21,14%, B&H ok. +30%.
+  Tagi `Project=tradepulse` dołożone ręcznie zasobom spoza Terraformu, `Project`
+  i `Stack` włączone jako cost allocation tags; budżet konta bez zmian (user). Research
+  Liquid/QuiverQuant: nic dla bota BTC; dwa pomysły zapisane na po #12.
