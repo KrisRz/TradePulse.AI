@@ -1702,7 +1702,7 @@ CHANNELS = {
         "dlq": "tradepulse-paper-kraken-scheduler-dlq",
         "alarms": ["tradepulse-paper-kraken-errors",
                    "tradepulse-paper-kraken-no-invocation",
-                   "tradepulse-paper-kraken-scheduler-dlq",
+                   "tradepulse-paper-kraken-dlq",
                    "tradepulse-paper-kraken-killswitch"],
         "extra_metrics": (("TradePulse/paper-kraken", "KillSwitchHalts"),),
         "window_start": None,

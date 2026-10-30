@@ -10,6 +10,7 @@
 #   scripts/build_lambda_package.sh            -> dist/paper_bot_lambda.zip
 #   scripts/build_lambda_package.sh --shadow   -> dist/shadow_bot_lambda.zip
 #   scripts/build_lambda_package.sh --venue-4h -> dist/venue_4h_lambda.zip
+#   scripts/build_lambda_package.sh --kraken-paper -> dist/kraken_paper_lambda.zip
 #
 # Why the --shadow variant exists, when the CONTENTS are identical:
 # `aws_lambda_function.paper_bot` keys its deployment off
@@ -31,6 +32,10 @@ case "${1:-}" in
   --venue-4h)
     BUILD="$ROOT/dist/venue_4h_build"
     ZIP="$ROOT/dist/venue_4h_lambda.zip"
+    ;;
+  --kraken-paper)
+    BUILD="$ROOT/dist/kraken_paper_build"
+    ZIP="$ROOT/dist/kraken_paper_lambda.zip"
     ;;
 esac
 
