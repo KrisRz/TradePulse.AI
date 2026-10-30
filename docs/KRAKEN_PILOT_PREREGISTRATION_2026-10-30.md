@@ -20,7 +20,10 @@ zamknięciu baru 1d (UTC).
 ## Etap 1 — paper na Krakenie (nowy zegar)
 
 - Ceny: publiczne OHLC Krakena **XBT/GBP 1d**.
-- Konto wirtualne **£200**. Bot dostaje `w × equity` konta, reszta to gotówka (0%).
+- Konto wirtualne **£200**. Bot trzyma **`w = 0,5` konta z pasmem `b = 0,15`**: przy wejściu
+  inwestuje połowę, a gdy udział BTC wyjdzie poza 0,35–0,65, wraca do 0,5.
+  Reszta to gotówka (0%). Podstawa: `docs/KRAKEN_SIZING_RESULTS_2026-10-30.md`.
+  Samo „połowa przy wejściu” nie spełnia limitu (zmierzone).
 - Koszt: **0,80% taker na stronę** plus zmierzony poślizg. Projekt venue liczył
   0,80%, więc pilot handluje zleceniami rynkowymi (taker). Post-only (0,40%) to
   osobne usprawnienie po pilocie, z własnym dowodem, bo dokłada ryzyko braku
@@ -49,8 +52,8 @@ dowód przewagi. Dowodem przewagi pozostaje bramka B.
 
 ## Etap 2 — pilot (prawdziwe pieniądze)
 
-- Kapitał: wpłata usera, około £200. Bot dostaje `w = 0,5` equity konta w chwili
-  wejścia, nigdy więcej (twardy budżet w executorze).
+- Kapitał: wpłata usera, około £200. Bot trzyma `w = 0,5` equity konta z pasmem
+  `b = 0,15`, nigdy więcej niż 0,65 (twardy budżet w executorze).
 - **Kill-switch konta:** equity konta ≤ 75% swojego szczytu → zamknięcie pozycji,
   stop bota, alarm. Ponowne uzbrojenie wyłącznie świadome, zgodnie z
   `docs/RUNBOOK.md`.
