@@ -56,7 +56,7 @@ potrzebne dopiero do pilota (warunek P4).
 | Harmonogram `tradepulse-paper-kraken-daily` | ✅ `cron(10 0 * * ? *)`: 00:10 UTC (00:10 GMT, 01:10 BST) |
 | Alarmy | ✅ `-errors`, `-no-invocation`, `-dlq`, `-killswitch` (metric filter `KILL SWITCH:` → `TradePulse/paper-kraken/KillSwitchHalts`) |
 | DynamoDB `tradepulse_paper_bot`, pk `XBTGBP_1d` | ✅ pierwsza decyzja: bar 2026-10-29, LONG po £58 128,8, equity £199,18 |
-| Dead-man ping | ⚠️ **wyłączony**: brak parametru SSM `/tradepulse/healthcheck/paper-kraken`. User: utworzyć check w healthchecks.io (okres 25 h, grace 2 h) i wpisać URL do SSM. Bot działa i bez tego. |
+| Dead-man ping | ✅ **działa od 2026-10-30**: check `tradepulse-paper-kraken` w healthchecks.io (okres 1 dzień, grace 2 h, alert mailem), URL w SSM `/tradepulse/healthcheck/paper-kraken` (SecureString). Ping sprawdzony: „Last Ping: now”. |
 | Executor Krakena (zlecenia, pilot) | **do zbudowania**, dopiero przed pilotem |
 | SSM: klucz pilota | **brak**, user zakłada przy pilocie |
 

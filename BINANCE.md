@@ -28,7 +28,7 @@ kanały demo według listy na dole.
 | Lambda `tradepulse-shadow-bot` | Heartbeat: codzienne mini zlecenie $10 na demo | demo API + klucze `/tradepulse/demo`, prefiks `tpsh-` | 00:25 UTC |
 | Lambda `tradepulse-paper-bot-status`, `tradepulse-site-status` | Status dla strony | DynamoDB, nie Binance | na żądanie |
 | DynamoDB `tradepulse_paper_bot` | Stan i dziennik decyzji | pk `BTCUSDT_1d`, `BTCUSDT_4h` (+ shadow) | — |
-| SSM `/tradepulse/healthcheck/{venue-4h,shadow}` | Dead-man ping (healthchecks.io) | — | — |
+| SSM `/tradepulse/healthcheck/{venue-4h,shadow}` | Dead-man ping (healthchecks.io) — ⚠️ **nigdy nie działał**: oba parametry zawierają placeholder `https://hc-ping.com/...`, healthchecks.io odpowiada HTTP 400, a stary `deadman.ping` logował to jako „sent (ok)” (wykryte 2026-10-30, kod naprawiony, w tych Lambdach stara wersja). Checków dla tych kanałów nie ma w koncie healthchecks.io. Nie zakładamy ich: kanały idą do wygaszenia. | — | — |
 | 10 alarmów `tradepulse-*` | Błędy, brak wywołań, DLQ, kill-switch 4h | — | 2026-10-30: wszystkie OK |
 | Strona tradepulseai.co.uk | Pokazuje kanały demo Binance | — | do poprawy przy wygaszaniu |
 
