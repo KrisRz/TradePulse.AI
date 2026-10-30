@@ -22,6 +22,10 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
+> 🗺️ **Giełdy (od 2026-10-30):** wszystko o kontach, kluczach, zasobach i decyzjach
+> per giełda jest w [`KRAKEN.md`](KRAKEN.md) (giełda bota) i [`BINANCE.md`](BINANCE.md)
+> (wygaszane demo). Każda zmiana stanu konta = wpis tam.
+
 ---
 
 ## 📊 STAN BOTA 2026-10-03 (check-up, tylko odczyt, dzień 79 okna M5)
