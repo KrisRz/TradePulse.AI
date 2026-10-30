@@ -80,8 +80,11 @@ resource "aws_iam_role_policy" "kraken_paper_ssm" {
 }
 
 resource "aws_lambda_function" "kraken_paper" {
-  function_name    = local.kraken_paper_function_name
-  role             = aws_iam_role.kraken_paper_exec.arn
+  function_name = local.kraken_paper_function_name
+  role          = aws_iam_role.kraken_paper_exec.arn
+  # python3.14 is blocked by the AWS provider (~> 5.0 rejects it; plan.md, CO DALEJ
+  # item 9). Tested 2026-10-30: the bot's tests pass on 3.14 + the
+  # AWSSDKPandas-Python314:4 layer (pandas 3.0.2, numpy 2.4.4).
   runtime          = "python3.11"
   handler          = "app.backend.paper_trading.kraken_paper_handler.handler"
   filename         = var.kraken_paper_lambda_zip_path
@@ -106,11 +109,40 @@ resource "aws_lambda_function" "kraken_paper" {
   }
 }
 
-# Retries belong to the scheduler (3 attempts, DLQ behind them); the step is
-# idempotent per bar, so a retry can never trade twice.
+# The scheduler invokes the Lambda ASYNCHRONOUSLY (AsyncEventsReceived > 0 on
+# every channel, measured 2026-10-30): its retry policy and DLQ cover delivery
+# only, never an exception inside the handler. With Lambda's own retries at 0 —
+# as on the Binance channels — a transient Kraken or DynamoDB error loses the
+# day silently, which here breaks P1 (a hole in the decision log). So execution
+# failures are retried by Lambda, and one that still fails lands in the same DLQ
+# the -dlq alarm watches. The step is idempotent per bar: a retry after a run
+# that did complete is a "bar already processed" no-op.
 resource "aws_lambda_function_event_invoke_config" "kraken_paper" {
-  function_name          = aws_lambda_function.kraken_paper.function_name
-  maximum_retry_attempts = 0
+  function_name                = aws_lambda_function.kraken_paper.function_name
+  maximum_retry_attempts       = 2
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.kraken_paper_scheduler_dlq.arn
+    }
+  }
+
+  depends_on = [aws_iam_role_policy.kraken_paper_failure_dlq]
+}
+
+resource "aws_iam_role_policy" "kraken_paper_failure_dlq" {
+  name = "${local.kraken_paper_function_name}-failure-dlq"
+  role = aws_iam_role.kraken_paper_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "sqs:SendMessage"
+      Resource = aws_sqs_queue.kraken_paper_scheduler_dlq.arn
+    }]
+  })
 }
 
 resource "aws_cloudwatch_log_group" "kraken_paper" {
@@ -247,7 +279,7 @@ resource "aws_cloudwatch_metric_alarm" "kraken_paper_scheduler_dlq" {
     QueueName = aws_sqs_queue.kraken_paper_scheduler_dlq.name
   }
 
-  alarm_description = "Kraken paper schedule could not deliver — the channel is not running."
+  alarm_description = "Kraken paper channel: a run failed after all retries, or the schedule could not deliver — that day is missing from the log (P1)."
   alarm_actions     = [aws_sns_topic.alerts.arn]
 }
 

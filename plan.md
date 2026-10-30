@@ -102,7 +102,11 @@ Binance (live i demo) wygaszamy. Mapa kont, kluczy i zasobów:
    ewentualni kandydaci do pre-rejestracji, nie zmiany w kodzie.
 9. Provider AWS w Terraformie `~> 5.0` (stary major; GA jest 6.x) — podbicie jako
    osobny commit z dowodem (`plan -target` bez nieoczekiwanych zmian). Znalezione
-   2026-10-30.
+   2026-10-30. **Blokuje runtime `python3.14`** (Codex P3): provider 5.x go odrzuca.
+   Dowód gotowości kodu: 480/480 testów bota na Pythonie 3.14.7 + pandas 3.0.2 +
+   numpy 2.4.4 (warstwa `AWSSDKPandas-Python314:4`), 2026-10-30. Po podbiciu
+   providera: runtime 3.14 + ta warstwa + `--python-version 3.14` w budowaniu
+   paczki Krakena (jedno źródło wersji).
 
 Kandydat #12 (wielkość pozycji wg zmienności) **zszedł na drugi plan**: przy nowym
 podejściu musi pobić `w = 0,5` z pasmem, nie samą strategię.
