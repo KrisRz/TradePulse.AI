@@ -91,12 +91,18 @@ Binance (live i demo) wygaszamy. Mapa kont, kluczy i zasobów:
    nowy pk w DynamoDB, harmonogram 00:10 UTC, alarmy, dead-man. Terraform
    z `-target`, apply po „wyjdź z auto mode”. **Start zegara = pierwsza decyzja
    w DynamoDB.** Wpis w `KRAKEN.md`.
-4. Raport `docs/GATE_EVAL_2026-10-30.md` (liczby wyżej) + PR z jednym przejściem
-   Codexa.
+4. ~~Raport `docs/GATE_EVAL_2026-10-30.md`~~ ✅ + PR z jednym przejściem Codexa.
 5. **Executor Krakena** (HMAC-SHA512 + nonce, sprawdzenie `cl_ord_id` przed
    wysłaniem, `validate=true`, limity pary) — w trakcie 28 dni papieru.
 6. **Wygaszenie Binance** po starcie papieru Kraken, lista w `BINANCE.md`.
 7. **Dzień 28 papieru:** ocena P1–P3 → user: wpłata £200 + klucz → pilot.
+8. **Na koniec sesji 2026-10-30 (prośba usera): głęboka analiza bota** — jak działa,
+   co ma, czego mu brakuje, jakie nowe źródła wiedzy / sygnały mogłyby poprawić
+   decyzje (research w internecie, nowe prace i narzędzia). Wynik: dokument +
+   ewentualni kandydaci do pre-rejestracji, nie zmiany w kodzie.
+9. Provider AWS w Terraformie `~> 5.0` (stary major; GA jest 6.x) — podbicie jako
+   osobny commit z dowodem (`plan -target` bez nieoczekiwanych zmian). Znalezione
+   2026-10-30.
 
 Kandydat #12 (wielkość pozycji wg zmienności) **zszedł na drugi plan**: przy nowym
 podejściu musi pobić `w = 0,5` z pasmem, nie samą strategię.
