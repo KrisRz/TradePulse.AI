@@ -157,3 +157,19 @@ def test_gate_a_catches_a_book_replayed_without_its_band(monkeypatch):
     inputs = FidelityInputs(decisions=list(store.decisions.values()), state=state,
                             bars=df, strategy=EmaCrossover(20, 100, allow_short=False))
     assert check_accounting_parity(inputs)["status"] == "FAIL"
+
+
+def test_a_quiet_long_window_is_not_described_as_flat(monkeypatch):
+    """Day 0 of the live Kraken channel sat LONG; the caveat said "target 0"."""
+    from app.backend.paper_trading.gate import check_signal_parity
+
+    store, df = MemoryStore(), _market()
+    _run_days(monkeypatch, store, df, 230, 236)
+    records = list(store.decisions.values())
+    assert {r["target"] for r in records} == {1}
+    inputs = FidelityInputs(decisions=records, state=store.state, bars=df,
+                            strategy=EmaCrossover(20, 100, allow_short=False),
+                            lookback_bars=120)
+    out = check_signal_parity(inputs)
+    assert out["status"] == "PASS" and out["discriminating"] is False
+    assert "stayed in the market" in out["detail"] and "flat" not in out["detail"]

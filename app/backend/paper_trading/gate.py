@@ -677,8 +677,9 @@ def check_signal_parity(inputs: FidelityInputs) -> dict:
         detail += f"; {len(unverifiable)} unverifiable (insufficient reference history)"
     if distinct < 2:
         only = next(iter(observed_targets)) if observed_targets else None
+        state = "flat" if only == 0 else "in the market"
         detail += (f" — but every target was {only}, so this cannot distinguish "
-                   f"the live strategy from any other that stayed flat")
+                   f"the live strategy from any other that stayed {state}")
     return _result("PASS", detail, checked=checked, distinct_targets=distinct,
                    discriminating=distinct >= 2,
                    unverifiable=_truncate(unverifiable))
@@ -1221,10 +1222,12 @@ def evaluate_fidelity(inputs: FidelityInputs, as_of: date) -> dict:
     caveats = []
     parity = criteria.get("signal_parity", {})
     if parity.get("status") == "PASS" and parity.get("discriminating") is False:
+        # Was "never left target 0" for every window — false the first time a
+        # quiet window sat LONG (Kraken channel, day 0, 2026-10-30).
         caveats.append(
-            "signal parity has low discriminating power: the window never left "
-            "target 0, so it cannot distinguish EMA20/100 from any other "
-            "strategy that also stayed flat")
+            "signal parity has low discriminating power: the target never "
+            "changed in the window, so it cannot distinguish EMA20/100 from any "
+            "other strategy that held the same position")
 
     start = inputs.window_start or WINDOW_START
     return {

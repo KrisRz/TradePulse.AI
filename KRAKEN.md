@@ -52,9 +52,11 @@ potrzebne dopiero do pilota (warunek P4).
 
 | Zasób | Stan |
 |---|---|
-| Lambda paper Kraken (XBT/GBP 1d) | **do zbudowania** |
-| Harmonogram, alarmy, dead-man ping | **do zbudowania** |
-| DynamoDB `tradepulse_paper_bot`, nowy pk dla Krakena | **do zbudowania** |
+| Lambda `tradepulse-paper-kraken` (XBT/GBP 1d, paper £200) | ✅ **działa od 2026-10-30** (Terraform `-target`, 17 zasobów). Handler `kraken_paper_handler.handler`, `CodeSha256` `5jfNLD4M…BoRjhfw=` |
+| Harmonogram `tradepulse-paper-kraken-daily` | ✅ `cron(10 0 * * ? *)`: 00:10 UTC (00:10 GMT, 01:10 BST) |
+| Alarmy | ✅ `-errors`, `-no-invocation`, `-dlq`, `-killswitch` (metric filter `KILL SWITCH:` → `TradePulse/paper-kraken/KillSwitchHalts`) |
+| DynamoDB `tradepulse_paper_bot`, pk `XBTGBP_1d` | ✅ pierwsza decyzja: bar 2026-10-29, LONG po £58 128,8, equity £199,18 |
+| Dead-man ping | ⚠️ **wyłączony**: brak parametru SSM `/tradepulse/healthcheck/paper-kraken`. User: utworzyć check w healthchecks.io (okres 25 h, grace 2 h) i wpisać URL do SSM. Bot działa i bez tego. |
 | Executor Krakena (zlecenia, pilot) | **do zbudowania**, dopiero przed pilotem |
 | SSM: klucz pilota | **brak**, user zakłada przy pilocie |
 
@@ -70,13 +72,14 @@ potrzebne dopiero do pilota (warunek P4).
 | 2026-10-30 | Najpierw **paper na Krakenie**; pilot dopiero po: P1 ≥ 28 dni bez błędów, P2 bramka A PASS, P3 saldo paper > startowe, P4 konto + wpłata + klucz | Warunek usera: paper ma pokazać zarobek przed prawdziwymi pieniędzmi | `docs/KRAKEN_PILOT_PREREGISTRATION_2026-10-30.md` |
 | 2026-10-30 | Trzymanie połowy konta **z korektą (pasmo 0,15)**, nie tylko przy wejściu | Sama połowa przy wejściu: spadek do −40,7%, limit trzyma w 49% okien 2-letnich; z korektą −26,7% i 78% | `docs/KRAKEN_SIZING_RESULTS_2026-10-30.md` |
 | 2026-10-30 | Konto Kraken otwarte i zweryfikowane, **bez wpłaty i bez klucza** do czasu P1–P3 | Pieniądze nie leżą na giełdzie, zanim paper pokaże wynik | ten plik |
+| 2026-10-30 | **Start papieru na Krakenie** (zegar P1–P3) | Kod i infrastruktura gotowe, bramka A dzień 0 PASS | ten plik |
 | 2026-10-30 | Zlecenia rynkowe (taker 0,80%), post-only (0,40%) później | Backtest i projekt liczą 0,80%; post-only dokłada ryzyko braku wykonania | `docs/KRAKEN_PILOT_PREREGISTRATION_2026-10-30.md` |
 
 ## Do zrobienia (po kolei)
 
 - [x] Księga z częściową pozycją i korektą 50/50 (2026-10-30): `PaperPortfolio(exposure, rebalance_band, min_rebalance)`, reguła w `backtesting/sizing.py`. Golden master nietknięty, 16 nowych testów, mutacje 8/8, replay prawdziwej księgi: R2 PASS (93% / 77%).
-- [ ] Ceny Krakena w bocie (`feed`) i w bramce A.
-- [ ] Lambda paper Kraken + harmonogram + alarmy (Terraform z `-target`). **Start zegara.**
+- [x] Ceny Krakena w bocie (`feed.fetch_kraken_ohlc`) i w bramce A (2026-10-30). ⚠️ Kraken trzyma 720 świec, więc bramka A działa do ~315. dnia kanału. Przed tym trzeba archiwizować bary (do zrobienia przed ~2027-09).
+- [x] Lambda paper Kraken + harmonogram + alarmy (2026-10-30). **Zegar wystartował 2026-10-30** (pierwsza decyzja, bar 2026-10-29). Bramka A dzień 0: PASS 6/6.
 - [x] User: konto Kraken + KYC (2026-10-30). Wpłata i klucz dopiero przed pilotem (P4).
 - [ ] Executor Krakena (podpis, nonce, sprawdzenie `cl_ord_id` przed wysłaniem, `validate=true`).
-- [ ] Ocena P1–P4 po 28 dniach paper → pilot.
+- [ ] Ocena P1–P4 **najwcześniej 2026-11-27** (28 dni od startu zegara) → pilot.

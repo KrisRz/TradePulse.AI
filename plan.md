@@ -76,13 +76,18 @@ Binance (live i demo) wygaszamy. Mapa kont, kluczy i zasobów:
 
 ### ▶ CO DALEJ (kolejność wiążąca, od góry)
 
-1. **Księga z częściową pozycją i pasmem korekty** (`w = 0,5`, `b = 0,15`, min.
+> ✅ **Kroki 1–3 zrobione 2026-10-30** (księga z pasmem, feed Kraken + bramka A,
+> Lambda `tradepulse-paper-kraken`). **Zegar papieru Kraken wystartował 2026-10-30**,
+> pierwsza decyzja bar 2026-10-29 (LONG £58 128,8). Ocena P1–P4 najwcześniej
+> **2026-11-27**. Następny: krok 4.
+
+1. ~~**Księga z częściową pozycją i pasmem korekty**~~ ✅ (`w = 0,5`, `b = 0,15`, min.
    zlecenie £5) w `portfolio.py` + to samo w backteście. Dyscyplina golden master:
    zamrożenie, `==` na floatach, test równoważności, mutacje, dowód, że stary kod nie
    przechodzi. `w = 1` musi dawać bit w bit dzisiejszy wynik.
-2. **Ceny z Krakena:** `feed.py` (OHLC `XBTGBP`, 1440, odrzucony otwarty bar)
+2. ~~**Ceny z Krakena:**~~ ✅ `feed.py` (OHLC `XBTGBP`, 1440, odrzucony otwarty bar)
    i źródło cen w bramce A (dziś zgodność sygnału liczona na Binance).
-3. **Lambda „paper Kraken”:** XBT/GBP 1d, £200, 0,80%, F7 + kill-switch konta,
+3. ~~**Lambda „paper Kraken”:**~~ ✅ XBT/GBP 1d, £200, 0,80%, F7 + kill-switch konta,
    nowy pk w DynamoDB, harmonogram 00:10 UTC, alarmy, dead-man. Terraform
    z `-target`, apply po „wyjdź z auto mode”. **Start zegara = pierwsza decyzja
    w DynamoDB.** Wpis w `KRAKEN.md`.
