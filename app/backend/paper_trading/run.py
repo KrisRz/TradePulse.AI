@@ -22,7 +22,9 @@ from .bot import BotConfig, PaperBot
 def build_bot(symbol: str = "BTCUSDT", timeframe: str = "1d",
               fast: int = 20, slow: int = 100, fee: float = 0.001,
               slippage: float = 0.0002, capital: float = 10_000.0,
-              state: str | None = None) -> PaperBot:
+              state: str | None = None, source: str = "binance",
+              exposure: float = 1.0, rebalance_band: float | None = None,
+              min_rebalance: float = 0.0) -> PaperBot:
     # Default = the walk-forward-validated edge: long-only EMA trend-following.
     strategy = EmaCrossover(fast=fast, slow=slow, allow_short=False)
     config = BotConfig(
@@ -32,6 +34,10 @@ def build_bot(symbol: str = "BTCUSDT", timeframe: str = "1d",
         slippage=slippage,
         initial_capital=capital,
         state_path=state or f"paper_state/{symbol}_{timeframe}.json",
+        source=source,
+        exposure=exposure,
+        rebalance_band=rebalance_band,
+        min_rebalance=min_rebalance,
     )
     return PaperBot(strategy, config)
 

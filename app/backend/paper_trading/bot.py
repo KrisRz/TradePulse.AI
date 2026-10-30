@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ..backtesting.strategy import Strategy
-from .feed import fetch_klines
+from .feed import fetch_klines, fetch_kraken_ohlc
 from .portfolio import PaperPortfolio
 from .state_store import make_state_store
 
@@ -30,6 +30,13 @@ class BotConfig:
     initial_capital: float = 10_000.0
     lookback_bars: int = 400
     state_path: str = "paper_state/BTCUSDT_1d.json"
+    # Whose public candles the strategy decides on: "binance" or "kraken".
+    source: str = "binance"
+    # Share of equity held in the position, and the band that pulls it back
+    # (docs/KRAKEN_SIZING_RESULTS_2026-10-30.md). 1.0 / None = full equity.
+    exposure: float = 1.0
+    rebalance_band: Optional[float] = None
+    min_rebalance: float = 0.0
 
 
 class PaperBot:
@@ -42,6 +49,9 @@ class PaperBot:
             fee_rate=config.fee_rate,
             slippage=config.slippage,
             initial_capital=config.initial_capital,
+            exposure=config.exposure,
+            rebalance_band=config.rebalance_band,
+            min_rebalance=config.min_rebalance,
         )
         self.last_bar: Optional[str] = None
         self.last_decision: Optional[dict] = None
@@ -90,8 +100,14 @@ class PaperBot:
     # -- run ------------------------------------------------------------- #
     def step(self) -> dict:
         """Process the latest closed bar. Returns a status dict."""
-        df = fetch_klines(self.config.symbol, self.config.timeframe,
-                          limit=self.config.lookback_bars)
+        if self.config.source == "kraken":
+            df = fetch_kraken_ohlc(self.config.symbol, self.config.timeframe,
+                                   limit=self.config.lookback_bars)
+        elif self.config.source == "binance":
+            df = fetch_klines(self.config.symbol, self.config.timeframe,
+                              limit=self.config.lookback_bars)
+        else:
+            raise ValueError(f"Unknown feed source {self.config.source!r}")
         # Binance returns `limit` klines including the still-open one we drop.
         # A shorter response means truncated history: the EMAs would differ
         # from the backtest and the zeroed warmup could force-flatten a live
@@ -159,6 +175,13 @@ class PaperBot:
         # own word too so signal parity (criterion 2) can still be judged.
         if target != strategy_target:
             record["strategy_target"] = strategy_target
+        # Only channels that differ from the original say so, so the records
+        # of the Binance channels stay exactly what they always were.
+        if self.config.source != "binance":
+            record["source"] = self.config.source
+        if self.portfolio.exposure < 1.0:
+            record["exposure"] = self.portfolio.exposure
+            record["rebalances_count"] = len(self.portfolio.rebalances)
         self.last_bar = latest_time
         self.last_decision = record
         self._save()
