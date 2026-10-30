@@ -45,6 +45,8 @@ potrzebne dopiero do pilota (warunek P4).
   BTC wyjdzie poza 35–65%, wraca do 50% (~0,6 razy w roku, koszt ~0,07% rocznie).
 - **Kill-switch konta:** equity ≤ 75% szczytu → zamknięcie pozycji, stop, alarm,
   ręczne uzbrojenie.
+- ⚠️ **Gotówkowa połowa nie jest nietykalna:** po spadku BTC korekta dokupuje
+  z gotówki do 50%. W długim spadku zatrzymuje to dopiero kill-switch konta.
 
 ## Co w AWS korzysta z Krakena
 
@@ -72,7 +74,7 @@ potrzebne dopiero do pilota (warunek P4).
 
 ## Do zrobienia (po kolei)
 
-- [ ] Księga z częściową pozycją i korektą 50/50 (golden master, test równoważności z backtestem).
+- [x] Księga z częściową pozycją i korektą 50/50 (2026-10-30): `PaperPortfolio(exposure, rebalance_band, min_rebalance)`, reguła w `backtesting/sizing.py`. Golden master nietknięty, 16 nowych testów, mutacje 8/8, replay prawdziwej księgi: R2 PASS (93% / 77%).
 - [ ] Ceny Krakena w bocie (`feed`) i w bramce A.
 - [ ] Lambda paper Kraken + harmonogram + alarmy (Terraform z `-target`). **Start zegara.**
 - [x] User: konto Kraken + KYC (2026-10-30). Wpłata i klucz dopiero przed pilotem (P4).

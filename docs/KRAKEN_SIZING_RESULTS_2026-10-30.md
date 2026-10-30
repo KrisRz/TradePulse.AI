@@ -40,3 +40,29 @@ Księga i silnik dotąd znały tylko pozycję 0 albo 1. Pilot potrzebuje:
    z minimalnym zleceniem £5;
 3. tej samej logiki w backteście i w bocie paper: test równoważności, jak dla
    obecnej księgi.
+
+## Dowód na implementacji (2026-10-30, po zbudowaniu księgi)
+
+`PaperPortfolio(exposure=0.5, rebalance_band=0.15, min_rebalance=5)` przeprowadzona
+przez tę samą historię GBP **tak, jak prowadzi ją bot**: decyzja i transakcja po
+cenie zamknięcia, stop F7 z `position_risk` na zamknięciach, 0,80%. Skrypt:
+`scripts/research/kraken_book_replay.py`.
+
+| Wariant | maxDD | CAGR | 365 d DD ≤ 25% | 730 d DD ≤ 25% | wyrównania/rok | R2 |
+|---|---|---|---|---|---|---|
+| cały kapitał (dzisiejszy bot) | −48,0% | +31,4% | 22% | 0% | 0 | FAIL |
+| `w=0,5` tylko przy wejściu | −40,7% | +19,3% | 75% | 49% | 0 | FAIL |
+| **`w=0,5`, pasmo 0,15 (pilot)** | **−27,5%** | **+19,0%** | **93%** | **77%** | **0,6** | **PASS** |
+
+Implementacja odtwarza wynik modelu: 93% / 77% wobec 94% / 78%, maxDD −27,5% wobec
+−26,7%. Różnica bierze się z innego momentu transakcji (zamknięcie zamiast
+otwarcia następnego baru) i stopu na zamknięciu zamiast na minimum dnia.
+
+⚠️ **Gotówkowa połowa nie jest nietykalna.** Pasmo działa w obie strony: po spadku
+BTC bot dokupuje z gotówki, żeby wrócić do 50%. W długim spadku robi to wielokrotnie,
+a zatrzymuje go dopiero kill-switch konta (25% od szczytu). Pomiar to uwzględnia;
+test: `test_a_crash_is_rebalanced_by_buying_from_the_cash_half`.
+
+Testy: `app/backend/tests/test_portfolio_partial.py` (16), w tym zgodność z regułą
+zapisaną ręcznie, bar po barze. Golden master pełnej księgi bez zmian (521 → 537
+testów). Mutacje 8/8 złapane.
