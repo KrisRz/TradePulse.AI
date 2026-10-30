@@ -92,11 +92,17 @@ Binance (live i demo) wygaszamy. Mapa kont, kluczy i zasobów:
    z `-target`, apply po „wyjdź z auto mode”. **Start zegara = pierwsza decyzja
    w DynamoDB.** Wpis w `KRAKEN.md`.
 4. ~~Raport `docs/GATE_EVAL_2026-10-30.md`~~ ✅ + PR z jednym przejściem Codexa.
-5. **Executor Krakena** (HMAC-SHA512 + nonce, sprawdzenie `cl_ord_id` przed
-   wysłaniem, `validate=true`, limity pary) — w trakcie 28 dni papieru.
+5. **Executor Krakena** (HMAC-SHA512 + nonce, `cl_ord_id` + `deadline`, wyszukanie
+   w `OpenOrders` i `ClosedOrders` po timeoucie, `validate=true`, limity pary,
+   `SystemStatus`, `GetApiKeyInfo` bez prawa wypłat, **awaryjny stop-loss trzymany na
+   giełdzie**, anuluj → handel → stop) — w trakcie 28 dni papieru, najpierw
+   pre-rejestracja (`docs/BOT_DEEP_ANALYSIS_2026-10-30.md` §6).
 6. **Wygaszenie Binance** po starcie papieru Kraken, lista w `BINANCE.md`.
 7. **Dzień 28 papieru:** ocena P1–P3 → user: wpłata £200 + klucz → pilot.
-8. **Na koniec sesji 2026-10-30 (prośba usera): głęboka analiza bota** — jak działa,
+8. ~~**Na koniec sesji 2026-10-30 (prośba usera): głęboka analiza bota**~~ ✅
+   `docs/BOT_DEEP_ANALYSIS_2026-10-30.md`. Wnioski: executor z awaryjnym stopem
+   po stronie Krakena przed pilotem; #12 w wariancie DVOL; Kraken UK nie daje odsetek
+   od gotówki. Pierwotny opis: jak działa,
    co ma, czego mu brakuje, jakie nowe źródła wiedzy / sygnały mogłyby poprawić
    decyzje (research w internecie, nowe prace i narzędzia). Wynik: dokument +
    ewentualni kandydaci do pre-rejestracji, nie zmiany w kodzie.
