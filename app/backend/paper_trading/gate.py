@@ -677,8 +677,9 @@ def check_signal_parity(inputs: FidelityInputs) -> dict:
         detail += f"; {len(unverifiable)} unverifiable (insufficient reference history)"
     if distinct < 2:
         only = next(iter(observed_targets)) if observed_targets else None
+        state = "flat" if only == 0 else "in the market"
         detail += (f" — but every target was {only}, so this cannot distinguish "
-                   f"the live strategy from any other that stayed flat")
+                   f"the live strategy from any other that stayed {state}")
     return _result("PASS", detail, checked=checked, distinct_targets=distinct,
                    discriminating=distinct >= 2,
                    unverifiable=_truncate(unverifiable))
@@ -807,10 +808,16 @@ def check_accounting_parity(inputs: FidelityInputs) -> dict:
     from .portfolio import PaperPortfolio
 
     book = inputs.state.get("portfolio", {}) or {}
+    band = book.get("rebalance_band")
     portfolio = PaperPortfolio(
         fee_rate=float(book.get("fee_rate", 0.001)),
         slippage=float(book.get("slippage", 0.0002)),
         initial_capital=float(book.get("initial_capital", 10_000.0)),
+        # A partial-exposure book (Kraken channel) replays with its own sizing;
+        # absent keys are the full-equity book every older state describes.
+        exposure=float(book.get("exposure", 1.0)),
+        rebalance_band=None if band is None else float(band),
+        min_rebalance=float(book.get("min_rebalance", 0.0)),
     )
     replayer = None
     mode = "modelled"
@@ -847,6 +854,10 @@ def check_accounting_parity(inputs: FidelityInputs) -> dict:
     replay_trades = len(portfolio.trades)
     if live_trades != replay_trades:
         drifts.append(f"closed trades: state has {live_trades}, replay produced {replay_trades}")
+    live_rebalances = len(book.get("rebalances", []) or [])
+    if live_rebalances != len(portfolio.rebalances):
+        drifts.append(f"rebalances: state has {live_rebalances}, "
+                      f"replay produced {len(portfolio.rebalances)}")
 
     if drifts:
         return _result("FAIL", f"{len(drifts)} accounting divergence(s) ({mode} replay)",
@@ -1211,10 +1222,12 @@ def evaluate_fidelity(inputs: FidelityInputs, as_of: date) -> dict:
     caveats = []
     parity = criteria.get("signal_parity", {})
     if parity.get("status") == "PASS" and parity.get("discriminating") is False:
+        # Was "never left target 0" for every window — false the first time a
+        # quiet window sat LONG (Kraken channel, day 0, 2026-10-30).
         caveats.append(
-            "signal parity has low discriminating power: the window never left "
-            "target 0, so it cannot distinguish EMA20/100 from any other "
-            "strategy that also stayed flat")
+            "signal parity has low discriminating power: the target never "
+            "changed in the window, so it cannot distinguish EMA20/100 from any "
+            "other strategy that held the same position")
 
     start = inputs.window_start or WINDOW_START
     return {
@@ -1584,7 +1597,7 @@ def main(argv: list[str] | None = None) -> None:
                         "--pk BTCUSDT_4h checks the venue channel")
     g.add_argument("--infra", choices=["aws", "none"], default="aws",
                    help="criterion 6 evidence source (default: aws)")
-    g.add_argument("--symbol", default="BTCUSDT")
+    g.add_argument("--symbol", default=None, help="default: the channel's (BTCUSDT)")
     g.add_argument("--timeframe", default=None,
                    help="default: the channel's (from --pk)")
     g.add_argument("--fast", type=int, default=20, help="live EMA fast period")
@@ -1608,6 +1621,8 @@ def main(argv: list[str] | None = None) -> None:
         args.pk = "BTCUSDT_4h" if args.cost_fidelity else "BTCUSDT_1d"
     channel = CHANNELS.get(args.pk, {})
     args.timeframe = args.timeframe or channel.get("timeframe") or "1d"
+    if args.symbol is None:
+        args.symbol = channel.get("symbol", "BTCUSDT")
     args.function = args.function or channel.get("function") or "tradepulse-paper-bot"
     args.dlq = args.dlq or channel.get("dlq") or "tradepulse-paper-bot-scheduler-dlq"
     args.alarms = channel.get("alarms") or [f"{args.function}-errors",
@@ -1680,18 +1695,48 @@ CHANNELS = {
         # No pre-registered window: the channel is checked from its first run.
         "window_start": None,
     },
+    # Kraken paper channel (2026-10-30, KRAKEN.md): its clock starts with its
+    # first record; P1–P4 in docs/KRAKEN_PILOT_PREREGISTRATION_2026-10-30.md.
+    "XBTGBP_1d": {
+        "timeframe": "1d",
+        "symbol": "XBTGBP",
+        "feed": "kraken",
+        "function": "tradepulse-paper-kraken",
+        "dlq": "tradepulse-paper-kraken-scheduler-dlq",
+        "alarms": ["tradepulse-paper-kraken-errors",
+                   "tradepulse-paper-kraken-no-invocation",
+                   "tradepulse-paper-kraken-dlq",
+                   "tradepulse-paper-kraken-killswitch"],
+        "extra_metrics": (("TradePulse/paper-kraken", "KillSwitchHalts"),),
+        "window_start": None,
+    },
 }
 
 
-def fetch_reference_bars(symbol: str, timeframe: str, needed: int) -> pd.DataFrame:
+def fetch_reference_bars(symbol: str, timeframe: str, needed: int,
+                         source: str = "binance") -> pd.DataFrame:
     """The last ``needed`` closed bars, paging past Binance's 1000-bar limit.
 
     The newest page comes from the bot's own feed, so the still-open bar is
     dropped exactly as the bot drops it. Older pages hold closed bars only.
+
+    Kraken keeps 720 candles and offers no paging, so a Kraken channel can be
+    checked only while its lookback plus its log fit in that (about 315 days
+    of a 1d channel with a 400-bar lookback). Past that the check must refuse
+    rather than judge the oldest records on bars it never had (KRAKEN.md).
     """
     import requests
 
-    from .feed import _BASE, _INTERVAL, _OHLCV, fetch_klines
+    from .feed import _BASE, _INTERVAL, _OHLCV, KRAKEN_MAX_BARS, fetch_klines, fetch_kraken_ohlc
+
+    if source == "kraken":
+        if needed > KRAKEN_MAX_BARS - 1:
+            raise RuntimeError(
+                f"Kraken keeps {KRAKEN_MAX_BARS} candles; Gate A needs {needed} "
+                f"closed bars — archive the channel's bars before this check can run")
+        return fetch_kraken_ohlc(symbol, timeframe, limit=needed + 1)
+    if source != "binance":
+        raise ValueError(f"Unknown feed source {source!r}")
 
     bars = fetch_klines(symbol, timeframe, limit=min(needed + 1, 1000))
     pages = [bars]
@@ -1745,7 +1790,8 @@ def run_fidelity(args, as_of: date) -> dict:
     # Enough reference history to rebuild the bot's decision window for the
     # oldest record: its lookback plus the bars processed since.
     needed = args.lookback_bars + len(decisions) + 5
-    bars = fetch_reference_bars(args.symbol, args.timeframe, needed)
+    bars = fetch_reference_bars(args.symbol, args.timeframe, needed,
+                                source=CHANNELS.get(args.pk, {}).get("feed", "binance"))
 
     infra = None
     if args.infra == "aws":

@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-10-03** (check-up stanu bota, sekcja „📊 STAN BOTA 2026-10-03”)
+> Ostatnia aktualizacja: **2026-10-30** (przejście na Kraken, sekcja „🧭 PODSUMOWANIE SESJI 2026-10-30”)
 
 ---
 
@@ -21,6 +21,103 @@
 > Nie pytaj „od czego zacząć" — odpowiedź jest tu. Wykonaj protokół i ruszaj.
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
+
+> 🗺️ **Giełdy (od 2026-10-30):** wszystko o kontach, kluczach, zasobach i decyzjach
+> per giełda jest w [`KRAKEN.md`](KRAKEN.md) (giełda bota) i [`BINANCE.md`](BINANCE.md)
+> (wygaszane demo). Każda zmiana stanu konta = wpis tam.
+
+## 🧭 PODSUMOWANIE SESJI 2026-10-30 — czytaj najpierw (zastępuje kierunek z 16.09 i 03.10)
+
+**Kierunek zmienił się całkowicie.** User: „musimy zacząć zarabiać prawdziwe
+pieniądze”. Wynik sesji: **giełdą bota jest Kraken (XBT/GBP)**, pilot na prawdziwych
+£200 **przed** bramką B, ale dopiero po 28 dniach papieru na cenach Krakena.
+Binance (live i demo) wygaszamy. Mapa kont, kluczy i zasobów:
+[`KRAKEN.md`](KRAKEN.md) i [`BINANCE.md`](BINANCE.md).
+
+### Decyzje usera 2026-10-30
+
+1. Prawdziwe pieniądze: **pilot ~£200 przed bramką B**. Kapitał rośnie dopiero po
+   bramce B na kanale Kraken.
+2. **Limit spadku 25% liczony na całym koncie.** Bot trzyma połowę konta (`w = 0,5`)
+   z korektą, gdy udział BTC wyjdzie poza 35–65%. B5/B6/B7 bez zmian.
+3. **Paper ma pokazać zarobek przed pilotem.** Warunek startu P1–P4: ≥ 28 dni papieru
+   bez błędów, bramka A PASS, equity paper > startowe, konto + wpłata + klucz.
+   Ocena co 28 dni, dopóki nie przejdzie.
+4. **Binance porzucony:** konto live z krajem Polska (UE) od 2026-07-01 bez nowych
+   zleceń spot (brak licencji MiCA), brak zezwolenia FCA, hack 2026-10-29.
+   Na koncie nie ma pieniędzy ani kluczy.
+5. **Kraken** jako giełda, po teście (user chciał porównania z Binance).
+6. Czego **nie** robimy: Claude jako trader decydujący w pętli (brak przewagi,
+   lookahead, koszt), day trading, derywaty (zakaz FCA dla klientów detalicznych),
+   gotowe repo „AI trading” (skan 2026-10-30: żadne nie pokazuje przewagi).
+
+### Co zmierzyliśmy (wszystko pre-rejestrowane, projekt w commicie przed liczbami)
+
+| Dokument | Wynik |
+|---|---|
+| `docs/KRAKEN_VENUE_RESULTS_2026-10-30.md` | **PASS 4/4.** Strategia w GBP przy 0,80% bije B&H w 4/4 układach (Sharpe 0,97–1,13 vs 0,80–0,98, DD −48% vs −73%); zgodność sygnału Kraken vs nasze dane 99,6%; koszt kupna £100 0,002%. Binance tańszy tylko o ~0,05 Sharpe'a. |
+| `docs/KRAKEN_SIZING_RESULTS_2026-10-30.md` | „Połowa konta przy wejściu” **nie** spełnia limitu (DD −40,7%, 49% okien 2-letnich). **Połowa z pasmem 0,15** spełnia: DD −26,7%, 94% / 78% okien, 0,6 korekty rocznie, koszt 0,07%/rok. |
+| `docs/KRAKEN_PILOT_PREREGISTRATION_2026-10-30.md` | Zasady papieru i pilota, warunek P1–P4, kill-switch konta 25%, taker 0,80%. |
+
+### Stan na koniec sesji
+
+- **Konto Kraken:** otwarte i zweryfikowane przez usera (paszport, TIN, Restricted
+  Investor, test 8/8). **£0, brak klucza.** Wpłata i klucz dopiero przy P4.
+- **Ocena bramek 2026-10-30** (ocena z 08.10 się nie odbyła; liczona dziś, tylko
+  odczyt, raport do napisania):
+  - **1d:** +1,07% vs B&H +20,15%, maxDD −9,96%, 0 RT, `INCONCLUSIVE_EXTEND`;
+  - **4h:** $225,48 (+12,74%) vs B&H +19,78%, 5 RT, PF 3,04, `FAIL` tylko na
+    `fee_drag` (znany odczyt).
+- **Produkcja bez zmian:** 5 Lambd, 10/10 alarmów OK. Bot 1d bierze ceny
+  z publicznego API Binance.
+- **Gałąź:** `session/kraken-20261030`, bez pusha i bez PR (PR na koniec sesji
+  pracy nad kodem, z jednym przejściem Codexa).
+- Repo: `delete_branch_on_merge` włączone 2026-10-30 (było `false`).
+
+### ▶ CO DALEJ (kolejność wiążąca, od góry)
+
+> ✅ **Kroki 1–3 zrobione 2026-10-30** (księga z pasmem, feed Kraken + bramka A,
+> Lambda `tradepulse-paper-kraken`). **Zegar papieru Kraken wystartował 2026-10-30**,
+> pierwsza decyzja bar 2026-10-29 (LONG £58 128,8). Ocena P1–P4 najwcześniej
+> **2026-11-27**. Następny: krok 4.
+
+1. ~~**Księga z częściową pozycją i pasmem korekty**~~ ✅ (`w = 0,5`, `b = 0,15`, min.
+   zlecenie £5) w `portfolio.py` + to samo w backteście. Dyscyplina golden master:
+   zamrożenie, `==` na floatach, test równoważności, mutacje, dowód, że stary kod nie
+   przechodzi. `w = 1` musi dawać bit w bit dzisiejszy wynik.
+2. ~~**Ceny z Krakena:**~~ ✅ `feed.py` (OHLC `XBTGBP`, 1440, odrzucony otwarty bar)
+   i źródło cen w bramce A (dziś zgodność sygnału liczona na Binance).
+3. ~~**Lambda „paper Kraken”:**~~ ✅ XBT/GBP 1d, £200, 0,80%, F7 + kill-switch konta,
+   nowy pk w DynamoDB, harmonogram 00:10 UTC, alarmy, dead-man. Terraform
+   z `-target`, apply po „wyjdź z auto mode”. **Start zegara = pierwsza decyzja
+   w DynamoDB.** Wpis w `KRAKEN.md`.
+4. ~~Raport `docs/GATE_EVAL_2026-10-30.md`~~ ✅ + PR z jednym przejściem Codexa.
+5. **Executor Krakena** (HMAC-SHA512 + nonce, `cl_ord_id` + `deadline`, wyszukanie
+   w `OpenOrders` i `ClosedOrders` po timeoucie, `validate=true`, limity pary,
+   `SystemStatus`, `GetApiKeyInfo` bez prawa wypłat, **awaryjny stop-loss trzymany na
+   giełdzie**, anuluj → handel → stop) — w trakcie 28 dni papieru, najpierw
+   pre-rejestracja (`docs/BOT_DEEP_ANALYSIS_2026-10-30.md` §6).
+6. **Wygaszenie Binance** po starcie papieru Kraken, lista w `BINANCE.md`.
+7. **Dzień 28 papieru:** ocena P1–P3 → user: wpłata £200 + klucz → pilot.
+8. ~~**Na koniec sesji 2026-10-30 (prośba usera): głęboka analiza bota**~~ ✅
+   `docs/BOT_DEEP_ANALYSIS_2026-10-30.md`. Wnioski: executor z awaryjnym stopem
+   po stronie Krakena przed pilotem; #12 w wariancie DVOL; Kraken UK nie daje odsetek
+   od gotówki. Pierwotny opis: jak działa,
+   co ma, czego mu brakuje, jakie nowe źródła wiedzy / sygnały mogłyby poprawić
+   decyzje (research w internecie, nowe prace i narzędzia). Wynik: dokument +
+   ewentualni kandydaci do pre-rejestracji, nie zmiany w kodzie.
+9. Provider AWS w Terraformie `~> 5.0` (stary major; GA jest 6.x) — podbicie jako
+   osobny commit z dowodem (`plan -target` bez nieoczekiwanych zmian). Znalezione
+   2026-10-30. **Blokuje runtime `python3.14`** (Codex P3): provider 5.x go odrzuca.
+   Dowód gotowości kodu: 480/480 testów bota na Pythonie 3.14.7 + pandas 3.0.2 +
+   numpy 2.4.4 (warstwa `AWSSDKPandas-Python314:4`), 2026-10-30. Po podbiciu
+   providera: runtime 3.14 + ta warstwa + `--python-version 3.14` w budowaniu
+   paczki Krakena (jedno źródło wersji).
+
+Kandydat #12 (wielkość pozycji wg zmienności) **zszedł na drugi plan**: przy nowym
+podejściu musi pobić `w = 0,5` z pasmem, nie samą strategię.
+
+---
 
 ---
 
@@ -119,6 +216,9 @@ Ocenione na prośbę usera. Zapisane tylko to, co może się przydać:
 
 ### Tryb pracy: zostajemy na DEMO Binance (decyzja usera 2026-09-16)
 
+> ⚠️ **NIEAKTUALNE od 2026-10-30:** przechodzimy na Kraken, pilot przed bramką B.
+> Patrz „🧭 PODSUMOWANIE SESJI 2026-10-30”.
+
 Bot handluje wyłącznie na **Binance Demo Trading** (`demo-api.binance.com`).
 Pracujemy nad botem i strategią. Realnych pieniędzy (M6) na razie nie planujemy.
 
@@ -202,6 +302,11 @@ ale prowizja 0,40/0,80%: bot 1d przeżywa, kanał 4h nie.
 ---
 
 ## ▶ NASTĘPNA SESJA — od czego zacząć, co sprawdzić, co robić, na co uważać
+
+> ⚠️ **ZASTĄPIONE 2026-10-30.** Kolejność pracy jest w „🧭 PODSUMOWANIE SESJI
+> 2026-10-30 → ▶ CO DALEJ”. Z tej sekcji aktualne są tylko kontrole zdrowia (pkt 1)
+> i pułapki (pkt 3). Ocena z 08.10 się nie odbyła, policzona 30.10; #12 zszedł na
+> drugi plan.
 
 > Spisane 2026-09-16 na koniec sesji. Czas: user jest w BST (= UTC+1). Kanał 4h
 > odpala o :10 UTC co 4 h (01:10, 05:10, 09:10 … BST), bot 1d o 00:10 UTC,
@@ -685,6 +790,9 @@ Zmierzone po kursach BNB z chwili każdego filla:
 
 ### 🗓 KIEDY CO — kalendarz decyzji i blokad (aktualizacja 2026-09-05)
 
+> ⚠️ **NIEAKTUALNE od 2026-10-30** (M6 nie czeka już na bramkę B; pilot na Krakenie
+> po P1–P4). Aktualny kalendarz: „🧭 PODSUMOWANIE SESJI 2026-10-30”.
+
 > Odpowiedź na „co dalej i kiedy" jest tutaj. Kolumna **blokada** mówi, dlaczego
 > czegoś NIE robimy dziś — prawie wszystko czeka na kalendarz, nie na trudność.
 
@@ -709,6 +817,9 @@ Zmierzone po kursach BNB z chwili każdego filla:
 ---
 
 ### 🎯 NASTĘPNA AKCJA (ustalone na koniec sesji 2026-09-16)
+
+> ⚠️ **ZASTĄPIONE 2026-10-30** — „🧭 PODSUMOWANIE SESJI 2026-10-30 → ▶ CO DALEJ”.
+> Pytanie „co konto LIVE Binance może handlować” rozstrzygnięte: nic (PL/MiCA).
 
 **0. LISTA AKCJI USERA:**
 - [ ] **Przed M6 (nie pilne — zostajemy na demo): co konto LIVE może handlować?**
@@ -2496,3 +2607,11 @@ ruszać pre-rejestrowanych PROGÓW decyzyjnych** — te są nietykalne.
   Tagi `Project=tradepulse` dołożone ręcznie zasobom spoza Terraformu, `Project`
   i `Stack` włączone jako cost allocation tags; budżet konta bez zmian (user). Research
   Liquid/QuiverQuant: nic dla bota BTC; dwa pomysły zapisane na po #12.
+- 2026-10-30 — PRZEJŚCIE NA KRAKEN. User chce prawdziwych pieniędzy. Skan repo „AI
+  trading” i benchmarków LLM (brak przewagi), ocena bramek liczona (1d +1,07% vs B&H
+  +20,15%; 4h +12,74% vs +19,78%). Decyzje: pilot £200 przed bramką B, limit 25% na
+  koncie z `w = 0,5`, paper musi pokazać zarobek (P1–P4), Binance porzucony (PL/MiCA,
+  hack 29.10). Pre-rejestrowane pomiary: Kraken PASS 4/4; połowa przy wejściu FAIL,
+  połowa z pasmem 0,15 PASS. Konto Kraken otwarte i zweryfikowane (£0, bez klucza).
+  Nowe pliki `KRAKEN.md` / `BINANCE.md`. Dalej: księga z pasmem → feed Kraken →
+  Lambda paper Kraken (start zegara).

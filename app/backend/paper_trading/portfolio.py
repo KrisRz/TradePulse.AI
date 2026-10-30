@@ -53,6 +53,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Optional
 
 from ..backtesting.costs import apply_fee
+from ..backtesting.sizing import rebalance_amount
 from .execution import (
     Executor,
     Order,
@@ -106,7 +107,19 @@ class PaperPortfolio:
     # priced it at fill time. Kept per asset so the amounts stay auditable.
     fees_converted: dict = field(default_factory=dict)  # {asset: amount}
 
+    # -- partial exposure (2026-10-30) ----------------------------------- #
+    # The book holds ``exposure`` of its equity in the position and the rest in
+    # cash, pulled back to ``exposure`` when the share leaves ``± rebalance_band``
+    # (docs/KRAKEN_SIZING_RESULTS_2026-10-30.md). At the default 1.0 none of
+    # this runs and the book is the full-equity one, bit for bit.
+    exposure: float = 1.0
+    rebalance_band: Optional[float] = None
+    min_rebalance: float = 0.0        # smallest rebalance the venue would take
+    rebalances: list = field(default_factory=list)
+
     def __post_init__(self) -> None:
+        if not 0.0 < self.exposure <= 1.0:
+            raise ValueError(f"exposure must be in (0, 1], got {self.exposure}")
         if self.realized is None:
             self.realized = self.initial_capital
         if not self.cash:
@@ -195,6 +208,9 @@ class PaperPortfolio:
     # -- opening and closing --------------------------------------------- #
     def _open(self, new_side: int, price: float, time: str,
               order_key: Optional[str] = None) -> None:
+        if self.exposure < 1.0:
+            self._open_partial(new_side, price, time, order_key)
+            return
         # A venue sizes a long from the book's cash, so the position compounds
         # exactly as the backtest's does. The model needs no budget and gets none.
         budget = self.cash if (self._executor is not None and new_side > 0) else None
@@ -230,8 +246,69 @@ class PaperPortfolio:
         self.realized = self.cash + self.qty * fill.price
         self.entry_equity = self.realized
 
+    def _open_partial(self, new_side: int, price: float, time: str,
+                      order_key: Optional[str]) -> None:
+        """Put ``exposure`` of equity into a long and keep the rest as cash.
+
+        Modelled on the full-equity path: the fee comes off the invested part,
+        exactly as the engine charges it on the whole equity when fully in.
+        """
+        if new_side != 1:
+            raise ValueError("partial exposure is long-only")
+        if self._executor is not None:
+            raise NotImplementedError(
+                "partial exposure on a venue needs the Kraken executor (not built yet)")
+        fill = self._fill(opening_order_side(new_side), price, time, order_key)
+        equity = self.realized
+        invest = equity * self.exposure
+        self.equity_before_entry = equity
+        self.cash = equity - invest
+        self.qty = apply_fee(invest, self.fee_rate) / fill.price
+        self.side = new_side
+        self.entry_fill = fill.price
+        self.entry_time = time
+        self.entry_equity = self.cash + self.qty * fill.price
+        self.realized = self.entry_equity
+
+    def _close_partial(self, price: float, time: str, reason: str,
+                       order_key: Optional[str]) -> None:
+        fill = self._fill(closing_order_side(self.side), price, time, order_key)
+        self.cash = self.cash + apply_fee(self.qty * fill.price, self.fee_rate)
+        self.qty = 0.0
+        self.realized = self.cash
+        self.trades.append(PaperTrade(
+            entry_time=self.entry_time, exit_time=time, side=self.side,
+            entry_price=self.entry_fill, exit_price=fill.price,
+            net_return=self.realized / self.equity_before_entry - 1.0, exit_reason=reason,
+        ).__dict__)
+        self.side = 0
+
+    def _rebalance(self, price: float, time: str) -> Optional[dict]:
+        """Pull the position back to ``exposure`` of equity if it left the band.
+
+        Charged the fee on the traded amount and no slippage, as measured in
+        docs/KRAKEN_SIZING_RESULTS_2026-10-30.md (the XBT/GBP book costs ~0.2 bps).
+        A no-op unless partial exposure with a band is configured.
+        """
+        if self.exposure >= 1.0 or self.rebalance_band is None or self.side == 0:
+            return None
+        amount = rebalance_amount(self.cash, self.qty * price, self.exposure,
+                                  self.rebalance_band, self.min_rebalance)
+        if amount is None:
+            return None
+        fee = abs(amount) * self.fee_rate
+        self.qty = self.qty + amount / price
+        self.cash = self.cash - amount - fee
+        self.realized = self.cash + self.qty * price
+        record = {"time": time, "price": price, "amount": amount, "fee": fee}
+        self.rebalances.append(record)
+        return record
+
     def _close(self, price: float, time: str, reason: str,
                order_key: Optional[str] = None) -> None:
+        if self.exposure < 1.0:
+            self._close_partial(price, time, reason, order_key)
+            return
         fill = self._fill(closing_order_side(self.side), price, time, order_key)
         exit_fill = fill.price
 
@@ -280,13 +357,20 @@ class PaperPortfolio:
         self.last_price = price
         target_side = int(target_side)
         if target_side == self.side:
-            return None
+            rebalanced = self._rebalance(price, time)
+            if rebalanced is None:
+                return None
+            return {"time": time, "price": price, "from": self.side,
+                    "to": self.side, "rebalance": rebalanced}
         action: dict[str, Any] = {"time": time, "price": price,
                                   "from": self.side, "to": target_side}
         if self.side != 0:
             self._close(price, time, reason="signal", order_key=order_key)
         if target_side != 0:
             self._open(target_side, price, time, order_key=order_key)
+            rebalanced = self._rebalance(price, time)
+            if rebalanced is not None:
+                action["rebalance"] = rebalanced
         return action
 
     # -- reporting ------------------------------------------------------- #
@@ -295,7 +379,7 @@ class PaperPortfolio:
         if self.side == 0:
             return self.realized
         price = mark_price if mark_price is not None else self.last_price
-        if self.quantity_backed:
+        if self.quantity_backed or self.exposure < 1.0:
             return self.cash + self.qty * price
         gross = self.side * (price / self.entry_fill - 1.0)
         return self.entry_equity * (1.0 + gross)

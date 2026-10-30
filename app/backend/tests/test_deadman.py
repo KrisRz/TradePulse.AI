@@ -72,6 +72,39 @@ def test_a_dead_monitoring_service_cannot_break_the_bot():
     assert deadman.ping("https://hc.example/abc", session=rec) is False
 
 
+class _Answer:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+
+class Answering:
+    """A service that answers — with whatever status it is given."""
+
+    def __init__(self, status_code):
+        self.status_code = status_code
+        self.calls = []
+
+    def get(self, url, timeout=None):
+        self.calls.append(url)
+        return _Answer(self.status_code)
+
+
+def test_a_rejected_ping_is_not_reported_as_sent(caplog):
+    """2026-10-30: two channels pinged a placeholder URL for two months.
+
+    healthchecks.io answered HTTP 400 every time and the bot logged "sent (ok)".
+    """
+    with caplog.at_level("INFO"):
+        assert deadman.ping("https://hc-ping.com/...", session=Answering(400)) is False
+    assert "REJECTED (HTTP 400)" in caplog.text
+    assert "sent (ok)" not in caplog.text
+    assert "hc-ping.com" not in caplog.text, "the ping URL is a secret; never log it"
+
+
+def test_an_accepted_ping_still_counts():
+    assert deadman.ping("https://hc-ping.com/x", session=Answering(200)) is True
+
+
 def test_the_ping_is_bounded_in_time():
     """An unbounded request inside a run that holds a position is not monitoring."""
     rec = Recorder()

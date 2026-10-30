@@ -59,9 +59,17 @@ def ping(url: Optional[str], failed: bool = False,
 
     target = f"{url.rstrip('/')}/fail" if failed else url
     try:
-        (session or requests).get(target, timeout=timeout)
-        logger.info("dead-man ping sent (%s)", "FAIL" if failed else "ok")
-        return True
+        resp = (session or requests).get(target, timeout=timeout)
     except Exception as exc:  # noqa: BLE001 - deliberately broad, see docstring
         logger.warning("dead-man ping did not get through (%s): %s", target, exc)
         return False
+    # A request that came back is not a ping that counted. Until 2026-10-30 any
+    # answer was logged as "sent (ok)" — and both Binance channels pinged the
+    # placeholder "https://hc-ping.com/..." for two months, got HTTP 400 every
+    # time, and reported success. The URL is not logged: it is a write-only secret.
+    status = getattr(resp, "status_code", None)
+    if status is not None and not 200 <= status < 300:
+        logger.warning("dead-man ping REJECTED (HTTP %s) — check the URL in SSM", status)
+        return False
+    logger.info("dead-man ping sent (%s)", "FAIL" if failed else "ok")
+    return True
