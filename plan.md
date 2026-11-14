@@ -82,7 +82,12 @@ pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
 - T4 ✅ (na żywo, nieplanowane): drugi przebieg znalazł kupno po id klienta,
   zaksięgował raz; na giełdzie dalej 1 kupno. T3 ✅ tym samym.
 - T2 ✅ stop `OAP6ZJ-O4UT7-JTGA2J`: 0,00012512 BTC, trigger £39 658,0 = 0,80 × wejście.
-- Dalej: `sync` (cichy), potem T5.
+- `sync` ✅ cichy: 0 zdarzeń, księga = saldo, stop otwarty.
+- T5 ✅ stop anulowany (0 wykonania) → 1,4 s → sprzedaż `OOHTT6-KMK5G-GEVDC4`
+  0,00006 BTC, opłata £0,02381 → nowy stop `OUXYGT-DGLEP-AFAKZJ` na 0,00006512, ten sam próg.
+- T7 ✅ wyjście `OIWZLI-E3DQQ-YV23NT` 0,00006512 BTC, opłata £0,02581; 0 BTC, 0 otwartych
+  zleceń, saldo £9,9014 (strata testu £0,0986 = opłaty £0,0992).
+- Dalej: runda 2 dla T6 (kupno £3,20 → stop 0,3% pod ceną → po wykonaniu `sync`), T8.
 
 **Następna: 5 — test T1–T8, ciąg dalszy** (user uruchamia komendy po kolei; kolejność:
 T1 `enter --gbp 6.20 --bar T1` → T2 `status` → T3 `enter` ponownie + `sync` →

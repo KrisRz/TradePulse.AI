@@ -424,7 +424,7 @@ class KrakenTrader:
                 raise ExecutorHalt(f"R13: booking {order.txid} would make the bot's quantity negative")
             if order.side == BUY and self.qty == 0:
                 self.state.entry_price = str(order.avg_price)
-            self.state.qty = str(new_qty)
+            self.state.qty = str(new_qty) if new_qty else "0"     # not "0E-8"
             if new_qty == 0:
                 self.state.entry_price = None
         self.state.booked.append(cid)

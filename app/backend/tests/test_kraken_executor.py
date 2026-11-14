@@ -368,6 +368,7 @@ def test_exit_cancels_the_stop_sells_the_bots_quantity_and_leaves_nothing_open()
     assert venue.open_stops() == [] and trader.state.stop_txid is None
     assert trader.state.entry_price is None
     assert trader.exit("bar2") is None                        # idempotent
+    assert trader.state.qty == "0"                            # not "0E-8" (seen live at T7)
 
 
 # --------------------------------------------------------------------------- #
