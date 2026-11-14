@@ -18,7 +18,7 @@
 
 | Konto | Stan | Kto | Pieniądze | Klucze API |
 |---|---|---|---|---|
-| **Kraken live** (kraken.com) | **otwarte i zweryfikowane 2026-10-30**: paszport, rezydencja podatkowa UK z TIN, oświadczenie „not a US person”, profil FCA „Restricted Investor”, test wiedzy o ryzyku 8/8. Panel pokazuje rynek BTC/GBP. Obowiązuje 24 h „cooling off” przed pierwszym zakupem krypto (wymóg UK). | user | **£0 / 0 BTC** (2026-10-30). Pilot: ~£200 przelewem Faster Payments z banku w UK (darmowy, min. £1) | brak. Pilot: **jeden** klucz, saldo + zlecenia, **bez wypłat**, do SSM (ścieżka do ustalenia) |
+| **Kraken live** (kraken.com) | **otwarte i zweryfikowane 2026-10-30**: paszport, rezydencja podatkowa UK z TIN, oświadczenie „not a US person”, profil FCA „Restricted Investor”, test wiedzy o ryzyku 8/8. Panel pokazuje rynek BTC/GBP. Obowiązuje 24 h „cooling off” przed pierwszym zakupem krypto (wymóg UK). | user | **£10 / 0 BTC** (2026-11-14, wpłata testowa do sprawdzenia executora). Pilot: ~£200 przelewem Faster Payments z banku w UK (darmowy, min. £1) | brak. Pilot: **jeden** klucz, saldo + zlecenia, **bez wypłat**, do SSM (ścieżka do ustalenia) |
 | Sandbox spot | **nie istnieje** | — | — | — |
 
 Paper **nie potrzebuje konta**: ceny Krakena są publiczne. Konto i klucz są
@@ -58,7 +58,7 @@ potrzebne dopiero do pilota (warunek P4).
 | DynamoDB `tradepulse_paper_bot`, pk `XBTGBP_1d` | ✅ pierwsza decyzja: bar 2026-10-29, LONG po £58 128,8, equity £199,18 |
 | Dead-man ping | ✅ **działa od 2026-10-30**: check `tradepulse-paper-kraken` w healthchecks.io (okres 1 dzień, grace 2 h, alert mailem), URL w SSM `/tradepulse/healthcheck/paper-kraken` (SecureString). Ping sprawdzony: „Last Ping: now”. |
 | Executor Krakena (zlecenia, pilot) | **do zbudowania**, dopiero przed pilotem |
-| SSM: klucz API | **brak**; ścieżka `/tradepulse/kraken/{key,secret}` (SecureString), user zakłada teraz (plan 2026-11-14, pozycja 2) |
+| SSM: klucz API | ✅ 2026-11-14: `/tradepulse/kraken/{key,secret}` (SecureString), klucz `tradepulse-bot`: saldo, zlecenia otwarte i zamknięte, składanie, anulowanie; bez wypłat i wpłat (sprawdzone przez API) |
 
 ## Decyzje
 

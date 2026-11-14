@@ -37,9 +37,9 @@
 | # | Co | Kto | Zamyka |
 |---|---|---|---|
 | 1 | ~~Pre-rejestracja executora i testu~~ ✅ `docs/KRAKEN_EXECUTOR_PREREGISTRATION_2026-11-14.md` | — | commit |
-| 2 | **Klucz API Krakena** bez prawa wypłat → SSM `/tradepulse/kraken/{key,secret}`. Bez wpłaty. | **K** | odczyt salda przez API = £0, brak prawa wypłat potwierdzony |
+| 2 | ~~Klucz API Krakena bez prawa wypłat → SSM `/tradepulse/kraken/{key,secret}`~~ ✅ 2026-11-14: klucz `tradepulse-bot`, 5 uprawnień, wypłaty i wpłaty odrzucane (`Permission denied`) | **K** | odczyt salda przez API |
 | 3 | **Executor Krakena** (R1–R13): klient API z podpisem i nonce, limity pary, idempotencja, stop awaryjny 20%, anuluj → handel → stop, uzgodnienie salda na starcie, fille do DynamoDB i eksportu HMRC | — | testy + T0 na żywym API w trybie `validate` |
-| 4 | **Wpłata testowa £20** (Faster Payments; możliwe 24 h „cooling off” przed pierwszym kupnem) | **K** | saldo £20 widoczne przez API |
+| 4 | ~~Wpłata testowa~~ ✅ 2026-11-14: **£10** (decyzja usera), saldo `ZGBP 10.0000` odczytane przez API. Możliwe 24 h „cooling off” przed pierwszym kupnem | **K** | saldo widoczne przez API |
 | 5 | **Test T1–T8 na prawdziwej giełdzie** (zlecenia ~£5, budżet straty £3) | — (K patrzy w panel) | raport `docs/KRAKEN_EXECUTOR_RESULTS_*.md`, wszystkie PASS |
 | 6 | Review Codexa (jedno przejście) + PR na koniec sesji, w której powstał kod | — | PR zmergowany |
 | 7 | **Kandydat post-only (0,40%)**: projekt → pomiar minimalnymi zleceniami (odsetek wykonanych, czas, cena wobec market) → decyzja | — | dokument wyników |
@@ -64,7 +64,8 @@ pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
   prywatnych endpointów (uprawnienia klucza, `cl_ord_id` w `OpenOrders`/`ClosedOrders`,
   `stop-loss`, `deadline`) sprawdzamy na `validate=true`, nie z pamięci.
 
-**Następna: 2 (K) — klucz API do SSM.**
+**Następna: 3b — executor.** Kształt prywatnych endpointów sprawdzony 2026-11-14 na
+`validate=true` (lista w pre-rejestracji executora, sekcja „Sprawdzone na żywym API”).
 
 ---
 

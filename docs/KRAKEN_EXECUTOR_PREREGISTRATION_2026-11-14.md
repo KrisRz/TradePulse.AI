@@ -14,13 +14,14 @@ Ten test nie mówi nic o rentowności i nie jest startem pilota.
 
 ## Pieniądze i klucz (decyzje usera — do potwierdzenia kwoty)
 
-- Wpłata testowa: **£20** (Faster Payments). Budżet straty testu: **£3**.
-  Przekroczenie = stop i raport.
+- Wpłata testowa: **£10** (decyzja usera 2026-11-14, wpłacone tego dnia; pierwotnie
+  proponowane £20). Budżet straty testu: **£3**. Przekroczenie = stop i raport.
 - Jeden klucz API: saldo, zlecenia otwarte i zamknięte, składanie i anulowanie
   zleceń. **Bez wypłat, bez wpłat, bez eksportu.** W SSM jako SecureString:
   `/tradepulse/kraken/key`, `/tradepulse/kraken/secret`. Klucz nigdy w czacie,
   w repo ani w logach.
-- Wpłata dopiero po T0 (executor przechodzi próby bez pieniędzy).
+- ~~Wpłata dopiero po T0~~ User wpłacił przed T0 (2026-11-14). Zasada, która z tego
+  zostaje: **żadne prawdziwe zlecenie nie wychodzi przed PASS na T0.**
 
 ## Zasady executora (R)
 
@@ -73,3 +74,19 @@ konta przy `w = 0,5`). Przyjęte świadomie.
 - Pilot (£200, `w = 0,5`, pasmo 0,15, kill-switch 25%) startuje wyłącznie po P1–P4.
 - Kapitał rośnie wyłącznie po bramce B na kanale Kraken.
 - Strategia: `EmaCrossover(20, 100)` long-only, F7 10%.
+
+## Sprawdzone na żywym API 2026-11-14 (tryb `validate=true`, żadne zlecenie nie trafiło na giełdę)
+
+- Klucz `tradepulse-bot`: uprawnienia z `GetApiKeyInfo` to `query-funds`,
+  `query-open-trades`, `query-closed-trades`, `modify-trades`, `close-trades`.
+  `WithdrawMethods` i `DepositMethods` → `EGeneral:Permission denied`. R1 = lista
+  uprawnień musi być podzbiorem tych pięciu.
+- Saldo: `ZGBP 10.0000`. Opłata z `TradeVolume`: 0,80% (następny próg 0,60% od $2 500).
+- `cl_ord_id`: przyjmuje tekst do 18 znaków albo UUID; 24 znaki → `Invalid arguments:cl_ord_id`.
+- `validate=true` **nie sprawdza salda** (sprzedaż bez BTC przechodzi) — brak środków
+  wyjdzie dopiero na prawdziwym zleceniu; executor sprawdza saldo sam (R11).
+- Poniżej `ordermin` → `Invalid arguments:volume minimum not met`; `deadline`
+  w przeszłości → `Invalid arguments:deadline`.
+- `stop-loss` sprzedaży z `trigger=last` i limit `oflags=post` przyjęte.
+- `OpenOrders` i `ClosedOrders` filtrują po `cl_ord_id`.
+- £5 po bieżącej cenie = 0,00010065 BTC (minimum 0,00006).
