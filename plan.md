@@ -26,6 +26,12 @@
 > i szukaniem ulepszeń.** Z pomiaru (stan w DynamoDB, raporty bramek), jako wpis
 > „📊 STAN BOTA <data>” z jednym nazwanym kandydatem na ulepszenie. Małymi krokami,
 > według reguł researchu, bez luzowania zapisanych progów. Cel: bot na plusie.
+> **Uzupełnienie 2026-11-14:** w każdej sesji zastanawiamy się też, jak ulepszyć
+> **samą strategię**, nie tylko koszty i wykonanie. Zamiar usera: „jak bot będzie
+> szedł na + lub choć bez straty, dopłacę więcej”. ⚠️ Dziś wiąże zasada ostrzejsza:
+> kapitał rośnie dopiero po bramce B na kanale Kraken (najwcześniej 2027-10-29).
+> Dopłata wcześniej = decyzja usera i nowy dokument pre-rejestracji z warunkiem
+> zapisanym przed danymi.
 
 > 🗺️ **Giełdy (od 2026-10-30):** wszystko o kontach, kluczach, zasobach i decyzjach
 > per giełda jest w [`KRAKEN.md`](KRAKEN.md) (giełda bota) i [`BINANCE.md`](BINANCE.md)
