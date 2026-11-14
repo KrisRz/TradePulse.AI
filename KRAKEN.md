@@ -58,7 +58,7 @@ potrzebne dopiero do pilota (warunek P4).
 | DynamoDB `tradepulse_paper_bot`, pk `XBTGBP_1d` | ✅ pierwsza decyzja: bar 2026-10-29, LONG po £58 128,8, equity £199,18 |
 | Dead-man ping | ✅ **działa od 2026-10-30**: check `tradepulse-paper-kraken` w healthchecks.io (okres 1 dzień, grace 2 h, alert mailem), URL w SSM `/tradepulse/healthcheck/paper-kraken` (SecureString). Ping sprawdzony: „Last Ping: now”. |
 | Executor Krakena (zlecenia, pilot) | **do zbudowania**, dopiero przed pilotem |
-| SSM: klucz pilota | **brak**, user zakłada przy pilocie |
+| SSM: klucz API | **brak**; ścieżka `/tradepulse/kraken/{key,secret}` (SecureString), user zakłada teraz (plan 2026-11-14, pozycja 2) |
 
 ## Decyzje
 
@@ -76,6 +76,7 @@ potrzebne dopiero do pilota (warunek P4).
 | 2026-10-30 | Zlecenia rynkowe (taker 0,80%), post-only (0,40%) później | Backtest i projekt liczą 0,80%; post-only dokłada ryzyko braku wykonania | `docs/KRAKEN_PILOT_PREREGISTRATION_2026-10-30.md` |
 | 2026-11-14 | **Test executora minimalnymi prawdziwymi zleceniami (~£5), niezależnie od P3**; P3 dla pilota bez zmian | Kraken nie ma sandboxa, a P3 zależy od rynku, nie od jakości executora (16. dnia papieru: £194,32, bot poza rynkiem) | `plan.md` „STAN BOTA 2026-11-14” |
 | 2026-11-14 | **Post-only 0,40%** z przejściem na taker po terminie jako osobny kandydat po executorze | Jedyny znaleziony mechanizm obniżki kosztu o połowę | jw. |
+| 2026-11-14 | Zasady executora R1–R13, stop awaryjny **20%** na giełdzie, test T0–T8 z wpłatą **£20** i budżetem straty £3 | Stop 20% zadziałałby przed F7 raz na 15 transakcji 2017–2026 (12%: 4 razy) | `docs/KRAKEN_EXECUTOR_PREREGISTRATION_2026-11-14.md` |
 
 ## Do zrobienia (po kolei)
 

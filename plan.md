@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-11-14** (check-up „📊 STAN BOTA 2026-11-14”; kierunek bez zmian: „🧭 PODSUMOWANIE SESJI 2026-10-30”)
+> Ostatnia aktualizacja: **2026-11-14** („🧭 PLAN OD 2026-11-14” = lista pracy; check-up „📊 STAN BOTA 2026-11-14”)
 
 ---
 
@@ -25,6 +25,39 @@
 > 🗺️ **Giełdy (od 2026-10-30):** wszystko o kontach, kluczach, zasobach i decyzjach
 > per giełda jest w [`KRAKEN.md`](KRAKEN.md) (giełda bota) i [`BINANCE.md`](BINANCE.md)
 > (wygaszane demo). Każda zmiana stanu konta = wpis tam.
+
+## 🧭 PLAN OD 2026-11-14 — droga do prawdziwych pieniędzy (kolejność wiążąca, od góry)
+
+> Zastępuje pozycje 5–9 z „▶ CO DALEJ” w podsumowaniu 2026-10-30 (kierunek, decyzje
+> i P1–P4 stamtąd obowiązują). Decyzje usera 2026-11-14: test executora minimalnymi
+> prawdziwymi zleceniami niezależnie od P3; post-only jako kandydat; user doładowuje
+> konto i jest prowadzony krok po kroku. Pozycję zamyka dowód, nie deklaracja.
+> **K** = robi Krzysztof, reszta po stronie bota/kodu.
+
+| # | Co | Kto | Zamyka |
+|---|---|---|---|
+| 1 | ~~Pre-rejestracja executora i testu~~ ✅ `docs/KRAKEN_EXECUTOR_PREREGISTRATION_2026-11-14.md` | — | commit |
+| 2 | **Klucz API Krakena** bez prawa wypłat → SSM `/tradepulse/kraken/{key,secret}`. Bez wpłaty. | **K** | odczyt salda przez API = £0, brak prawa wypłat potwierdzony |
+| 3 | **Executor Krakena** (R1–R13): klient API z podpisem i nonce, limity pary, idempotencja, stop awaryjny 20%, anuluj → handel → stop, uzgodnienie salda na starcie, fille do DynamoDB i eksportu HMRC | — | testy + T0 na żywym API w trybie `validate` |
+| 4 | **Wpłata testowa £20** (Faster Payments; możliwe 24 h „cooling off” przed pierwszym kupnem) | **K** | saldo £20 widoczne przez API |
+| 5 | **Test T1–T8 na prawdziwej giełdzie** (zlecenia ~£5, budżet straty £3) | — (K patrzy w panel) | raport `docs/KRAKEN_EXECUTOR_RESULTS_*.md`, wszystkie PASS |
+| 6 | Review Codexa (jedno przejście) + PR na koniec sesji, w której powstał kod | — | PR zmergowany |
+| 7 | **Kandydat post-only (0,40%)**: projekt → pomiar minimalnymi zleceniami (odsetek wykonanych, czas, cena wobec market) → decyzja | — | dokument wyników |
+| 8 | **Kandydat #12**: wielkość pozycji wg zmienności, warianty zrealizowana i DVOL, z pasmem; punkt odniesienia `w = 0,5` + pasmo 0,15; próg tylko na korektach ze zmienności. Projekt w commicie przed liczbami | — | dokument wyników; przyjęty tylko, gdy spłyca DD przy Sharpe ≥ odniesienie − 0,10 |
+| 9 | **Lambda pilota** (ten sam kod co paper + executor, osobny pk w DynamoDB, alarmy, dead-man, kill-switch konta 25%), wdrożona wyłączona | — | Terraform `-target`, przebieg na `validate` |
+| 10 | **Ocena P1–P4** co 28 dni: 2026-11-27, 2026-12-25, 2027-01-22… | — + **K** | raport oceny; gdy P1–P3 PASS → K dopłaca do ~£200 → start pilota |
+| 11 | **Pilot**: bramki A, B, C co 28 dni; eksport HMRC | — | kapitał rośnie dopiero po bramce B (najwcześniej 2027-10-29) |
+| 12 | Wygaszenie Binance (lista w `BINANCE.md`) | — | 3 Lambdy i alarmy usunięte, M5 zarchiwizowane |
+| 13 | Provider AWS 6.x → runtime `python3.14` | — | `plan -target` bez nieoczekiwanych zmian |
+| 14 | Archiwum barów Krakena (przed ~2027-09) | — | bramka A czyta z archiwum |
+
+Kolejność 7 i 8 może się zamienić z 9–10, jeśli P3 przejdzie wcześniej: pilot nie
+czeka na ulepszenia. Ulepszenie przyjęte po starcie papieru wchodzi osobną
+pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
+
+**Gdzie jesteśmy:** pozycja 1 zamknięta 2026-11-14. **Następna: 2 (K) i 3 równolegle.**
+
+---
 
 ## 🧭 PODSUMOWANIE SESJI 2026-10-30 — czytaj najpierw (zastępuje kierunek z 16.09 i 03.10)
 
@@ -75,6 +108,8 @@ Binance (live i demo) wygaszamy. Mapa kont, kluczy i zasobów:
 - Repo: `delete_branch_on_merge` włączone 2026-10-30 (było `false`).
 
 ### ▶ CO DALEJ (kolejność wiążąca, od góry)
+
+> ⚠️ **Pozycje 5–9 zastąpione 2026-11-14** przez „🧭 PLAN OD 2026-11-14” wyżej.
 
 > ✅ **Kroki 1–3 zrobione 2026-10-30** (księga z pasmem, feed Kraken + bramka A,
 > Lambda `tradepulse-paper-kraken`). **Zegar papieru Kraken wystartował 2026-10-30**,
