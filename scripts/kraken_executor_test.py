@@ -353,8 +353,14 @@ def cmd_maker_cycles(args) -> int:
     for n in range(args.start, args.start + args.count):
         guard_budget(executor)
         report = trader.sync(f"M{n:02d}")
-        if trader.state.pending:
-            raise ExecutorHalt("a maker order is pending — run maker-settle first")
+        if trader.state.pending:                 # an order left resting by an earlier command
+            pending = trader.state.pending
+            age_min = (datetime.now(timezone.utc)
+                       - datetime.fromisoformat(pending["placed_at"])).total_seconds() / 60
+            _wait_for(executor, pending["txid"], max(0.0, args.wait_min - age_min))
+            result = trader.maker_settle()
+            print(f"[{datetime.now(timezone.utc):%H:%M:%S}] {pending['bar']} {pending['kind']} (left pending): "
+                  f"maker {result['maker']} taker {result['taker']} dust {result['dust']}", flush=True)
         if trader.qty == 0:
             _maker_leg(trader, executor, "entry", args.gbp, f"M{n:02d}", args.wait_min)
         if trader.qty > 0:
