@@ -286,21 +286,56 @@ class KrakenExecutor:
         if existing is not None:
             return existing
         _bid, ask = self.client.best_bid_ask(self.pair)
-        volume = rules.floor_volume(budget / ask)
-        if not rules.allows(volume, ask):
+        volume = self._sized_buy(budget, ask, bot_base)
+        return self._submit({"type": "buy", "ordertype": "market", "volume": str(volume)},
+                            cid, until_final=True)
+
+    def _sized_buy(self, budget: Decimal, price: Decimal, bot_base: Decimal) -> Decimal:
+        """Volume for a buy of ``budget`` at ``price``, after R3 and R7."""
+        rules = self.rules
+        volume = rules.floor_volume(budget / price)
+        if not rules.allows(volume, price):
             raise ExecutorHalt(f"R3: buy of {volume} {rules.base} (£{budget}) is below the pair minimum")
         if budget > self.max_notional:
             raise ExecutorHalt(f"R7: order £{budget} exceeds the per-order ceiling £{self.max_notional}")
         quote, base = self.balances()
-        equity = quote + base * ask
-        exposure_after = (Decimal(str(bot_base)) * ask + budget) / equity if equity > 0 else Decimal("1")
+        equity = quote + base * price
+        exposure_after = (Decimal(str(bot_base)) * price + budget) / equity if equity > 0 else Decimal("1")
         if exposure_after > MAX_EXPOSURE:
             raise ExecutorHalt(f"R7: exposure after the buy would be {exposure_after:.3f} "
                                f"> {MAX_EXPOSURE} of account equity £{equity:.2f}")
         if budget > quote:
             raise ExecutorHalt(f"buy £{budget} exceeds the cash on the account £{quote}")
-        return self._submit({"type": "buy", "ordertype": "market", "volume": str(volume)},
-                            cid, until_final=True)
+        return volume
+
+    def post_only(self, side: int, amount: Decimal, key: str, *,
+                  bot_base: Decimal = Decimal("0")) -> VenueOrder:
+        """A resting limit at the touch that may only add liquidity (maker fee).
+
+        ``amount`` is a quote budget for a BUY and a base volume for a SELL. The
+        order rests on our own side of the book — a buy at the bid, a sell at
+        the ask — so it cannot cross. If the book moves in the instant between
+        the quote and the order, Kraken refuses a ``post`` order that would
+        take; that refusal is a clean "nothing happened" (docs/POSTONLY_DESIGN_2026-11-14.md).
+        """
+        rules = self.rules
+        cid = self.client_order_id("m", key)
+        existing = self._existing(cid, until_final=False)
+        if existing is not None:
+            return existing
+        amount = Decimal(str(amount))
+        bid, ask = self.client.best_bid_ask(self.pair)
+        if side == BUY:
+            price = rules.floor_price(bid)
+            volume = self._sized_buy(amount, price, bot_base)
+        else:
+            price = rules.floor_price(ask)
+            volume = rules.floor_volume(amount)
+            if not rules.allows(volume, price):
+                raise ExecutorHalt(f"R3: sell of {volume} {rules.base} is below the pair minimum")
+        return self._submit({"type": "buy" if side == BUY else "sell", "ordertype": "limit",
+                             "price": str(price), "volume": str(volume), "oflags": "post"},
+                            cid, until_final=False)
 
     def sell(self, volume: Decimal, key: str) -> VenueOrder:
         """Market sell of exactly ``volume`` base — the bot's own quantity (R13)."""
@@ -363,6 +398,9 @@ class TraderState:
     stop_seq: int = 0                    # makes each stop's client id unique
     blocked: bool = False                # stopped out — no entry until the signal returns to 0
     booked: list = field(default_factory=list)   # client ids already booked
+    # A resting post-only order waiting for its deadline:
+    # {"txid", "kind", "bar", "side", "ref_price", "placed_at"}
+    pending: Optional[dict] = None
 
     @classmethod
     def from_dict(cls, raw: Optional[dict]) -> "TraderState":
@@ -401,8 +439,10 @@ class KrakenTrader:
     def _persist(self) -> None:
         self._save(self.state.as_dict())
 
-    def fill_record(self, order: VenueOrder, kind: str, bar: str) -> dict:
+    def fill_record(self, order: VenueOrder, kind: str, bar: str,
+                    extra: Optional[dict] = None) -> dict:
         return {
+            **(extra or {}),
             "bar": bar, "time": order.closed_at, "kind": kind,
             "side": order.side, "qty": str(order.vol_exec),
             "actual_price": str(order.avg_price), "cost": str(order.cost),
@@ -412,7 +452,8 @@ class KrakenTrader:
             "symbol": self.ex.pair, "book_qty_after": self.state.qty,
         }
 
-    def _book(self, order: VenueOrder, kind: str, bar: str) -> bool:
+    def _book(self, order: VenueOrder, kind: str, bar: str,
+              extra: Optional[dict] = None) -> bool:
         """Apply an executed order to the state exactly once."""
         cid = order.cl_ord_id or order.txid
         if cid in self.state.booked:
@@ -430,7 +471,7 @@ class KrakenTrader:
         self.state.booked.append(cid)
         self._persist()
         if order.executed:
-            self._on_fill(self.fill_record(order, kind, bar))
+            self._on_fill(self.fill_record(order, kind, bar, extra))
         return True
 
     # -- the stop --------------------------------------------------------- #
@@ -498,10 +539,13 @@ class KrakenTrader:
         if base > self.qty + step:
             report["events"].append(f"account holds {base - self.qty} more than the book (not ours, untouched)")
         expected = {self.state.stop_txid} if self.state.stop_txid else set()
+        if self.state.pending:
+            expected.add(self.state.pending["txid"])
+            report["events"].append(f"maker order {self.state.pending['txid']} is pending — settle it")
         strangers = [o.txid for o in self.ex.open_orders() if o.txid not in expected]
         if strangers:
             raise ExecutorHalt(f"R11: open orders the book does not know: {strangers}")
-        if self.qty > 0 and not self.state.stop_txid:
+        if self.qty > 0 and not self.state.stop_txid and not self.state.pending:
             report["events"].append("position without a stop — placing one")
             self._ensure_stop()
         report["protected"] = self.qty == 0 or bool(self.state.stop_txid)
@@ -544,6 +588,90 @@ class KrakenTrader:
         self._fault("after_submit")
         self._book(order, "exit", bar)
         return order
+
+    # -- post-only (docs/POSTONLY_DESIGN_2026-11-14.md) -------------------- #
+    def maker_open(self, kind: str, amount: Decimal, bar: str) -> VenueOrder:
+        """Rest a post-only order for a signal-driven entry, adjust or exit.
+
+        ``amount``: quote budget for a buy (entry, adjust > 0), base volume for
+        a sell (adjust < 0); ignored for an exit, which sells the whole
+        quantity. Forced exits (F7, kill switch) never come through here.
+        """
+        if self.state.pending:
+            raise ExecutorHalt(f"maker order {self.state.pending['txid']} is still pending — settle it first")
+        amount = Decimal(str(amount))
+        if kind == "entry":
+            if self.state.blocked:
+                raise ExecutorHalt("entry is blocked after a stop-out until the signal returns to 0")
+            if self.qty > 0:
+                raise ExecutorHalt("entry with a position already open")
+            side = BUY
+        elif kind == "adjust":
+            if self.qty == 0:
+                raise ExecutorHalt("adjust without a position")
+            side, amount = (BUY, amount) if amount > 0 else (SELL, -amount)
+        elif kind == "exit":
+            if self.qty == 0:
+                raise ExecutorHalt("exit without a position")
+            side, amount = SELL, self.qty
+        else:
+            raise ValueError(f"unknown kind {kind!r}")
+        if kind != "entry":
+            self._clear_stop(bar)              # the quantity is about to change / coins get reserved
+            if self.qty == 0:
+                raise ExecutorHalt("the stop filled before the order — position is flat")
+            if kind == "exit":
+                amount = self.qty
+        bid, ask = self.ex.client.best_bid_ask(self.ex.pair)
+        try:
+            order = self.ex.post_only(side, amount, f"{kind}#{bar}", bot_base=self.qty)
+        except KrakenAPIError as exc:
+            if exc.has("EOrder:Post only"):
+                self._ensure_position_stop()
+                raise ExecutorHalt("the book moved and the post-only order would have taken — "
+                                   "nothing was placed, run the step again") from exc
+            raise
+        self.state.pending = {"txid": order.txid, "kind": kind, "bar": bar, "side": side,
+                              "ref_price": str((bid + ask) / 2),
+                              "placed_at": datetime.now(timezone.utc).isoformat()}
+        self._persist()
+        return order
+
+    def _ensure_position_stop(self) -> None:
+        if self.qty > 0 and not self.state.stop_txid:
+            self._set_stop()
+
+    def maker_settle(self) -> dict:
+        """The deadline has passed: take what filled, cancel the rest, finish
+        the remainder as a taker, put the stop back. Idempotent."""
+        pending = self.state.pending
+        if not pending:
+            return {"settled": False, "reason": "nothing pending"}
+        kind, bar, side = pending["kind"], pending["bar"], int(pending["side"])
+        ref = {"ref_price": pending["ref_price"], "placed_at": pending["placed_at"]}
+        order = self.ex.query(pending["txid"])
+        if not order.is_final:
+            order = self.ex.cancel(order.txid)
+        result = {"settled": True, "maker": str(order.vol_exec), "taker": "0", "dust": "0",
+                  "maker_txid": order.txid, "taker_txid": None}
+        self._book(order, kind, bar, {**ref, "liquidity": "maker"})
+        remaining = order.volume - order.vol_exec
+        if remaining > 0:
+            rules = self.ex.rules
+            bid, ask = self.ex.client.best_bid_ask(self.ex.pair)
+            touch = ask if side == BUY else bid
+            if rules.allows(rules.floor_volume(remaining), touch):
+                taker = (self.ex.buy(remaining * ask, f"{kind}#{bar}#taker", bot_base=self.qty)
+                         if side == BUY else self.ex.sell(remaining, f"{kind}#{bar}#taker"))
+                self._book(taker, kind, bar, {**ref, "liquidity": "taker"})
+                result.update(taker=str(taker.vol_exec), taker_txid=taker.txid)
+            else:
+                result["dust"] = str(remaining)      # below the pair minimum — left as is, reported
+        self.state.pending = None
+        self._persist()
+        if self.qty > 0 and self.ex.rules.allows(self.qty, emergency_stop_price(Decimal(self.state.entry_price))):
+            self._ensure_position_stop()
+        return result
 
     def unblock(self) -> None:
         """The strategy's target went back to 0 — entries are allowed again."""

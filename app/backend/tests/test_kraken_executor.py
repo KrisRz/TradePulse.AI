@@ -23,6 +23,7 @@ D = Decimal
 RULES = PairRules("XXBTZGBP", "XBTGBP", "XXBT", "ZGBP", D("0.00006"), D("0.43"),
                   D("0.1"), 8, "online")
 FEE = D("0.008")
+MAKER_FEE = D("0.004")
 
 
 class FakeKraken:
@@ -77,10 +78,10 @@ class FakeKraken:
         return sum((D(o["vol"]) for o in self.orders.values()
                     if o["status"] == "open" and o["descr"]["type"] == "sell"), D("0"))
 
-    def _fill(self, order, price):
-        vol = D(order["vol"])
+    def _fill(self, order, price, vol=None, fee_rate=FEE, final=True):
+        vol = D(order["vol"]) if vol is None else D(vol)
         cost = vol * price
-        fee = cost * FEE
+        fee = cost * fee_rate
         if order["descr"]["type"] == "buy":
             self.gbp -= cost + fee
             self.btc += vol
@@ -88,8 +89,9 @@ class FakeKraken:
             self.gbp += cost - fee
             self.btc -= vol
         self._t += 1
-        order.update(status="closed", vol_exec=str(vol), cost=str(cost), fee=str(fee),
-                     price=str(price), closetm=self._t)
+        order.update(vol_exec=str(vol), cost=str(cost), fee=str(fee), price=str(price))
+        if final:
+            order.update(status="closed", closetm=self._t)
 
     def _add(self, p):
         if p["volume"] and D(p["volume"]) < RULES.ordermin:
@@ -102,6 +104,10 @@ class FakeKraken:
             raise KrakenAPIError(["EOrder:Insufficient funds"], "AddOrder")
         if p["type"] == "sell" and vol > self.btc - self._reserved():
             raise KrakenAPIError(["EOrder:Insufficient funds"], "AddOrder")
+        if p.get("oflags") == "post" and (
+                (p["type"] == "buy" and D(p["price"]) >= self.ask)
+                or (p["type"] == "sell" and D(p["price"]) <= self.bid)):
+            raise KrakenAPIError(["EOrder:Post only order"], "AddOrder")
         self._n += 1
         txid = f"O{self._n:05d}"
         order = {"status": "open", "cl_ord_id": p["cl_ord_id"], "vol": p["volume"],
@@ -141,6 +147,19 @@ class FakeKraken:
             if (order["status"] == "open" and order["descr"]["ordertype"] == "stop-loss"
                     and D(last) <= D(order["descr"]["price"])):
                 self._fill(order, D(last))
+
+    def fill_limits(self, fraction="1"):
+        """The market comes to our resting post-only orders."""
+        for order in self.orders.values():
+            if order["status"] == "open" and order["descr"]["ordertype"] == "limit":
+                whole = D(fraction) == 1
+                self._fill(order, D(order["descr"]["price"]),
+                           vol=None if whole else D(order["vol"]) * D(fraction),
+                           fee_rate=MAKER_FEE, final=whole)
+
+    def open_limits(self):
+        return [o for o in self.orders.values()
+                if o["status"] == "open" and o["descr"]["ordertype"] == "limit"]
 
     def open_stops(self):
         return [o for o in self.orders.values()
@@ -479,3 +498,102 @@ def test_an_order_that_never_becomes_visible_is_outcome_unknown_not_a_halt():
     trader.enter(D("6.20"), "bar1")           # the rerun finds it by client id and finishes
     assert len([p for p in venue.adds() if p["type"] == "buy"]) == 1
     assert trader.qty == D("0.000124") and len(venue.open_stops()) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Post-only (docs/POSTONLY_DESIGN_2026-11-14.md)
+# --------------------------------------------------------------------------- #
+def test_maker_entry_rests_at_the_bid_and_pays_the_maker_fee_when_filled():
+    venue, ex, trader, saved, fills = make()
+    order = trader.maker_open("entry", D("3.20"), "bar1")
+    (limit,) = venue.open_limits()
+    assert D(limit["descr"]["price"]) == venue.bid and order.status == "open"
+    assert trader.qty == 0 and trader.state.pending["txid"] == order.txid and not fills
+    venue.fill_limits()
+    result = trader.maker_settle()
+    assert result["taker"] == "0" and D(result["maker"]) == trader.qty == venue.btc
+    (fill,) = fills
+    assert fill["liquidity"] == "maker" and D(fill["fee_paid"]) == D(fill["cost"]) * MAKER_FEE
+    assert D(fill["ref_price"]) == (D("49990") + D("50000")) / 2
+    assert trader.state.pending is None and len(venue.open_stops()) == 1
+    assert trader.maker_settle() == {"settled": False, "reason": "nothing pending"}
+
+
+def test_maker_order_not_filled_by_the_deadline_is_cancelled_and_finished_as_taker():
+    venue, ex, trader, saved, fills = make()
+    order = trader.maker_open("entry", D("3.20"), "bar1")
+    result = trader.maker_settle()
+    assert venue.orders[order.txid]["status"] == "canceled" and D(result["maker"]) == 0
+    assert D(result["taker"]) == trader.qty == venue.btc > 0
+    (fill,) = fills
+    assert fill["liquidity"] == "taker" and D(fill["fee_paid"]) == D(fill["cost"]) * FEE
+    assert venue.open_limits() == [] and len(venue.open_stops()) == 1
+
+
+def test_partial_maker_fill_books_both_parts_once():
+    venue, ex, trader, saved, fills = make(FakeKraken(gbp="100"))
+    trader.maker_open("entry", D("20"), "bar1")              # 0.0004 BTC
+    venue.fill_limits("0.5")
+    result = trader.maker_settle()
+    assert D(result["maker"]) == D("0.00020004") and D(result["taker"]) > 0     # half of 0.00040008
+    assert [f["liquidity"] for f in fills] == ["maker", "taker"]
+    assert trader.qty == venue.btc and len(venue.open_stops()) == 1
+
+
+def test_a_remainder_below_the_pair_minimum_is_left_and_reported_not_forced():
+    venue, ex, trader, saved, fills = make()
+    trader.maker_open("entry", D("3.20"), "bar1")            # 0.00006401 BTC
+    venue.fill_limits("0.5")
+    result = trader.maker_settle()
+    assert D(result["dust"]) > 0 and result["taker"] == "0"
+    assert trader.qty == venue.btc and venue.open_limits() == []
+
+
+def test_maker_exit_lifts_the_stop_rests_at_the_ask_and_ends_flat():
+    venue, ex, trader, saved, fills = make()
+    trader.enter(D("6.20"), "bar1")
+    trader.maker_open("exit", D("0"), "bar2")
+    assert venue.open_stops() == [] and D(venue.open_limits()[0]["descr"]["price"]) == venue.ask
+    report = trader.sync("bar2")                             # must neither halt nor place a stop
+    assert any("pending" in e for e in report["events"]) and venue.open_stops() == []
+    venue.fill_limits()
+    trader.maker_settle()
+    assert trader.qty == venue.btc == 0 and venue.open_stops() == [] and venue.open_limits() == []
+    assert [f["kind"] for f in fills] == ["entry", "exit"]
+
+
+def test_maker_exit_not_filled_sells_at_market_after_the_deadline():
+    venue, ex, trader, saved, fills = make()
+    trader.enter(D("6.20"), "bar1")
+    trader.maker_open("exit", D("0"), "bar2")
+    trader.maker_settle()
+    assert trader.qty == venue.btc == 0 and fills[-1]["liquidity"] == "taker"
+
+
+def test_post_only_that_would_cross_places_nothing_and_keeps_the_position_protected():
+    venue, ex, trader, saved, fills = make()
+    trader.enter(D("6.20"), "bar1")
+    real = venue.best_bid_ask
+    venue.best_bid_ask = lambda pair: (D("49990"), D("49980"))    # a stale quote: our ask is under the bid
+    with pytest.raises(ExecutorHalt, match="would have taken"):
+        trader.maker_open("exit", D("0"), "bar2")
+    venue.best_bid_ask = real
+    assert trader.state.pending is None and venue.open_limits() == []
+    assert len(venue.open_stops()) == 1 and trader.qty == venue.btc
+
+
+def test_one_maker_order_at_a_time_and_r7_still_applies():
+    venue, ex, trader, saved, fills = make()
+    with pytest.raises(ExecutorHalt, match="R7"):
+        trader.maker_open("entry", D("6.60"), "bar1")
+    trader.maker_open("entry", D("3.20"), "bar1")
+    with pytest.raises(ExecutorHalt, match="still pending"):
+        trader.maker_open("entry", D("3.20"), "bar2")
+    assert len(venue.open_limits()) == 1
+
+
+def test_rerunning_maker_open_for_the_same_bar_does_not_rest_a_second_order():
+    venue, ex, trader, saved, fills = make()
+    first = ex.post_only(BUY, D("3.20"), "entry#bar1")
+    again = ex.post_only(BUY, D("3.20"), "entry#bar1")
+    assert first.txid == again.txid and len(venue.open_limits()) == 1

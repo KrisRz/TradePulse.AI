@@ -105,7 +105,20 @@ pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
 - **Werdykt: PASS 9/9**, strata £0,1591 z budżetu £3 →
   `docs/KRAKEN_EXECUTOR_RESULTS_2026-11-14.md`.
 
-**Następna: 6 — review Codexa + PR (gdy user poprosi), potem 7 (post-only).**
+**Pozycja 7 (post-only) w toku, 2026-11-14:**
+- ✅ przesłanka z publicznej taśmy (45 dni × 2 strony): termin 15 min → 76,7% jako
+  maker, koszt strony 0,535% vs 0,80%; `scripts/research/postonly_premise.py`;
+- ✅ projekt z regułą decyzji w commicie przed zleceniami:
+  `docs/POSTONLY_DESIGN_2026-11-14.md` (PRZYJĘTY gdy na 20 zleceniach: maker ≥ 60%,
+  koszt strony ≤ 0,65%, zero zgubionych, żaden `post` jako taker);
+- ✅ kod: `KrakenExecutor.post_only`, `KrakenTrader.maker_open` / `maker_settle`
+  (anuluj po terminie → reszta market → stop wraca), 42 testy executora, mutacje 8/8;
+- ⏳ pomiar: 20 zleceń (10 cykli kupno → 15 min → rozliczenie → sprzedaż → 15 min →
+  rozliczenie), uruchamia user: `unblock`, potem `maker-open --kind entry --gbp 3.20
+  --bar M01`, `maker-settle`, `maker-open --kind exit --bar M01x`, `maker-settle`, …
+  Bez pośpiechu — pilot i tak czeka na P3. Budżet straty £1,50.
+
+**Pozycja 6 (review Codexa + PR) — gdy user poprosi.**
 
 ---
 

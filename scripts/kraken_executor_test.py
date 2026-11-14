@@ -11,6 +11,8 @@ docs/KRAKEN_EXECUTOR_PREREGISTRATION_2026-11-14.md. Real orders, smallest size.
     scripts/kraken_executor_test.py tighten-stop --pct 0.3 --confirm
     scripts/kraken_executor_test.py exit --bar T7 --confirm
     scripts/kraken_executor_test.py unblock --confirm
+    scripts/kraken_executor_test.py maker-open --kind entry --gbp 3.20 --bar M01 --confirm
+    scripts/kraken_executor_test.py maker-settle --confirm        # 15 minutes later
 
 Every command that can place, cancel or trade needs ``--confirm``; without it
 the command prints what it would do and stops. State and fills live in DynamoDB
@@ -284,6 +286,30 @@ def cmd_exit(args) -> int:
     return 0
 
 
+def cmd_maker_open(args) -> int:
+    """Post-only measurement (docs/POSTONLY_DESIGN_2026-11-14.md): rest one order."""
+    _c, executor, trader, _pre = build(args)
+    what = (f"rest a post-only BUY for £{args.gbp} at the bid" if args.kind == "entry"
+            else "lift the stop and rest a post-only SELL of the whole position at the ask")
+    if not need_confirm(args, what):
+        return 0
+    guard_budget(executor)
+    order = trader.maker_open(args.kind, Decimal(args.gbp or "0"), args.bar)
+    print(json.dumps({"order": order.txid, "status": order.status, "limit": order.raw["descr"]["price"],
+                      "volume": str(order.volume), "pending": trader.state.pending,
+                      "settle_after_utc": "15 minutes from placed_at"}, indent=1))
+    return 0
+
+
+def cmd_maker_settle(args) -> int:
+    _c, executor, trader, _pre = build(args)
+    if not need_confirm(args, "take what filled, cancel the rest, finish the remainder at market, restore the stop"):
+        return 0
+    result = trader.maker_settle()
+    print(json.dumps({"result": result, "after": snapshot(executor, trader)}, indent=1))
+    return 0
+
+
 def cmd_unblock(args) -> int:
     _c, executor, trader, _pre = build(args)
     if not need_confirm(args, "clear the stop-out block on the test book"):
@@ -300,7 +326,8 @@ def main() -> int:
     sub.add_parser("t0").set_defaults(fn=cmd_t0)
     sub.add_parser("status").set_defaults(fn=cmd_status)
     for name, fn in (("enter", cmd_enter), ("sync", cmd_sync), ("adjust", cmd_adjust),
-                     ("tighten-stop", cmd_tighten_stop), ("exit", cmd_exit), ("unblock", cmd_unblock)):
+                     ("tighten-stop", cmd_tighten_stop), ("exit", cmd_exit), ("unblock", cmd_unblock),
+                     ("maker-open", cmd_maker_open), ("maker-settle", cmd_maker_settle)):
         sp = sub.add_parser(name)
         sp.set_defaults(fn=fn)
         sp.add_argument("--confirm", action="store_true")
@@ -310,6 +337,9 @@ def main() -> int:
         if name == "adjust":
             sp.add_argument("--sell", required=True)
             sp.add_argument("--crash-after-submit", action="store_true")
+        if name == "maker-open":
+            sp.add_argument("--kind", choices=["entry", "exit"], required=True)
+            sp.add_argument("--gbp")
         if name == "tighten-stop":
             sp.add_argument("--pct", default="0.3")
     args = p.parse_args()
