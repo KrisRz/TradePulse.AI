@@ -60,12 +60,25 @@ pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
   Krakena, nonce, odczyt ponawiany, zapis wysyłany raz → `KrakenOutcomeUnknown`,
   limity pary), 22 testy; dowód na żywo: `SystemStatus` online, limity XBT/GBP
   (`ordermin` 0,00006, `costmin` £0,43, krok 0,1), zły klucz → `EAPI:Invalid key`.
-- ⏳ 3b executor (R1–R13) — **czeka na klucz z pozycji 2**: kształt odpowiedzi
-  prywatnych endpointów (uprawnienia klucza, `cl_ord_id` w `OpenOrders`/`ClosedOrders`,
-  `stop-loss`, `deadline`) sprawdzamy na `validate=true`, nie z pamięci.
+- ✅ 3b executor `kraken_executor.py` (R1–R13: `KrakenExecutor` + `KrakenTrader`),
+  31 testów na giełdzie w pamięci, mutacje 8/8 zabite (po dopisaniu testu na
+  podwójne księgowanie). **T0 PASS 11/11 na żywym Krakenie 2026-11-14 20:32 UTC**
+  (`scripts/kraken_executor_test.py t0`): uprawnienia, wypłaty i wpłaty odrzucone,
+  kupno / sprzedaż / stop w `validate`, zły sekret bez ponowień, zły nonce po 3
+  próbach, uzgodnienie pustej księgi, 0 zleceń na koncie.
+- ⚠️ **Prawdziwe zlecenia uruchamia user** (komendy `scripts/kraken_executor_test.py
+  … --confirm`), nie asystent: transakcji finansowych asystent nie wykonuje.
+  To samo dotyczy włączenia Lambdy pilota (pozycja 9–10).
+- Rozmiary testu przy wpłacie £10: T1 kupno **£6,20** (62% konta, pod limitem 65%),
+  T5 sprzedaż 0,00006 BTC (zostaje ~0,000064 ≥ minimum, więc stop da się postawić),
+  T6 na drugiej rundzie kupno £3,20. Samo £5 nie pozwala przejść T5: po sprzedaży
+  minimum zostałoby 0,00004 BTC, poniżej minimum zlecenia.
 
-**Następna: 3b — executor.** Kształt prywatnych endpointów sprawdzony 2026-11-14 na
-`validate=true` (lista w pre-rejestracji executora, sekcja „Sprawdzone na żywym API”).
+**Następna: 5 — test T1–T8** (user uruchamia komendy po kolei; kolejność:
+T1 `enter --gbp 6.20 --bar T1` → T2 `status` → T3 `enter` ponownie + `sync` →
+T4+T5 `adjust --sell 0.00006 --bar T5 --crash-after-submit`, potem to samo bez flagi →
+T7 `exit --bar T7` → runda 2: `enter --gbp 3.20 --bar T6` → `tighten-stop` → po
+wykonaniu `sync --bar T6b` → `unblock` → T8 `hmrc_export.py --pk XBTGBP_exectest`).
 
 ---
 
