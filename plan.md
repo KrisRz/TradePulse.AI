@@ -22,6 +22,11 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
+> 🔁 **Zasada usera od 2026-11-14: każda sesja kończy się analizą działania bota
+> i szukaniem ulepszeń.** Z pomiaru (stan w DynamoDB, raporty bramek), jako wpis
+> „📊 STAN BOTA <data>” z jednym nazwanym kandydatem na ulepszenie. Małymi krokami,
+> według reguł researchu, bez luzowania zapisanych progów. Cel: bot na plusie.
+
 > 🗺️ **Giełdy (od 2026-10-30):** wszystko o kontach, kluczach, zasobach i decyzjach
 > per giełda jest w [`KRAKEN.md`](KRAKEN.md) (giełda bota) i [`BINANCE.md`](BINANCE.md)
 > (wygaszane demo). Każda zmiana stanu konta = wpis tam.
