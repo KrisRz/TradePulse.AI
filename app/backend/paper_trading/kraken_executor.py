@@ -192,11 +192,29 @@ class KrakenExecutor:
                                f"({[o.txid for o in found]})")
         return found[0] if found else None
 
+    def _query(self, txid: str) -> Optional[VenueOrder]:
+        """The order, or None while the exchange does not show it. Seen live on
+        2026-11-14 (T1): ``QueryOrders`` answered "unknown order" for a txid
+        that ``AddOrder`` had returned a moment earlier — the order existed and
+        had filled. Not-yet-visible is a state to wait out, not a verdict."""
+        try:
+            result = self.client.private_read("QueryOrders", {"txid": txid}) or {}
+        except KrakenAPIError as exc:
+            if exc.has("EOrder:Unknown order") or exc.has("EOrder:Invalid order"):
+                return None
+            raise
+        return VenueOrder.parse(txid, result[txid]) if txid in result else None
+
     def query(self, txid: str) -> VenueOrder:
-        result = self.client.private_read("QueryOrders", {"txid": txid}) or {}
-        if txid not in result:
-            raise ExecutorHalt(f"order {txid} is unknown to the exchange")
-        return VenueOrder.parse(txid, result[txid])
+        """An order that must exist (one the book already knows)."""
+        for attempt in range(self._poll_attempts):
+            order = self._query(txid)
+            if order is not None:
+                return order
+            if attempt + 1 < self._poll_attempts:
+                self._sleep(self._poll_interval)
+        raise OrderOutcomeUnknown(f"order {txid} is not visible on the exchange after "
+                                  f"{self._poll_attempts} checks")
 
     def open_orders(self) -> list[VenueOrder]:
         listing = (self.client.private_read("OpenOrders") or {}).get("open") or {}

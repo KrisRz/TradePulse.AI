@@ -33,6 +33,7 @@ class FakeKraken:
         self.permissions = sorted(ALLOWED_PERMISSIONS)
         self.status = "online"
         self.fail_next_write = None      # "before" | "after"
+        self.query_lag = 0               # QueryOrders answers "unknown" this many times
         self.writes = []
         self._n = 0
         self._t = 1_800_000_000.0
@@ -66,6 +67,9 @@ class FakeKraken:
             return {"open": out} if want_open else {"closed": out, "count": len(out)}
         if name == "QueryOrders":
             t = params["txid"]
+            if self.query_lag > 0:
+                self.query_lag -= 1
+                raise KrakenAPIError(["EOrder:Unknown order"], name)
             return {t: self.orders[t]} if t in self.orders else {}
         raise AssertionError(f"unexpected read {name}")
 
@@ -452,3 +456,25 @@ def test_state_survives_a_dynamodb_round_trip():
     state = TraderState.from_dict({"qty": "0.000124", "entry_price": "50000", "stop_txid": "O1",
                                    "stop_seq": 2.0, "blocked": False, "booked": ["a"]})
     assert state.stop_seq == 2 and isinstance(state.stop_seq, int)
+
+
+def test_t1_live_bug_order_not_yet_visible_right_after_submit_is_waited_out():
+    """2026-11-14, first real order: AddOrder returned a txid, QueryOrders said
+    "unknown order" a moment later, the run stopped with the coins bought, the
+    book empty and no stop. The order must be waited for, booked and protected."""
+    venue, ex, trader, saved, fills = make()
+    venue.query_lag = 2
+    trader.enter(D("6.20"), "bar1")
+    assert trader.qty == venue.btc == D("0.000124")
+    assert len(fills) == 1 and len(venue.open_stops()) == 1
+
+
+def test_an_order_that_never_becomes_visible_is_outcome_unknown_not_a_halt():
+    venue, ex, trader, saved, fills = make()
+    venue.query_lag = 99
+    with pytest.raises(OrderOutcomeUnknown):
+        trader.enter(D("6.20"), "bar1")
+    venue.query_lag = 0
+    trader.enter(D("6.20"), "bar1")           # the rerun finds it by client id and finishes
+    assert len([p for p in venue.adds() if p["type"] == "buy"]) == 1
+    assert trader.qty == D("0.000124") and len(venue.open_stops()) == 1

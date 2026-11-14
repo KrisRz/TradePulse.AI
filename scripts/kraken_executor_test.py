@@ -34,7 +34,7 @@ from app.backend.paper_trading.kraken_api import (  # noqa: E402
     KrakenAPIError, KrakenClient, KrakenOutcomeUnknown,
 )
 from app.backend.paper_trading.kraken_executor import (  # noqa: E402
-    ExecutorHalt, KrakenExecutor, KrakenTrader, TraderState,
+    ExecutorHalt, KrakenExecutor, KrakenTrader, OrderOutcomeUnknown, TraderState,
 )
 from app.backend.paper_trading.state_store import DynamoDBStateStore  # noqa: E402
 
@@ -315,7 +315,7 @@ def main() -> int:
     args = p.parse_args()
     try:
         return args.fn(args)
-    except (ExecutorHalt, KrakenAPIError, KrakenOutcomeUnknown) as exc:
+    except (ExecutorHalt, OrderOutcomeUnknown, KrakenAPIError, KrakenOutcomeUnknown) as exc:
         print(f"STOPPED: {type(exc).__name__}: {exc}")
         return 2
 
