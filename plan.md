@@ -43,9 +43,9 @@
 |---|---|---|---|
 | 1 | ~~Pre-rejestracja executora i testu~~ ✅ `docs/KRAKEN_EXECUTOR_PREREGISTRATION_2026-11-14.md` | — | commit |
 | 2 | ~~Klucz API Krakena bez prawa wypłat → SSM `/tradepulse/kraken/{key,secret}`~~ ✅ 2026-11-14: klucz `tradepulse-bot`, 5 uprawnień, wypłaty i wpłaty odrzucane (`Permission denied`) | **K** | odczyt salda przez API |
-| 3 | **Executor Krakena** (R1–R13): klient API z podpisem i nonce, limity pary, idempotencja, stop awaryjny 20%, anuluj → handel → stop, uzgodnienie salda na starcie, fille do DynamoDB i eksportu HMRC | — | testy + T0 na żywym API w trybie `validate` |
+| 3 | ✅ 2026-11-14 **Executor Krakena** (R1–R13): klient API z podpisem i nonce, limity pary, idempotencja, stop awaryjny 20%, anuluj → handel → stop, uzgodnienie salda na starcie, fille do DynamoDB i eksportu HMRC | — | testy + T0 na żywym API w trybie `validate` |
 | 4 | ~~Wpłata testowa~~ ✅ 2026-11-14: **£10** (decyzja usera), saldo `ZGBP 10.0000` odczytane przez API. Możliwe 24 h „cooling off” przed pierwszym kupnem | **K** | saldo widoczne przez API |
-| 5 | **Test T1–T8 na prawdziwej giełdzie** (zlecenia ~£5, budżet straty £3) | — (K patrzy w panel) | raport `docs/KRAKEN_EXECUTOR_RESULTS_*.md`, wszystkie PASS |
+| 5 | ~~Test T1–T8 na prawdziwej giełdzie~~ ✅ 2026-11-14: **PASS 9/9**, strata £0,16; zlecenia uruchamiał K | **K** + weryfikacja przez API | `docs/KRAKEN_EXECUTOR_RESULTS_2026-11-14.md` |
 | 6 | Review Codexa (jedno przejście) + PR na koniec sesji, w której powstał kod | — | PR zmergowany |
 | 7 | **Kandydat post-only (0,40%)**: projekt → pomiar minimalnymi zleceniami (odsetek wykonanych, czas, cena wobec market) → decyzja | — | dokument wyników |
 | 8 | **Kandydat #12**: wielkość pozycji wg zmienności, warianty zrealizowana i DVOL, z pasmem; punkt odniesienia `w = 0,5` + pasmo 0,15; próg tylko na korektach ze zmienności. Projekt w commicie przed liczbami | — | dokument wyników; przyjęty tylko, gdy spłyca DD przy Sharpe ≥ odniesienie − 0,10 |
@@ -92,13 +92,14 @@ pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
   0,00006 BTC, opłata £0,02381 → nowy stop `OUXYGT-DGLEP-AFAKZJ` na 0,00006512, ten sam próg.
 - T7 ✅ wyjście `OIWZLI-E3DQQ-YV23NT` 0,00006512 BTC, opłata £0,02581; 0 BTC, 0 otwartych
   zleceń, saldo £9,9014 (strata testu £0,0986 = opłaty £0,0992).
-- Dalej: runda 2 dla T6 (kupno £3,20 → stop 0,3% pod ceną → po wykonaniu `sync`), T8.
+- T6 ✅ kupno `OMVUED-JP2CN-5O5J5V` w jednym przebiegu (poprawka działa), stop 0,3%
+  pod ceną wykonany po 13 min po £49 466,2 (poślizg 0,007%), `sync` zaksięgował go
+  z giełdy, księga 0, wejście zablokowane.
+- T8 ✅ eksport HMRC: 5 filli, 3 zbycia, −£0,16, kwoty w GBP.
+- **Werdykt: PASS 9/9**, strata £0,1591 z budżetu £3 →
+  `docs/KRAKEN_EXECUTOR_RESULTS_2026-11-14.md`.
 
-**Następna: 5 — test T1–T8, ciąg dalszy** (user uruchamia komendy po kolei; kolejność:
-T1 `enter --gbp 6.20 --bar T1` → T2 `status` → T3 `enter` ponownie + `sync` →
-T4+T5 `adjust --sell 0.00006 --bar T5 --crash-after-submit`, potem to samo bez flagi →
-T7 `exit --bar T7` → runda 2: `enter --gbp 3.20 --bar T6` → `tighten-stop` → po
-wykonaniu `sync --bar T6b` → `unblock` → T8 `hmrc_export.py --pk XBTGBP_exectest`).
+**Następna: 6 — review Codexa + PR (gdy user poprosi), potem 7 (post-only).**
 
 ---
 
@@ -252,6 +253,16 @@ dane < 2026-07-16, próbki niezachodzące):
   executor). Analityk decydujący (LLM) odrzucony 30.10; filtry reżimu #7
   i meta-labeler #8 odrzucone. Drugi proces ma sens tylko jako kontroler
   (uzgadnianie stanu z giełdą), nie jako źródło sygnału.
+
+**Analiza na koniec sesji 2026-11-14 (zasada usera):**
+- Kanały bez zmian od porannego pomiaru: wszystkie FLAT, 0 błędów.
+- Nowy pomiar z prawdziwej giełdy: na 5 zleceniach (obrót £18,80) **94,5% straty to
+  opłata 0,80%**, poślizg zleceń market niemierzalny, stop wykonał się 0,007% pod
+  progiem. Wniosek: na Krakenie kosztem jest opłata, nie wykonanie.
+- **Kandydat na ulepszenie tej sesji: post-only 0,40% (pozycja 7).** Obniża jedyny
+  realny koszt o połowę i otwiera ponowny pomiar wariantu 4h (przy 0,40%: 3/4 układów,
+  przy 0,80%: 0/4). Do zmierzenia minimalnymi zleceniami: odsetek wykonanych i czas.
+- Drugi w kolejce: #12 (przesłanka zmierzona dziś: korelacja zmienności 0,49).
 
 **Research zewnętrzny 2026-11-14** (agent, źródła pierwotne; nie powtarzać):
 - „Catching Crypto Trends” (Zarattini i in., SSRN 5209907): zespół wybić Donchiana

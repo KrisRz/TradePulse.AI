@@ -18,7 +18,7 @@
 
 | Konto | Stan | Kto | Pieniądze | Klucze API |
 |---|---|---|---|---|
-| **Kraken live** (kraken.com) | **otwarte i zweryfikowane 2026-10-30**: paszport, rezydencja podatkowa UK z TIN, oświadczenie „not a US person”, profil FCA „Restricted Investor”, test wiedzy o ryzyku 8/8. Panel pokazuje rynek BTC/GBP. Obowiązuje 24 h „cooling off” przed pierwszym zakupem krypto (wymóg UK). | user | **£10 / 0 BTC** (2026-11-14, wpłata testowa do sprawdzenia executora). Pilot: ~£200 przelewem Faster Payments z banku w UK (darmowy, min. £1) | brak. Pilot: **jeden** klucz, saldo + zlecenia, **bez wypłat**, do SSM (ścieżka do ustalenia) |
+| **Kraken live** (kraken.com) | **otwarte i zweryfikowane 2026-10-30**: paszport, rezydencja podatkowa UK z TIN, oświadczenie „not a US person”, profil FCA „Restricted Investor”, test wiedzy o ryzyku 8/8. Panel pokazuje rynek BTC/GBP. Obowiązuje 24 h „cooling off” przed pierwszym zakupem krypto (wymóg UK). | user | **£9,84 / 0 BTC** (2026-11-14, po teście executora; wpłata testowa £10). Pilot: ~£200 przelewem Faster Payments z banku w UK (darmowy, min. £1) | brak. Pilot: **jeden** klucz, saldo + zlecenia, **bez wypłat**, do SSM (ścieżka do ustalenia) |
 | Sandbox spot | **nie istnieje** | — | — | — |
 
 Paper **nie potrzebuje konta**: ceny Krakena są publiczne. Konto i klucz są
@@ -57,7 +57,8 @@ potrzebne dopiero do pilota (warunek P4).
 | Alarmy | ✅ `-errors`, `-no-invocation`, `-dlq`, `-killswitch` (metric filter `KILL SWITCH:` → `TradePulse/paper-kraken/KillSwitchHalts`) |
 | DynamoDB `tradepulse_paper_bot`, pk `XBTGBP_1d` | ✅ pierwsza decyzja: bar 2026-10-29, LONG po £58 128,8, equity £199,18 |
 | Dead-man ping | ✅ **działa od 2026-10-30**: check `tradepulse-paper-kraken` w healthchecks.io (okres 1 dzień, grace 2 h, alert mailem), URL w SSM `/tradepulse/healthcheck/paper-kraken` (SecureString). Ping sprawdzony: „Last Ping: now”. |
-| Executor Krakena (zlecenia, pilot) | **do zbudowania**, dopiero przed pilotem |
+| Executor Krakena (`kraken_api.py`, `kraken_executor.py`) | ✅ 2026-11-14: test T0–T8 na prawdziwych zleceniach **PASS 9/9** (`docs/KRAKEN_EXECUTOR_RESULTS_2026-11-14.md`). Jeszcze nie wpięty w Lambdę (plan, pozycja 9) |
+| DynamoDB pk `XBTGBP_exectest` | księga i 5 filli testu executora (prawdziwe zlecenia, do eksportu HMRC) |
 | SSM: klucz API | ✅ 2026-11-14: `/tradepulse/kraken/{key,secret}` (SecureString), klucz `tradepulse-bot`: saldo, zlecenia otwarte i zamknięte, składanie, anulowanie; bez wypłat i wpłat (sprawdzone przez API) |
 
 ## Decyzje
@@ -84,6 +85,6 @@ potrzebne dopiero do pilota (warunek P4).
 - [x] Ceny Krakena w bocie (`feed.fetch_kraken_ohlc`) i w bramce A (2026-10-30). ⚠️ Kraken trzyma 720 świec, więc bramka A działa do ~315. dnia kanału. Przed tym trzeba archiwizować bary (do zrobienia przed ~2027-09).
 - [x] Lambda paper Kraken + harmonogram + alarmy (2026-10-30). **Zegar wystartował 2026-10-30** (pierwsza decyzja, bar 2026-10-29). Bramka A dzień 0: PASS 6/6.
 - [x] User: konto Kraken + KYC (2026-10-30). Wpłata i klucz dopiero przed pilotem (P4).
-- [ ] Executor Krakena (podpis, nonce, sprawdzenie `cl_ord_id` przed wysłaniem, `validate=true`), najpierw pre-rejestracja z testem minimalnymi prawdziwymi zleceniami (decyzja 2026-11-14).
+- [x] Executor Krakena + test T0–T8 minimalnymi prawdziwymi zleceniami (2026-11-14, PASS 9/9).
 - [ ] Kandydat post-only 0,40% (po executorze).
 - [ ] Ocena P1–P4 **najwcześniej 2026-11-27** (28 dni od startu zegara) → pilot.
