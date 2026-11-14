@@ -224,3 +224,14 @@ def test_an_fx_rate_converts_every_money_column(tmp_path):
     assert "GBP" in rows[0][0] and "NOT converted" not in rows[0][0]
     assert rows[2][6] == "240.00"    # 300 * 0.8
     assert rows[2][8] == "160.00"    # 200 * 0.8
+
+def test_csv_for_a_sterling_pair_needs_no_conversion_and_says_gbp(tmp_path):
+    reports, _ = match([t(1, ACQUISITION, 1, 100), t(20, DISPOSAL, 1, 300)])
+    out = tmp_path / "r.csv"
+    write_csv(out, reports, currency="GBP")
+
+    rows = list(csv.reader(out.open()))
+    assert "GBP" in rows[0][0] and "NOT converted" not in rows[0][0]
+    assert rows[1][6] == "proceeds_GBP"
+    assert rows[2][6] == "300.00" and rows[2][8] == "200.00"    # unchanged: already sterling
+

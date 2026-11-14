@@ -9,6 +9,9 @@
         --fx 0.79 --out disposals_2026_27.csv
     scripts/hmrc_export.py --pk BTCUSDT_4h --fx-csv rates.csv --out disposals.csv
 
+    # a sterling pair (Kraken XBT/GBP): no conversion needed
+    scripts/hmrc_export.py --pk XBTGBP_exectest --quote GBP --out disposals.csv
+
 The matching rules live in ``app.backend.reporting.hmrc`` and are tested there;
 this file only fetches, filters and prints. It is a working paper, not a return —
 see the module docstring for what it deliberately does not decide for you.
@@ -127,7 +130,7 @@ def main(argv=None) -> None:
     if summary["unmatched_disposals"]:
         print(f"⚠️  UNMATCHED disposals: {summary['unmatched_disposals']} — the log "
               f"shows selling more than it ever bought; check before filing")
-    if not fx:
+    if not fx and args.quote.upper() != "GBP":
         print(f"⚠️  amounts are in {args.quote}, NOT sterling — apply HMRC rates "
               f"(--fx / --fx-csv) before this goes near a return")
     print(f"written             : {args.out}")
