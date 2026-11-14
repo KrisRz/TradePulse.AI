@@ -4,7 +4,7 @@
 > z niego korzysta, co postanowiliśmy. Nowa decyzja albo zmiana stanu = nowy wpis
 > w „Decyzje” i poprawka mapy w tym samym commicie.
 >
-> Stan na **2026-10-30**. Para do Krakena: [`BINANCE.md`](BINANCE.md).
+> Stan na **2026-11-14**. Para do Krakena: [`BINANCE.md`](BINANCE.md).
 
 ## W skrócie
 
@@ -52,7 +52,7 @@ potrzebne dopiero do pilota (warunek P4).
 
 | Zasób | Stan |
 |---|---|
-| Lambda `tradepulse-paper-kraken` (XBT/GBP 1d, paper £200) | ✅ **działa od 2026-10-30** (Terraform `-target`, 17 zasobów). Handler `kraken_paper_handler.handler`, `CodeSha256` `5jfNLD4M…BoRjhfw=` |
+| Lambda `tradepulse-paper-kraken` (XBT/GBP 1d, paper £200) | ✅ **działa od 2026-10-30** (Terraform `-target`, 17 zasobów). Handler `kraken_paper_handler.handler`, `CodeSha256` `gDrD0yUv…Y4oGqDo=` (deploy 2026-10-30 16:02 UTC z ponowieniami i DLQ; sprawdzone w AWS 2026-11-14) |
 | Harmonogram `tradepulse-paper-kraken-daily` | ✅ `cron(10 0 * * ? *)`: 00:10 UTC (00:10 GMT, 01:10 BST) |
 | Alarmy | ✅ `-errors`, `-no-invocation`, `-dlq`, `-killswitch` (metric filter `KILL SWITCH:` → `TradePulse/paper-kraken/KillSwitchHalts`) |
 | DynamoDB `tradepulse_paper_bot`, pk `XBTGBP_1d` | ✅ pierwsza decyzja: bar 2026-10-29, LONG po £58 128,8, equity £199,18 |
@@ -74,6 +74,8 @@ potrzebne dopiero do pilota (warunek P4).
 | 2026-10-30 | Konto Kraken otwarte i zweryfikowane, **bez wpłaty i bez klucza** do czasu P1–P3 | Pieniądze nie leżą na giełdzie, zanim paper pokaże wynik | ten plik |
 | 2026-10-30 | **Start papieru na Krakenie** (zegar P1–P3) | Kod i infrastruktura gotowe, bramka A dzień 0 PASS | ten plik |
 | 2026-10-30 | Zlecenia rynkowe (taker 0,80%), post-only (0,40%) później | Backtest i projekt liczą 0,80%; post-only dokłada ryzyko braku wykonania | `docs/KRAKEN_PILOT_PREREGISTRATION_2026-10-30.md` |
+| 2026-11-14 | **Test executora minimalnymi prawdziwymi zleceniami (~£5), niezależnie od P3**; P3 dla pilota bez zmian | Kraken nie ma sandboxa, a P3 zależy od rynku, nie od jakości executora (16. dnia papieru: £194,32, bot poza rynkiem) | `plan.md` „STAN BOTA 2026-11-14” |
+| 2026-11-14 | **Post-only 0,40%** z przejściem na taker po terminie jako osobny kandydat po executorze | Jedyny znaleziony mechanizm obniżki kosztu o połowę | jw. |
 
 ## Do zrobienia (po kolei)
 
@@ -81,5 +83,6 @@ potrzebne dopiero do pilota (warunek P4).
 - [x] Ceny Krakena w bocie (`feed.fetch_kraken_ohlc`) i w bramce A (2026-10-30). ⚠️ Kraken trzyma 720 świec, więc bramka A działa do ~315. dnia kanału. Przed tym trzeba archiwizować bary (do zrobienia przed ~2027-09).
 - [x] Lambda paper Kraken + harmonogram + alarmy (2026-10-30). **Zegar wystartował 2026-10-30** (pierwsza decyzja, bar 2026-10-29). Bramka A dzień 0: PASS 6/6.
 - [x] User: konto Kraken + KYC (2026-10-30). Wpłata i klucz dopiero przed pilotem (P4).
-- [ ] Executor Krakena (podpis, nonce, sprawdzenie `cl_ord_id` przed wysłaniem, `validate=true`).
+- [ ] Executor Krakena (podpis, nonce, sprawdzenie `cl_ord_id` przed wysłaniem, `validate=true`), najpierw pre-rejestracja z testem minimalnymi prawdziwymi zleceniami (decyzja 2026-11-14).
+- [ ] Kandydat post-only 0,40% (po executorze).
 - [ ] Ocena P1–P4 **najwcześniej 2026-11-27** (28 dni od startu zegara) → pilot.
