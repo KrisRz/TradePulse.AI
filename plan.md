@@ -74,7 +74,17 @@ pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
   T6 na drugiej rundzie kupno £3,20. Samo £5 nie pozwala przejść T5: po sprzedaży
   minimum zostałoby 0,00004 BTC, poniżej minimum zlecenia.
 
-**Następna: 5 — test T1–T8** (user uruchamia komendy po kolei; kolejność:
+**Test T1–T8, dziennik (2026-11-14):**
+- T1 ✅ kupno `OXTEEF-HNV7F-HGUHVS`: 0,00012512 BTC, koszt £6,20252, opłata £0,04962
+  (0,80%); 10 − saldo = £6,2521 = koszt + opłata; BTC księga = saldo.
+- 🐛 Pierwszy przebieg stanął po kupnie („order unknown”): `QueryOrders` nie widział
+  zlecenia tuż po `AddOrder`. Naprawione (czekanie zamiast haltu, 2 testy).
+- T4 ✅ (na żywo, nieplanowane): drugi przebieg znalazł kupno po id klienta,
+  zaksięgował raz; na giełdzie dalej 1 kupno. T3 ✅ tym samym.
+- T2 ✅ stop `OAP6ZJ-O4UT7-JTGA2J`: 0,00012512 BTC, trigger £39 658,0 = 0,80 × wejście.
+- Dalej: `sync` (cichy), potem T5.
+
+**Następna: 5 — test T1–T8, ciąg dalszy** (user uruchamia komendy po kolei; kolejność:
 T1 `enter --gbp 6.20 --bar T1` → T2 `status` → T3 `enter` ponownie + `sync` →
 T4+T5 `adjust --sell 0.00006 --bar T5 --crash-after-submit`, potem to samo bez flagi →
 T7 `exit --bar T7` → runda 2: `enter --gbp 3.20 --bar T6` → `tighten-stop` → po
