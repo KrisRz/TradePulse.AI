@@ -13,6 +13,7 @@ docs/KRAKEN_EXECUTOR_PREREGISTRATION_2026-11-14.md. Real orders, smallest size.
     scripts/kraken_executor_test.py unblock --confirm
     scripts/kraken_executor_test.py maker-open --kind entry --gbp 3.20 --bar M01 --confirm
     scripts/kraken_executor_test.py maker-settle --confirm        # 15 minutes later
+    scripts/kraken_executor_test.py maker-cycles --start 2 --count 9 --confirm   # unattended
 
 Every command that can place, cancel or trade needs ``--confirm``; without it
 the command prints what it would do and stops. State and fills live in DynamoDB
@@ -310,6 +311,64 @@ def cmd_maker_settle(args) -> int:
     return 0
 
 
+def _wait_for(executor, txid: str, minutes: float) -> None:
+    """Block until the order is final or the deadline has passed (read-only)."""
+    import time
+    end = time.time() + minutes * 60
+    while time.time() < end:
+        if executor.query(txid).is_final:
+            return
+        time.sleep(20)
+
+
+def _maker_leg(trader, executor, kind: str, gbp: str, bar: str, wait_min: float) -> dict:
+    """One measured order: rest it, wait, settle. A post-only order the book
+    moved away from places nothing and is simply tried again."""
+    import time
+    for attempt in range(5):
+        try:
+            order = trader.maker_open(kind, Decimal(gbp), bar)
+            break
+        except ExecutorHalt as exc:
+            if "would have taken" not in str(exc) or attempt == 4:
+                raise
+            time.sleep(5)
+    print(f"[{datetime.now(timezone.utc):%H:%M:%S}] {bar} {kind}: resting {order.volume} @ "
+          f"{order.raw['descr']['price']} ({order.txid})", flush=True)
+    _wait_for(executor, order.txid, wait_min)
+    result = trader.maker_settle()
+    print(f"[{datetime.now(timezone.utc):%H:%M:%S}] {bar} {kind}: maker {result['maker']} "
+          f"taker {result['taker']} dust {result['dust']}", flush=True)
+    return result
+
+
+def cmd_maker_cycles(args) -> int:
+    """Run whole measurement cycles unattended: buy -> settle -> sell -> settle,
+    then a pause, ``--count`` times. Stops on the first thing it cannot explain."""
+    import time
+    _c, executor, trader, _pre = build(args)
+    if not need_confirm(args, f"run {args.count} post-only cycle(s) of £{args.gbp} "
+                              f"(deadline {args.wait_min} min per order, {args.gap_min} min between cycles)"):
+        return 0
+    for n in range(args.start, args.start + args.count):
+        guard_budget(executor)
+        report = trader.sync(f"M{n:02d}")
+        if trader.state.pending:
+            raise ExecutorHalt("a maker order is pending — run maker-settle first")
+        if trader.qty == 0:
+            _maker_leg(trader, executor, "entry", args.gbp, f"M{n:02d}", args.wait_min)
+        if trader.qty > 0:
+            _maker_leg(trader, executor, "exit", "0", f"M{n:02d}x", args.wait_min)
+        snap = snapshot(executor, trader)
+        print(f"[{datetime.now(timezone.utc):%H:%M:%S}] cycle {n} done: £{snap['gbp']}, "
+              f"{snap['btc']} BTC, open orders {len(snap['open_orders'])}, "
+              f"test loss £{snap['test_loss_gbp']}", flush=True)
+        if n + 1 < args.start + args.count:
+            time.sleep(args.gap_min * 60)
+    print("ALL CYCLES DONE")
+    return 0
+
+
 def cmd_unblock(args) -> int:
     _c, executor, trader, _pre = build(args)
     if not need_confirm(args, "clear the stop-out block on the test book"):
@@ -327,7 +386,8 @@ def main() -> int:
     sub.add_parser("status").set_defaults(fn=cmd_status)
     for name, fn in (("enter", cmd_enter), ("sync", cmd_sync), ("adjust", cmd_adjust),
                      ("tighten-stop", cmd_tighten_stop), ("exit", cmd_exit), ("unblock", cmd_unblock),
-                     ("maker-open", cmd_maker_open), ("maker-settle", cmd_maker_settle)):
+                     ("maker-open", cmd_maker_open), ("maker-settle", cmd_maker_settle),
+                     ("maker-cycles", cmd_maker_cycles)):
         sp = sub.add_parser(name)
         sp.set_defaults(fn=fn)
         sp.add_argument("--confirm", action="store_true")
@@ -337,6 +397,12 @@ def main() -> int:
         if name == "adjust":
             sp.add_argument("--sell", required=True)
             sp.add_argument("--crash-after-submit", action="store_true")
+        if name == "maker-cycles":
+            sp.add_argument("--count", type=int, required=True)
+            sp.add_argument("--start", type=int, required=True, help="number of the first cycle (bar M<start>)")
+            sp.add_argument("--gbp", default="3.20")
+            sp.add_argument("--wait-min", type=float, default=15)
+            sp.add_argument("--gap-min", type=float, default=20)
         if name == "maker-open":
             sp.add_argument("--kind", choices=["entry", "exit"], required=True)
             sp.add_argument("--gbp")
