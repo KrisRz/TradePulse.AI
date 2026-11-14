@@ -330,3 +330,29 @@ def test_the_log_carries_prices_timeframe_and_the_open_position():
     assert inp.open_trade["net_return"] == closed.trades[-1]["net_return"]
     assert inp.open_trade["exit_reason"] == "open_at_evaluation"
     assert WINDOW_START == date(2026, 7, 16)
+
+
+# --------------------------------------------------------------------------- #
+# B7 counts from the channel's own start, not from the M5 window
+# --------------------------------------------------------------------------- #
+def test_b7_counts_from_the_channels_own_start():
+    """Kraken's clock started 2026-10-29. On 2027-07-20 the M5 window is 369
+    days old but the Kraken channel only 264 — B7 must not be met."""
+    from app.backend.paper_trading.gate import channel_window_start
+    inp = _strong_year()
+    inp.equity.index = inp.equity.index + pd.Timedelta(days=106)   # first bar 2026-10-29
+    inp.prices.index = inp.equity.index
+    inp.window_start = channel_window_start("XBTGBP_1d", inp.equity)
+    assert inp.window_start == date(2026, 10, 29)
+    rep = evaluate(inp, as_of=A_YEAR_IN)
+    assert rep["window_days"] == 264
+    assert not rep["tightened_gates"]["B7 window_days>=365"]
+    assert rep["verdict"] != "PASS"
+    assert evaluate(inp, as_of=date(2027, 10, 29))["tightened_gates"]["B7 window_days>=365"]
+
+
+def test_m5_channel_keeps_its_preregistered_start():
+    from app.backend.paper_trading.gate import channel_window_start
+    inp = _strong_year()
+    assert channel_window_start("BTCUSDT_1d", inp.equity) == WINDOW_START
+    assert channel_window_start("SOMETHING_ELSE", inp.equity) is None
