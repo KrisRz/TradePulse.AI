@@ -55,7 +55,16 @@ Kolejność 7 i 8 może się zamienić z 9–10, jeśli P3 przejdzie wcześniej:
 czeka na ulepszenia. Ulepszenie przyjęte po starcie papieru wchodzi osobną
 pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
 
-**Gdzie jesteśmy:** pozycja 1 zamknięta 2026-11-14. **Następna: 2 (K) i 3 równolegle.**
+**Gdzie jesteśmy (2026-11-14):** pozycja 1 zamknięta. Pozycja 3 w toku:
+- ✅ 3a warstwa transportu `kraken_api.py` (podpis zgodny z przykładem z dokumentacji
+  Krakena, nonce, odczyt ponawiany, zapis wysyłany raz → `KrakenOutcomeUnknown`,
+  limity pary), 22 testy; dowód na żywo: `SystemStatus` online, limity XBT/GBP
+  (`ordermin` 0,00006, `costmin` £0,43, krok 0,1), zły klucz → `EAPI:Invalid key`.
+- ⏳ 3b executor (R1–R13) — **czeka na klucz z pozycji 2**: kształt odpowiedzi
+  prywatnych endpointów (uprawnienia klucza, `cl_ord_id` w `OpenOrders`/`ClosedOrders`,
+  `stop-loss`, `deadline`) sprawdzamy na `validate=true`, nie z pamięci.
+
+**Następna: 2 (K) — klucz API do SSM.**
 
 ---
 
