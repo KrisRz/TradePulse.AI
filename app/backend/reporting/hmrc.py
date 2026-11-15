@@ -276,11 +276,12 @@ def write_csv(path, reports, currency: str, fx=None) -> None:
     Absent, the amounts stay in ``currency`` and the header says so, because a
     column headed "gain" that is silently in USDT is worse than no column.
     """
-    unit = "GBP" if fx else currency
+    sterling = bool(fx) or currency.upper() == "GBP"   # a GBP pair needs no conversion
+    unit = "GBP" if sterling else currency
     with open(path, "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow([f"# amounts in {unit}"
-                    + ("" if fx else " — NOT converted to GBP; apply HMRC rates before filing")])
+                    + ("" if sterling else " — NOT converted to GBP; apply HMRC rates before filing")])
         w.writerow(["date_uk", "time_utc", "asset", "order_id", "rule", "quantity",
                     f"proceeds_{unit}", f"allowable_cost_{unit}", f"gain_{unit}",
                     "fee_asset_other"])

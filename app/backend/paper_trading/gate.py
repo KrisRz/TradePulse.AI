@@ -213,6 +213,10 @@ class GateInputs:
     quantity_backed: bool = False
     # The open position, closed hypothetically at the last price (MEDIUM-5).
     open_trade: Optional[dict] = None
+    # Start of THIS channel's clock (B7 counts from it). None = the M5 window.
+    # A channel that started later must not inherit the M5 start: that would
+    # let B7 pass before the channel has run for a year.
+    window_start: Optional[date] = None
 
 
 def periods_per_year(timeframe: str) -> float:
@@ -330,11 +334,12 @@ def _drawdown_profile(equity: pd.Series) -> dict:
 def evaluate(inputs: GateInputs, as_of: date) -> dict:
     """Full pre-registered evaluation. Pure — no I/O, fully testable."""
     eq = inputs.equity.dropna().sort_index()
-    window_days = (as_of - WINDOW_START).days
+    window_start = inputs.window_start or WINDOW_START
+    window_days = (as_of - window_start).days
     ppy = periods_per_year(inputs.timeframe)
     report: dict[str, Any] = {
         "as_of": str(as_of),
-        "window_start": str(WINDOW_START),
+        "window_start": str(window_start),
         "window_days": window_days,
         "earliest_eval": str(EARLIEST_EVAL),
         "timeframe": inputs.timeframe,
@@ -1665,6 +1670,7 @@ def main(argv: list[str] | None = None) -> None:
               else load_local(args.state))
     if args.tracking_error is not None:
         inputs.tracking_error = args.tracking_error
+    inputs.window_start = channel_window_start(args.pk, inputs.equity)
     report = evaluate(inputs, as_of)
     if args.json:
         print(json.dumps(report, indent=2, default=str))
@@ -1711,6 +1717,19 @@ CHANNELS = {
         "window_start": None,
     },
 }
+
+
+def channel_window_start(pk: str, equity: pd.Series) -> Optional[date]:
+    """Where B7 starts counting for ``pk``: the pre-registered M5 start for the
+    M5 channel (and for an unknown pk), the first recorded bar for a channel
+    whose clock starts with its first record."""
+    if pk not in CHANNELS:
+        return None
+    registered = CHANNELS[pk].get("window_start")
+    if registered is not None:
+        return registered
+    eq = equity.dropna()
+    return eq.index.min().date() if len(eq) else None
 
 
 def fetch_reference_bars(symbol: str, timeframe: str, needed: int,

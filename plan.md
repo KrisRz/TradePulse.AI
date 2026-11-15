@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-10-30** (przejście na Kraken, sekcja „🧭 PODSUMOWANIE SESJI 2026-10-30”)
+> Ostatnia aktualizacja: **2026-11-15** („🧭 PLAN OD 2026-11-14” = lista pracy; check-up „📊 STAN BOTA 2026-11-15”)
 
 ---
 
@@ -22,9 +22,116 @@
 
 ### 📍 STATUS TERAZ  (← tę linię AKTUALIZUJ na końcu każdej sesji)
 
+> 🔁 **Zasada usera od 2026-11-14: każda sesja kończy się analizą działania bota
+> i szukaniem ulepszeń.** Z pomiaru (stan w DynamoDB, raporty bramek), jako wpis
+> „📊 STAN BOTA <data>” z jednym nazwanym kandydatem na ulepszenie. Małymi krokami,
+> według reguł researchu, bez luzowania zapisanych progów. Cel: bot na plusie.
+> **Uzupełnienie 2026-11-14:** w każdej sesji zastanawiamy się też, jak ulepszyć
+> **samą strategię**, nie tylko koszty i wykonanie. Zamiar usera: „jak bot będzie
+> szedł na + lub choć bez straty, dopłacę więcej”. ⚠️ Dziś wiąże zasada ostrzejsza:
+> kapitał rośnie dopiero po bramce B na kanale Kraken (najwcześniej 2027-10-29).
+> Dopłata wcześniej = decyzja usera i nowy dokument pre-rejestracji z warunkiem
+> zapisanym przed danymi.
+
 > 🗺️ **Giełdy (od 2026-10-30):** wszystko o kontach, kluczach, zasobach i decyzjach
 > per giełda jest w [`KRAKEN.md`](KRAKEN.md) (giełda bota) i [`BINANCE.md`](BINANCE.md)
 > (wygaszane demo). Każda zmiana stanu konta = wpis tam.
+
+## 🧭 PLAN OD 2026-11-14 — droga do prawdziwych pieniędzy (kolejność wiążąca, od góry)
+
+> Zastępuje pozycje 5–9 z „▶ CO DALEJ” w podsumowaniu 2026-10-30 (kierunek, decyzje
+> i P1–P4 stamtąd obowiązują). Decyzje usera 2026-11-14: test executora minimalnymi
+> prawdziwymi zleceniami niezależnie od P3; post-only jako kandydat; user doładowuje
+> konto i jest prowadzony krok po kroku. Pozycję zamyka dowód, nie deklaracja.
+> **K** = robi Krzysztof, reszta po stronie bota/kodu.
+
+| # | Co | Kto | Zamyka |
+|---|---|---|---|
+| 1 | ~~Pre-rejestracja executora i testu~~ ✅ `docs/KRAKEN_EXECUTOR_PREREGISTRATION_2026-11-14.md` | — | commit |
+| 2 | ~~Klucz API Krakena bez prawa wypłat → SSM `/tradepulse/kraken/{key,secret}`~~ ✅ 2026-11-14: klucz `tradepulse-bot`, 5 uprawnień, wypłaty i wpłaty odrzucane (`Permission denied`) | **K** | odczyt salda przez API |
+| 3 | ✅ 2026-11-14 **Executor Krakena** (R1–R13): klient API z podpisem i nonce, limity pary, idempotencja, stop awaryjny 20%, anuluj → handel → stop, uzgodnienie salda na starcie, fille do DynamoDB i eksportu HMRC | — | testy + T0 na żywym API w trybie `validate` |
+| 4 | ~~Wpłata testowa~~ ✅ 2026-11-14: **£10** (decyzja usera), saldo `ZGBP 10.0000` odczytane przez API. Możliwe 24 h „cooling off” przed pierwszym kupnem | **K** | saldo widoczne przez API |
+| 5 | ~~Test T1–T8 na prawdziwej giełdzie~~ ✅ 2026-11-14: **PASS 9/9**, strata £0,16; zlecenia uruchamiał K | **K** + weryfikacja przez API | `docs/KRAKEN_EXECUTOR_RESULTS_2026-11-14.md` |
+| 6 | Review Codexa (jedno przejście) + PR: ✅ 2026-11-15 **PR #66 otwarty**, checki zielone; Codex: 6 znalezisk → 6 prawdziwych, wszystkie naprawione z testem. Merge = decyzja K | **K** | PR zmergowany |
+| 7 | ~~Kandydat post-only~~ ✅ 2026-11-15 **PRZYJĘTY** (maker 85%, 0,536% na stronę vs 0,80%) | — | `docs/POSTONLY_RESULTS_2026-11-15.md` |
+| 8 | ~~Kandydat #12: wielkość pozycji wg zmienności (RV20, RV60, DVOL) z pasmem~~ ❌ 2026-11-15 **ODRZUCONY 0/4**: żaden wariant nie spłyca DD wobec `w = 0,5` + pasmo 0,15; 3–10× więcej korekt | — | `docs/VOL_SIZING_RESULTS_2026-11-15.md` |
+| 9 | **Lambda pilota** (ten sam kod co paper + executor, osobny pk w DynamoDB, alarmy, dead-man, kill-switch konta 25%), wdrożona wyłączona | — | Terraform `-target`, przebieg na `validate` |
+| 10 | **Ocena P1–P4** co 28 dni: 2026-11-27, 2026-12-25, 2027-01-22… | — + **K** | raport oceny; gdy P1–P3 PASS → K dopłaca do ~£200 → start pilota |
+| 11 | **Pilot**: bramki A, B, C co 28 dni; eksport HMRC | — | kapitał rośnie dopiero po bramce B (najwcześniej 2027-10-29) |
+| 12 | Wygaszenie Binance (lista w `BINANCE.md`) | — | 3 Lambdy i alarmy usunięte, M5 zarchiwizowane |
+| 13 | Provider AWS 6.x → runtime `python3.14` | — | `plan -target` bez nieoczekiwanych zmian |
+| 14 | Archiwum barów Krakena (przed ~2027-09) | — | bramka A czyta z archiwum |
+
+Kolejność 7 i 8 może się zamienić z 9–10, jeśli P3 przejdzie wcześniej: pilot nie
+czeka na ulepszenia. Ulepszenie przyjęte po starcie papieru wchodzi osobną
+pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
+
+**Gdzie jesteśmy (2026-11-14):** pozycja 1 zamknięta. Pozycja 3 w toku:
+- ✅ 3a warstwa transportu `kraken_api.py` (podpis zgodny z przykładem z dokumentacji
+  Krakena, nonce, odczyt ponawiany, zapis wysyłany raz → `KrakenOutcomeUnknown`,
+  limity pary), 22 testy; dowód na żywo: `SystemStatus` online, limity XBT/GBP
+  (`ordermin` 0,00006, `costmin` £0,43, krok 0,1), zły klucz → `EAPI:Invalid key`.
+- ✅ 3b executor `kraken_executor.py` (R1–R13: `KrakenExecutor` + `KrakenTrader`),
+  31 testów na giełdzie w pamięci, mutacje 8/8 zabite (po dopisaniu testu na
+  podwójne księgowanie). **T0 PASS 11/11 na żywym Krakenie 2026-11-14 20:32 UTC**
+  (`scripts/kraken_executor_test.py t0`): uprawnienia, wypłaty i wpłaty odrzucone,
+  kupno / sprzedaż / stop w `validate`, zły sekret bez ponowień, zły nonce po 3
+  próbach, uzgodnienie pustej księgi, 0 zleceń na koncie.
+- ⚠️ **Prawdziwe zlecenia uruchamia user** (komendy `scripts/kraken_executor_test.py
+  … --confirm`), nie asystent: transakcji finansowych asystent nie wykonuje.
+  To samo dotyczy włączenia Lambdy pilota (pozycja 9–10).
+- Rozmiary testu przy wpłacie £10: T1 kupno **£6,20** (62% konta, pod limitem 65%),
+  T5 sprzedaż 0,00006 BTC (zostaje ~0,000064 ≥ minimum, więc stop da się postawić),
+  T6 na drugiej rundzie kupno £3,20. Samo £5 nie pozwala przejść T5: po sprzedaży
+  minimum zostałoby 0,00004 BTC, poniżej minimum zlecenia.
+
+**Test T1–T8, dziennik (2026-11-14):**
+- T1 ✅ kupno `OXTEEF-HNV7F-HGUHVS`: 0,00012512 BTC, koszt £6,20252, opłata £0,04962
+  (0,80%); 10 − saldo = £6,2521 = koszt + opłata; BTC księga = saldo.
+- 🐛 Pierwszy przebieg stanął po kupnie („order unknown”): `QueryOrders` nie widział
+  zlecenia tuż po `AddOrder`. Naprawione (czekanie zamiast haltu, 2 testy).
+- T4 ✅ (na żywo, nieplanowane): drugi przebieg znalazł kupno po id klienta,
+  zaksięgował raz; na giełdzie dalej 1 kupno. T3 ✅ tym samym.
+- T2 ✅ stop `OAP6ZJ-O4UT7-JTGA2J`: 0,00012512 BTC, trigger £39 658,0 = 0,80 × wejście.
+- `sync` ✅ cichy: 0 zdarzeń, księga = saldo, stop otwarty.
+- T5 ✅ stop anulowany (0 wykonania) → 1,4 s → sprzedaż `OOHTT6-KMK5G-GEVDC4`
+  0,00006 BTC, opłata £0,02381 → nowy stop `OUXYGT-DGLEP-AFAKZJ` na 0,00006512, ten sam próg.
+- T7 ✅ wyjście `OIWZLI-E3DQQ-YV23NT` 0,00006512 BTC, opłata £0,02581; 0 BTC, 0 otwartych
+  zleceń, saldo £9,9014 (strata testu £0,0986 = opłaty £0,0992).
+- T6 ✅ kupno `OMVUED-JP2CN-5O5J5V` w jednym przebiegu (poprawka działa), stop 0,3%
+  pod ceną wykonany po 13 min po £49 466,2 (poślizg 0,007%), `sync` zaksięgował go
+  z giełdy, księga 0, wejście zablokowane.
+- T8 ✅ eksport HMRC: 5 filli, 3 zbycia, −£0,16, kwoty w GBP.
+- **Werdykt: PASS 9/9**, strata £0,1591 z budżetu £3 →
+  `docs/KRAKEN_EXECUTOR_RESULTS_2026-11-14.md`.
+
+**Pozycja 7 (post-only) w toku, 2026-11-14:**
+- ✅ przesłanka z publicznej taśmy (45 dni × 2 strony): termin 15 min → 76,7% jako
+  maker, koszt strony 0,535% vs 0,80%; `scripts/research/postonly_premise.py`;
+- ✅ projekt z regułą decyzji w commicie przed zleceniami:
+  `docs/POSTONLY_DESIGN_2026-11-14.md` (PRZYJĘTY gdy na 20 zleceniach: maker ≥ 60%,
+  koszt strony ≤ 0,65%, zero zgubionych, żaden `post` jako taker);
+- ✅ kod: `KrakenExecutor.post_only`, `KrakenTrader.maker_open` / `maker_settle`
+  (anuluj po terminie → reszta market → stop wraca), 42 testy executora, mutacje 8/8;
+- ✅ pomiar 2026-11-14/15 (20 zleceń, uruchomione przez usera, `maker-cycles` przez noc):
+  **PRZYJĘTY 4/4** — maker 85,0%, koszt strony 0,536% (taker 0,80%), 25 filli =
+  25 zleceń Krakena, żaden `post` jako taker, strata £0,33 z budżetu £1,50.
+  Ogon: 3 niewykonane zlecenia kosztowały 1,1–1,9%. →
+  `docs/POSTONLY_RESULTS_2026-11-15.md`.
+- Wejdzie do Lambdy pilota osobnym commitem (pozycja 9); koszt w backteście i papierze
+  zostaje 0,80% do pomiaru bramki C na pilocie.
+
+**Pozycja 8 — kandydat #12 — ODRZUCONY 2026-11-15** (projekt `09c4968` przed liczbami):
+- Cel `w_t = 0,5 × mediana(σ)/σ_t`, w granicach 0,25–0,65, jedno pasmo; RV20, RV60,
+  DVOL × pasmo 0,10 / 0,15; kontrola o tej samej średniej ekspozycji.
+- Punkt odniesienia −26,7% maxDD; kandydaci −26,8…−29,6%. Wobec kontroli spadek
+  płytszy o 1,3–6,3 pp (zmienność niesie informację), ale kosztem 0,7–3,3 pp CAGR
+  i 2–6 korekt rocznie zamiast 0,6. DVOL gorszy od RV60 i od punktu odniesienia.
+- Rejestr: **12 zmierzonych, 12 odrzuconych.** → `docs/VOL_SIZING_RESULTS_2026-11-15.md`.
+
+**Następna: 9 — Lambda pilota (wdrożona wyłączona, z post-only osobnym commitem). Pozycja 6 (review Codexa + PR) — gdy user poprosi. Ocena P1–P4: 2026-11-27.**
+
+---
 
 ## 🧭 PODSUMOWANIE SESJI 2026-10-30 — czytaj najpierw (zastępuje kierunek z 16.09 i 03.10)
 
@@ -76,6 +183,8 @@ Binance (live i demo) wygaszamy. Mapa kont, kluczy i zasobów:
 
 ### ▶ CO DALEJ (kolejność wiążąca, od góry)
 
+> ⚠️ **Pozycje 5–9 zastąpione 2026-11-14** przez „🧭 PLAN OD 2026-11-14” wyżej.
+
 > ✅ **Kroki 1–3 zrobione 2026-10-30** (księga z pasmem, feed Kraken + bramka A,
 > Lambda `tradepulse-paper-kraken`). **Zegar papieru Kraken wystartował 2026-10-30**,
 > pierwsza decyzja bar 2026-10-29 (LONG £58 128,8). Ocena P1–P4 najwcześniej
@@ -97,6 +206,9 @@ Binance (live i demo) wygaszamy. Mapa kont, kluczy i zasobów:
    `SystemStatus`, `GetApiKeyInfo` bez prawa wypłat, **awaryjny stop-loss trzymany na
    giełdzie**, anuluj → handel → stop) — w trakcie 28 dni papieru, najpierw
    pre-rejestracja (`docs/BOT_DEEP_ANALYSIS_2026-10-30.md` §6).
+   **Od 2026-11-14 (decyzja usera):** pre-rejestracja obejmuje test na prawdziwej
+   giełdzie minimalnymi zleceniami (~£5), niezależny od P3; potem kandydat
+   post-only 0,40%.
 6. **Wygaszenie Binance** po starcie papieru Kraken, lista w `BINANCE.md`.
 7. **Dzień 28 papieru:** ocena P1–P3 → user: wpłata £200 + klucz → pilot.
 8. ~~**Na koniec sesji 2026-10-30 (prośba usera): głęboka analiza bota**~~ ✅
@@ -118,6 +230,106 @@ Kandydat #12 (wielkość pozycji wg zmienności) **zszedł na drugi plan**: przy
 podejściu musi pobić `w = 0,5` z pasmem, nie samą strategię.
 
 ---
+
+---
+
+## 📊 STAN BOTA 2026-11-15 (analiza na koniec sesji; dzień 17 papieru Kraken)
+
+Odczyt `paper_trading.gate` z DynamoDB, 2026-11-15 rano:
+
+| Kanał | Bot | B&H z kosztami | maxDD bot / B&H | Stan |
+|---|---|---|---|---|
+| Kraken 1d paper, £200 | **−2,84%** (£194,32), 1 RT | −17,74% | −3,76% / −19,20% | FLAT |
+| 1d M5, $10k | **−4,20%** ($9 579,99), 1 RT | −1,17% | −14,80% / −26,03% | FLAT |
+| 4h demo, $200 | **+12,74%** ($225,48), 5 RT, PF 3,04 | −0,91% | −10,10% / −26,26% | FLAT |
+
+- BTC spadł od wczoraj o kolejne ~6% (B&H na Krakenie z −12,57% na −17,74%); bot
+  stoi w gotówce i tego nie odczuł. Wyniki botów bez zmian.
+- Zamknięte dziś: post-only **przyjęty** (0,536% na stronę), #12 **odrzucony**.
+- Wniosek o strategii: dźwignie „ile trzymać” są wyczerpane (#1, #12, stałe `w`
+  z pasmem wygrywa). Realny, zmierzony zysk tej sesji to koszt: 0,80% → 0,536%.
+- **Kandydat na następną sesję (#13): wariant 4h na Krakenie przy zmierzonym koszcie
+  post-only.** Przy 0,80% padał w 0/4 układów, przy 0,40% przechodził w 3/4; koszt
+  0,536% z ogonem 1,1–1,9% nie był liczony. Na żywo 4h demo jest jedynym kanałem
+  na plusie (+12,74% vs −0,91%), ale to 5 transakcji, nie dowód. Projekt z regułą
+  przed liczbami; koszt modelowany rozkładem z pomiaru (85% po 0,40%, 15% ogon),
+  nie średnią.
+
+## 📊 STAN BOTA 2026-11-14 (check-up, tylko odczyt; dzień 16 papieru Kraken)
+
+**Zdrowie:** 6/6 Lambd, 14/14 alarmów OK, 4/4 harmonogramy `ENABLED`. Od 30.10
+16:05 UTC: Kraken 15/15, bot 1d 15/15, shadow 15/15, venue 91/91 wywołań,
+**0 błędów**. Bramka A **PASS 6/6** na trzech kanałach (Kraken 16 barów, 1d 122,
+4h 600). Testy zielone.
+
+| Kanał | Bot | B&H z kosztami | maxDD bot / B&H | Stan |
+|---|---|---|---|---|
+| Kraken 1d paper, £200 | **−2,84%** (£194,32), 1 RT | −12,57% | −3,76% / −14,12% | FLAT od 11.11 |
+| 1d M5, $10k | **−4,20%** ($9 579,99), 1 RT | +5,24% | −14,80% / −21,23% | FLAT od 11.11 |
+| 4h demo, $200 | **+12,74%** ($225,48), 5 RT, PF 3,04 | +1,77% | −10,10% / −24,27% | FLAT od 22.10 |
+
+- Rynek: XBT/GBP £51 666 (bar 13.11), −44% od szczytu z 06.10.2025, −11% od startu
+  papieru. EMA20 jest 1,33% pod EMA100, cena 10,5% pod EMA100.
+- Bot zrobił to, do czego jest: wyszedł i stoi w gotówce. Transakcja 1d M5
+  (22.08 → 11.11) miała na szczycie +9,5% i skończyła −4,2%.
+- Bramka B: wszędzie `INCONCLUSIVE_EXTEND` / bez zmian. Bramka C 10/20.
+- ⚠️ **P3 na 2026-11-27 najpewniej nie przejdzie** (equity £194,32 < £200, bot FLAT).
+  Według pre-rejestracji ocena wraca co 28 dni: 2026-12-25, 2027-01-22…
+  P3 po stratnym wyjściu spełni dopiero zyskowna transakcja, a strategia ma ich
+  ~1,7 rocznie przy 36% trafnych.
+- 🐛 **Naprawione (gałąź `session/analysis-20261114`, bez commita):** bramka B liczyła
+  B7 (365 dni) dla każdego kanału od startu okna M5 (2026-07-16). Dla Krakena B7
+  przeszłoby 2027-07-16 zamiast 2027-10-29. Teraz kanał bez pre-rejestrowanego
+  startu liczy od swojego pierwszego baru (`gate.channel_window_start`), 2 testy.
+- `KRAKEN.md`: poprawiony `CodeSha256` Lambdy (był sprzed drugiego deployu 30.10).
+
+**Decyzje usera 2026-11-14 (obie na TAK):**
+1. **Test executora na prawdziwej giełdzie niezależnie od P3:** minimalne prawdziwe
+   zlecenia (~£5 w obie strony) do sprawdzenia executora i awaryjnego stopu, bez
+   startu pilota. Wymaga małej wpłaty i klucza bez prawa wypłat; zasady w
+   pre-rejestracji executora (krok 5 w „▶ CO DALEJ”). **P3 dla pilota bez zmian.**
+2. **Zlecenia post-only (0,40%)** z przejściem na taker po terminie: osobny
+   kandydat z własnym dowodem, po executorze.
+
+**Przesłanki zmierzone 2026-11-14** (`scripts/research/premise_recent_window.py`,
+dane < 2026-07-16, próbki niezachodzące):
+- **„Ostatnie 7 dni” nie mówi nic o następnych 7.** Zwrot, zmienność, wolumen
+  i rozpiętość z 7 dni wobec zwrotu z kolejnych 7: korelacja rang od −0,10 do +0,08,
+  żadna istotna (p ≥ 0,12), w całości, w połowach 2017–21 / 2022–26 i gdy bot jest
+  LONG (n = 443 tygodnie, 231 LONG). Nie budujemy na tym.
+- **Przesłanka #12 trzyma:** zmienność z 20 dni wobec następnych 20: korelacja 0,49.
+  Gdy bot jest LONG przy wysokiej zmienności, najgorszy spadek w kolejnych 20 dniach
+  to −39,5% (niska: −21,4%), średni −9,7% vs −5,0%. Przesłanka to nie obietnica:
+  #1 padł na obrotach, #12 musi pobić `w = 0,5` z pasmem.
+- „Drugi bot analityk”: analiza i handel są już rozdzielone (sygnał → księga →
+  executor). Analityk decydujący (LLM) odrzucony 30.10; filtry reżimu #7
+  i meta-labeler #8 odrzucone. Drugi proces ma sens tylko jako kontroler
+  (uzgadnianie stanu z giełdą), nie jako źródło sygnału.
+
+**Analiza na koniec sesji 2026-11-14 (zasada usera):**
+- Kanały bez zmian od porannego pomiaru: wszystkie FLAT, 0 błędów.
+- Nowy pomiar z prawdziwej giełdy: na 5 zleceniach (obrót £18,80) **94,5% straty to
+  opłata 0,80%**, poślizg zleceń market niemierzalny, stop wykonał się 0,007% pod
+  progiem. Wniosek: na Krakenie kosztem jest opłata, nie wykonanie.
+- **Kandydat na ulepszenie tej sesji: post-only 0,40% (pozycja 7).** Obniża jedyny
+  realny koszt o połowę i otwiera ponowny pomiar wariantu 4h (przy 0,40%: 3/4 układów,
+  przy 0,80%: 0/4). Do zmierzenia minimalnymi zleceniami: odsetek wykonanych i czas.
+- Drugi w kolejce: #12 (przesłanka zmierzona dziś: korelacja zmienności 0,49).
+
+**Research zewnętrzny 2026-11-14** (agent, źródła pierwotne; nie powtarzać):
+- „Catching Crypto Trends” (Zarattini i in., SSRN 5209907): zespół wybić Donchiana
+  + cel zmienności 25%; tylko in-sample, koszty testowane do 0,50%, niski DD bierze
+  się z ekspozycji ~17% zmienności. Potwierdza nasz wniosek „dźwignią jest
+  ekspozycja”. Do wzięcia: próg tylko na korektach wynikających ze zmienności (#12).
+- Złoto (PAXG) na Krakenie: brak pary PAXG/GBP, potrzebna noga walutowa; brak dowodu,
+  że trend BTC + złoto spłyca DD. Hipoteza, nie kandydat.
+- Odsetki od gotówki: GBP nie jest objęte; stablecoiny 4–4,25%, dostępność w UK
+  niepotwierdzona, przy £100 koszt wymiany zjada zysk.
+- Wzorce inżynierskie do executora: NautilusTrader (uzgadnianie stanu po starcie,
+  kontrola zleceń „w locie”, adapter Kraken: id klienta > 18 znaków jest obcinane),
+  freqtrade `stoploss_on_exchange` na Krakenie.
+- 28 dni papieru i £200 pilota nie dowiodą przewagi (Sharpe 1 potrzebuje ~4 lat) —
+  pilot ma kryteria operacyjne, przewagę ocenia bramka B.
 
 ---
 
