@@ -52,7 +52,7 @@
 | 3 | ✅ 2026-11-14 **Executor Krakena** (R1–R13): klient API z podpisem i nonce, limity pary, idempotencja, stop awaryjny 20%, anuluj → handel → stop, uzgodnienie salda na starcie, fille do DynamoDB i eksportu HMRC | — | testy + T0 na żywym API w trybie `validate` |
 | 4 | ~~Wpłata testowa~~ ✅ 2026-11-14: **£10** (decyzja usera), saldo `ZGBP 10.0000` odczytane przez API. Możliwe 24 h „cooling off” przed pierwszym kupnem | **K** | saldo widoczne przez API |
 | 5 | ~~Test T1–T8 na prawdziwej giełdzie~~ ✅ 2026-11-14: **PASS 9/9**, strata £0,16; zlecenia uruchamiał K | **K** + weryfikacja przez API | `docs/KRAKEN_EXECUTOR_RESULTS_2026-11-14.md` |
-| 6 | Review Codexa (jedno przejście) + PR na koniec sesji, w której powstał kod | — | PR zmergowany |
+| 6 | Review Codexa (jedno przejście) + PR: ✅ 2026-11-15 **PR #66 otwarty**, checki zielone; Codex: 6 znalezisk → 6 prawdziwych, wszystkie naprawione z testem. Merge = decyzja K | **K** | PR zmergowany |
 | 7 | ~~Kandydat post-only~~ ✅ 2026-11-15 **PRZYJĘTY** (maker 85%, 0,536% na stronę vs 0,80%) | — | `docs/POSTONLY_RESULTS_2026-11-15.md` |
 | 8 | ~~Kandydat #12: wielkość pozycji wg zmienności (RV20, RV60, DVOL) z pasmem~~ ❌ 2026-11-15 **ODRZUCONY 0/4**: żaden wariant nie spłyca DD wobec `w = 0,5` + pasmo 0,15; 3–10× więcej korekt | — | `docs/VOL_SIZING_RESULTS_2026-11-15.md` |
 | 9 | **Lambda pilota** (ten sam kod co paper + executor, osobny pk w DynamoDB, alarmy, dead-man, kill-switch konta 25%), wdrożona wyłączona | — | Terraform `-target`, przebieg na `validate` |
