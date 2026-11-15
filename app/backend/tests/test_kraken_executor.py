@@ -597,3 +597,118 @@ def test_rerunning_maker_open_for_the_same_bar_does_not_rest_a_second_order():
     first = ex.post_only(BUY, D("3.20"), "entry#bar1")
     again = ex.post_only(BUY, D("3.20"), "entry#bar1")
     assert first.txid == again.txid and len(venue.open_limits()) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Review findings 2026-11-15: each of these failed on the code before the fix
+# --------------------------------------------------------------------------- #
+def test_r13_a_sell_larger_than_the_bots_quantity_is_refused_before_anything_moves():
+    venue, ex, trader, saved, fills = make(FakeKraken(btc="0.5"))     # 0.5 BTC that is not the bot's
+    trader.enter(D("6.20"), "bar1")
+    writes = len(venue.writes)
+    for attempt in (lambda: trader.adjust(D("-0.001"), "bar2"),
+                    lambda: trader.maker_open("adjust", D("-0.001"), "bar2")):
+        with pytest.raises(ExecutorHalt, match="R13"):
+            attempt()
+    assert len(venue.writes) == writes, "nothing may be cancelled or sent"
+    assert venue.btc == D("0.5") + trader.qty and len(venue.open_stops()) == 1
+
+
+def test_a_fill_whose_record_could_not_be_written_is_delivered_by_the_next_run():
+    venue = FakeKraken()
+    ex = KrakenExecutor(venue, max_notional=D("1000"), sleep=lambda _s: None, poll_attempts=3)
+    ex.preflight()
+    saved = []
+
+    def broken(_record):
+        raise OSError("fill store is down")
+
+    trader = KrakenTrader(ex, TraderState(), save=saved.append, on_fill=broken)
+    with pytest.raises(OSError):
+        trader.enter(D("6.20"), "bar1")
+    assert len(saved[-1]["outbox"]) == 1 and len(saved[-1]["booked"]) == 1
+
+    venue, ex, trader, saved, fills = make(venue, TraderState.from_dict(saved[-1]))
+    trader.sync("bar2")
+    (fill,) = fills
+    assert fill["kind"] == "entry" and D(fill["qty"]) == trader.qty == venue.btc
+    assert trader.state.outbox == [] and len(venue.adds()) == 2      # the buy once, then its stop
+
+
+def test_a_stop_that_is_still_executing_is_left_alone_until_it_is_final():
+    venue, ex, trader, saved, fills = make()
+    trader.enter(D("6.20"), "bar1")
+    txid = trader.state.stop_txid
+    stop = venue.orders[txid]
+    venue._fill(stop, D("39900"), vol="0.00006", final=False)        # triggered, half sold, still open
+    with pytest.raises(ExecutorHalt, match="executing"):
+        trader.sync("bar2")
+    assert trader.state.stop_txid == txid and trader.qty == D("0.000124") and len(fills) == 1
+
+    stop.update(status="closed", closetm=venue._t + 1)               # the exchange gave up on the rest
+    trader.sync("bar2")
+    assert trader.qty == venue.btc == D("0.000064") and trader.state.blocked
+    assert [f["kind"] for f in fills] == ["entry", "stop"] and D(fills[1]["qty"]) == D("0.00006")
+    assert len(venue.open_stops()) == 1, "what is left gets a fresh stop"
+
+
+def test_a_refused_adjust_or_exit_puts_the_stop_back():
+    venue, ex, trader, saved, fills = make()
+    trader.enter(D("6.20"), "bar1")
+    with pytest.raises(ExecutorHalt, match="R3"):
+        trader.adjust(D("-0.00001"), "bar2")                         # below the pair minimum
+    assert len(venue.open_stops()) == 1 and trader.state.stop_txid
+
+    with pytest.raises(ExecutorHalt, match="R7"):
+        trader.adjust(D("900"), "bar3")                              # over the exposure ceiling
+    assert len(venue.open_stops()) == 1 and trader.state.stop_txid
+
+    def refused(*_a, **_k):
+        raise KrakenAPIError(["EService:Market in cancel_only mode"], "AddOrder")
+
+    ex.sell = refused
+    with pytest.raises(KrakenAPIError):
+        trader.exit("bar4")
+    assert len(venue.open_stops()) == 1 and trader.qty == venue.btc > 0
+
+
+def test_a_refused_maker_order_puts_the_stop_back():
+    venue, ex, trader, saved, fills = make()
+    trader.enter(D("6.20"), "bar1")
+    with pytest.raises(ExecutorHalt, match="R3"):
+        trader.maker_open("adjust", D("-0.00001"), "bar2")
+    assert len(venue.open_stops()) == 1 and trader.state.pending is None
+
+
+def test_a_stop_placed_by_a_run_that_died_before_saving_its_txid_is_recovered():
+    venue, ex, trader, saved, fills = make()
+    trader.enter(D("6.20"), "bar1")
+    txid = trader.state.stop_txid
+    lost = TraderState.from_dict({**saved[-1], "stop_txid": None})
+    venue, ex, trader, saved, fills = make(venue, lost)
+    report = trader.sync("bar2")
+    assert trader.state.stop_txid == txid and report["protected"]
+    assert len(venue.open_stops()) == 1 and trader.state.stop_seq == 1
+
+
+def test_a_recovered_stop_that_already_fired_is_booked():
+    venue, ex, trader, saved, fills = make()
+    trader.enter(D("6.20"), "bar1")
+    lost = TraderState.from_dict({**saved[-1], "stop_txid": None})
+    venue.trigger_stops("39900")
+    venue, ex, trader, saved, fills = make(venue, lost)
+    trader.sync("bar2")
+    assert trader.qty == venue.btc == 0 and trader.state.blocked
+    assert [f["kind"] for f in fills] == ["stop"]
+
+
+def test_a_pending_maker_exit_that_filled_before_the_next_run_is_not_a_shortfall():
+    venue, ex, trader, saved, fills = make()
+    trader.enter(D("6.20"), "bar1")
+    trader.maker_open("exit", D("0"), "bar2")
+    venue.fill_limits()
+    venue, ex, trader, saved, fills = make(venue, TraderState.from_dict(saved[-1]))
+    report = trader.sync("bar2")                                     # used to halt with R11
+    assert any("pending" in e for e in report["events"])
+    trader.maker_settle()
+    assert trader.qty == venue.btc == 0 and [f["kind"] for f in fills] == ["exit"]

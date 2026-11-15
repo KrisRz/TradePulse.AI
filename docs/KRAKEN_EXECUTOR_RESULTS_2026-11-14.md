@@ -52,3 +52,22 @@
 
 Pozycja 6 planu (review Codexa + PR, gdy user poprosi), potem 7 (post-only) i 8 (#12).
 Księga testu zostaje zablokowana po stop-oucie; do pilota powstaje osobny pk.
+
+## Po review kodu (2026-11-15)
+
+Review przed PR-em znalazło 6 błędów w ścieżkach, których test T0–T8 nie dotknął.
+Wszystkie odtworzone, naprawione, każdy z testem, który pada na kodzie sprzed poprawki.
+
+| # | Błąd | Poprawka |
+|---|---|---|
+| 1 | Korekta mogła sprzedać więcej, niż należy do bota, jeśli konto trzyma BTC spoza strategii; R13 odzywało się dopiero po transakcji | wielkość sprzedaży sprawdzana z księgą **przed** anulowaniem stopa i wysłaniem zlecenia (także post-only) |
+| 2 | Gdy zapis rekordu transakcji się nie udał po zapisie stanu, rekord znikał z eksportu HMRC na stałe | rekord czeka w zapisanym stanie (`outbox`), w tym samym zapisie co `booked`; następne uruchomienie go dostarcza. Zapis w DynamoDB jest idempotentny po `order_id` |
+| 3 | Stop wykonany częściowo i wciąż otwarty był księgowany od razu, a reszta ginęła | `sync` czeka na stan końcowy stopa i nie zmienia stanu wcześniej |
+| 4 | Odrzucona korekta albo wyjście (minimum pary, limit ekspozycji, odmowa giełdy) zostawiały pozycję bez stopa | po każdej jednoznacznej odmowie stop wraca |
+| 5 | Stop przyjęty przez giełdę tuż przed śmiercią procesu był brany za obce zlecenie | `sync` odnajduje go po identyfikatorze klienta; jeśli zdążył się wykonać, księguje |
+| 6 | Wyjście post-only wykonane przed kolejnym uruchomieniem wyglądało jak brak monet (R11) | `sync` uwzględnia to, co oczekujące zlecenie już sprzedało albo kupiło |
+
+Żaden z nich nie wystąpił na prawdziwych zleceniach (rekordy i saldo uzgodnione
+co do pensa). Testy executora: 42 → 50. Kod po poprawkach wczytał stan z DynamoDB
+i odczytał konto (`status`, tylko odczyt): 0 otwartych zleceń, `outbox` pusty.
+Poprawek nie sprawdzałem nowymi prawdziwymi zleceniami.

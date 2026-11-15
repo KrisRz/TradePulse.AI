@@ -401,12 +401,16 @@ class TraderState:
     # A resting post-only order waiting for its deadline:
     # {"txid", "kind", "bar", "side", "ref_price", "placed_at"}
     pending: Optional[dict] = None
+    # Fill records booked in the state but not yet handed to ``on_fill``. Saved
+    # in the same write as ``booked``, so a fill can be late but never lost.
+    outbox: list = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, raw: Optional[dict]) -> "TraderState":
         state = cls(**(raw or {}))
         state.stop_seq = int(state.stop_seq)      # DynamoDB hands numbers back as floats
         state.booked = list(state.booked)
+        state.outbox = list(state.outbox)
         return state
 
     def as_dict(self) -> dict:
@@ -417,7 +421,9 @@ class KrakenTrader:
     """Enter, adjust, exit — with the stop handled in the pre-registered order.
 
     ``save(state_dict)`` is called after every venue effect and
-    ``on_fill(record)`` once per executed order. ``fault(point)`` is called at
+    ``on_fill(record)`` at least once per executed order: the record waits in
+    the saved state until ``on_fill`` has returned, so ``on_fill`` must be
+    idempotent per ``order_id`` (the DynamoDB store is). ``fault(point)`` is called at
     named points and may raise, which is how the interrupted-run test (T4)
     proves that a half-finished run is completed, not repeated.
     """
@@ -469,10 +475,19 @@ class KrakenTrader:
             if new_qty == 0:
                 self.state.entry_price = None
         self.state.booked.append(cid)
-        self._persist()
         if order.executed:
-            self._on_fill(self.fill_record(order, kind, bar, extra))
+            self.state.outbox.append(self.fill_record(order, kind, bar, extra))
+        self._persist()                       # booked and its record, in one write
+        self._flush_fills()
         return True
+
+    def _flush_fills(self) -> None:
+        """Hand over the records still waiting — including any a run that died
+        (or whose ``on_fill`` failed) left behind."""
+        while self.state.outbox:
+            self._on_fill(self.state.outbox[0])
+            self.state.outbox.pop(0)
+            self._persist()
 
     # -- the stop --------------------------------------------------------- #
     def _clear_stop(self, bar: str) -> None:
@@ -518,9 +533,15 @@ class KrakenTrader:
         """Start-of-run reconciliation. Returns a report; raises
         :class:`ExecutorHalt` on anything it cannot explain."""
         report: dict[str, Any] = {"stop": None, "events": []}
+        self._flush_fills()
+        self._recover_stop(report)
         if self.state.stop_txid:
             stop = self.ex.query(self.state.stop_txid)
             report["stop"] = stop.status
+            if stop.executed and not stop.is_final:
+                # Triggered and still selling: booking now would lose the rest.
+                raise ExecutorHalt(f"stop {stop.txid} is executing ({stop.vol_exec} of "
+                                   f"{stop.volume} sold) — run the reconciliation again")
             if stop.executed:
                 self._book(stop, "stop", bar)
                 self.state.stop_txid = None
@@ -534,10 +555,15 @@ class KrakenTrader:
         quote, base = self.ex.balances()
         step = Decimal(1).scaleb(-self.ex.rules.lot_decimals)
         report.update(venue_quote=str(quote), venue_base=str(base), book_qty=self.state.qty)
-        if base + step < self.qty:
-            raise ExecutorHalt(f"R11: the book holds {self.qty} but the account only {base}")
-        if base > self.qty + step:
-            report["events"].append(f"account holds {base - self.qty} more than the book (not ours, untouched)")
+        # What the pending maker order has already traded is not booked yet.
+        expected_base = self.qty
+        if self.state.pending:
+            resting = self.ex.query(self.state.pending["txid"])
+            expected_base += resting.vol_exec if resting.side == BUY else -resting.vol_exec
+        if base + step < expected_base:
+            raise ExecutorHalt(f"R11: the book holds {expected_base} but the account only {base}")
+        if base > expected_base + step:
+            report["events"].append(f"account holds {base - expected_base} more than the book (not ours, untouched)")
         expected = {self.state.stop_txid} if self.state.stop_txid else set()
         if self.state.pending:
             expected.add(self.state.pending["txid"])
@@ -550,6 +576,27 @@ class KrakenTrader:
             self._ensure_stop()
         report["protected"] = self.qty == 0 or bool(self.state.stop_txid)
         return report
+
+    def _recover_stop(self, report: dict) -> None:
+        """A run that died after the exchange took the stop but before its txid
+        was saved: find that stop by its client id and take it back, so it is
+        neither mistaken for a stranger's order nor left unbooked if it fired."""
+        if self.state.stop_txid or self.state.stop_seq == 0 or self.qty == 0:
+            return
+        cid = self.ex.client_order_id("p", f"stop#{self.state.stop_seq}")
+        found = self.ex.find_order(cid)
+        if found is None:
+            return
+        if not found.is_final or (found.executed and cid not in self.state.booked):
+            self.state.stop_txid = found.txid
+            self._persist()
+            report["events"].append(f"stop {found.txid} recovered by its client id")
+
+    def _own_base(self, volume: Decimal) -> None:
+        """R13 before anything is cancelled or sent: never sell more than the
+        bot's own quantity, whatever else the account holds."""
+        if volume > self.qty:
+            raise ExecutorHalt(f"R13: sell of {volume} exceeds the bot's own quantity {self.qty}")
 
     # -- trading ---------------------------------------------------------- #
     def enter(self, budget: Decimal, bar: str) -> VenueOrder:
@@ -569,11 +616,17 @@ class KrakenTrader:
         delta = Decimal(str(delta))
         if self.qty == 0:
             raise ExecutorHalt("adjust() without a position")
+        if delta < 0:
+            self._own_base(-delta)
         self._clear_stop(bar)
         if self.qty == 0:                      # the stop filled while we were cancelling it
             raise ExecutorHalt("the stop filled before the rebalance — position is flat")
-        order = (self.ex.buy(delta, f"adjust#{bar}", bot_base=self.qty) if delta > 0
-                 else self.ex.sell(-delta, f"adjust#{bar}"))
+        try:
+            order = (self.ex.buy(delta, f"adjust#{bar}", bot_base=self.qty) if delta > 0
+                     else self.ex.sell(-delta, f"adjust#{bar}"))
+        except (ExecutorHalt, KrakenAPIError):
+            self._ensure_position_stop()       # refused: nothing traded, protect again
+            raise
         self._fault("after_submit")
         self._book(order, "adjust", bar)
         self._set_stop()
@@ -584,7 +637,11 @@ class KrakenTrader:
         self._clear_stop(bar)
         if self.qty == 0:
             return None
-        order = self.ex.sell(self.qty, f"exit#{bar}")
+        try:
+            order = self.ex.sell(self.qty, f"exit#{bar}")
+        except (ExecutorHalt, KrakenAPIError):
+            self._ensure_position_stop()       # refused: still holding, protect again
+            raise
         self._fault("after_submit")
         self._book(order, "exit", bar)
         return order
@@ -610,6 +667,8 @@ class KrakenTrader:
             if self.qty == 0:
                 raise ExecutorHalt("adjust without a position")
             side, amount = (BUY, amount) if amount > 0 else (SELL, -amount)
+            if side == SELL:
+                self._own_base(amount)
         elif kind == "exit":
             if self.qty == 0:
                 raise ExecutorHalt("exit without a position")
@@ -625,9 +684,9 @@ class KrakenTrader:
         bid, ask = self.ex.client.best_bid_ask(self.ex.pair)
         try:
             order = self.ex.post_only(side, amount, f"{kind}#{bar}", bot_base=self.qty)
-        except KrakenAPIError as exc:
-            if exc.has("EOrder:Post only"):
-                self._ensure_position_stop()
+        except (ExecutorHalt, KrakenAPIError) as exc:
+            self._ensure_position_stop()       # refused: nothing rests, protect again
+            if isinstance(exc, KrakenAPIError) and exc.has("EOrder:Post only"):
                 raise ExecutorHalt("the book moved and the post-only order would have taken — "
                                    "nothing was placed, run the step again") from exc
             raise
@@ -638,7 +697,10 @@ class KrakenTrader:
         return order
 
     def _ensure_position_stop(self) -> None:
-        if self.qty > 0 and not self.state.stop_txid:
+        """Put the stop back if there is a position large enough to carry one."""
+        if self.qty == 0 or self.state.stop_txid:
+            return
+        if self.ex.rules.allows(self.qty, emergency_stop_price(Decimal(self.state.entry_price))):
             self._set_stop()
 
     def maker_settle(self) -> dict:
@@ -669,8 +731,7 @@ class KrakenTrader:
                 result["dust"] = str(remaining)      # below the pair minimum — left as is, reported
         self.state.pending = None
         self._persist()
-        if self.qty > 0 and self.ex.rules.allows(self.qty, emergency_stop_price(Decimal(self.state.entry_price))):
-            self._ensure_position_stop()
+        self._ensure_position_stop()
         return result
 
     def unblock(self) -> None:
