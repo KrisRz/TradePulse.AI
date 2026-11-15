@@ -11,7 +11,7 @@
 > **Zasada obsługi:** czytaj sekcję 0 → 1 → znajdź pierwszy niezaznaczony `[ ]`
 > w ROADMAP → rób → odhacz → dopisz linię do „Log sesji" na końcu.
 >
-> Ostatnia aktualizacja: **2026-11-14** („🧭 PLAN OD 2026-11-14” = lista pracy; check-up „📊 STAN BOTA 2026-11-14”)
+> Ostatnia aktualizacja: **2026-11-15** („🧭 PLAN OD 2026-11-14” = lista pracy; check-up „📊 STAN BOTA 2026-11-15”)
 
 ---
 
@@ -54,7 +54,7 @@
 | 5 | ~~Test T1–T8 na prawdziwej giełdzie~~ ✅ 2026-11-14: **PASS 9/9**, strata £0,16; zlecenia uruchamiał K | **K** + weryfikacja przez API | `docs/KRAKEN_EXECUTOR_RESULTS_2026-11-14.md` |
 | 6 | Review Codexa (jedno przejście) + PR na koniec sesji, w której powstał kod | — | PR zmergowany |
 | 7 | ~~Kandydat post-only~~ ✅ 2026-11-15 **PRZYJĘTY** (maker 85%, 0,536% na stronę vs 0,80%) | — | `docs/POSTONLY_RESULTS_2026-11-15.md` |
-| 8 | **Kandydat #12**: wielkość pozycji wg zmienności, warianty zrealizowana i DVOL, z pasmem; punkt odniesienia `w = 0,5` + pasmo 0,15; próg tylko na korektach ze zmienności. Projekt w commicie przed liczbami | — | dokument wyników; przyjęty tylko, gdy spłyca DD przy Sharpe ≥ odniesienie − 0,10 |
+| 8 | ~~Kandydat #12: wielkość pozycji wg zmienności (RV20, RV60, DVOL) z pasmem~~ ❌ 2026-11-15 **ODRZUCONY 0/4**: żaden wariant nie spłyca DD wobec `w = 0,5` + pasmo 0,15; 3–10× więcej korekt | — | `docs/VOL_SIZING_RESULTS_2026-11-15.md` |
 | 9 | **Lambda pilota** (ten sam kod co paper + executor, osobny pk w DynamoDB, alarmy, dead-man, kill-switch konta 25%), wdrożona wyłączona | — | Terraform `-target`, przebieg na `validate` |
 | 10 | **Ocena P1–P4** co 28 dni: 2026-11-27, 2026-12-25, 2027-01-22… | — + **K** | raport oceny; gdy P1–P3 PASS → K dopłaca do ~£200 → start pilota |
 | 11 | **Pilot**: bramki A, B, C co 28 dni; eksport HMRC | — | kapitał rośnie dopiero po bramce B (najwcześniej 2027-10-29) |
@@ -121,7 +121,15 @@ pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
 - Wejdzie do Lambdy pilota osobnym commitem (pozycja 9); koszt w backteście i papierze
   zostaje 0,80% do pomiaru bramki C na pilocie.
 
-**Następna: 8 — kandydat #12 (projekt przed liczbami). Pozycja 6 (review Codexa + PR) — gdy user poprosi.**
+**Pozycja 8 — kandydat #12 — ODRZUCONY 2026-11-15** (projekt `09c4968` przed liczbami):
+- Cel `w_t = 0,5 × mediana(σ)/σ_t`, w granicach 0,25–0,65, jedno pasmo; RV20, RV60,
+  DVOL × pasmo 0,10 / 0,15; kontrola o tej samej średniej ekspozycji.
+- Punkt odniesienia −26,7% maxDD; kandydaci −26,8…−29,6%. Wobec kontroli spadek
+  płytszy o 1,3–6,3 pp (zmienność niesie informację), ale kosztem 0,7–3,3 pp CAGR
+  i 2–6 korekt rocznie zamiast 0,6. DVOL gorszy od RV60 i od punktu odniesienia.
+- Rejestr: **12 zmierzonych, 12 odrzuconych.** → `docs/VOL_SIZING_RESULTS_2026-11-15.md`.
+
+**Następna: 9 — Lambda pilota (wdrożona wyłączona, z post-only osobnym commitem). Pozycja 6 (review Codexa + PR) — gdy user poprosi. Ocena P1–P4: 2026-11-27.**
 
 ---
 
@@ -224,6 +232,28 @@ podejściu musi pobić `w = 0,5` z pasmem, nie samą strategię.
 ---
 
 ---
+
+## 📊 STAN BOTA 2026-11-15 (analiza na koniec sesji; dzień 17 papieru Kraken)
+
+Odczyt `paper_trading.gate` z DynamoDB, 2026-11-15 rano:
+
+| Kanał | Bot | B&H z kosztami | maxDD bot / B&H | Stan |
+|---|---|---|---|---|
+| Kraken 1d paper, £200 | **−2,84%** (£194,32), 1 RT | −17,74% | −3,76% / −19,20% | FLAT |
+| 1d M5, $10k | **−4,20%** ($9 579,99), 1 RT | −1,17% | −14,80% / −26,03% | FLAT |
+| 4h demo, $200 | **+12,74%** ($225,48), 5 RT, PF 3,04 | −0,91% | −10,10% / −26,26% | FLAT |
+
+- BTC spadł od wczoraj o kolejne ~6% (B&H na Krakenie z −12,57% na −17,74%); bot
+  stoi w gotówce i tego nie odczuł. Wyniki botów bez zmian.
+- Zamknięte dziś: post-only **przyjęty** (0,536% na stronę), #12 **odrzucony**.
+- Wniosek o strategii: dźwignie „ile trzymać” są wyczerpane (#1, #12, stałe `w`
+  z pasmem wygrywa). Realny, zmierzony zysk tej sesji to koszt: 0,80% → 0,536%.
+- **Kandydat na następną sesję (#13): wariant 4h na Krakenie przy zmierzonym koszcie
+  post-only.** Przy 0,80% padał w 0/4 układów, przy 0,40% przechodził w 3/4; koszt
+  0,536% z ogonem 1,1–1,9% nie był liczony. Na żywo 4h demo jest jedynym kanałem
+  na plusie (+12,74% vs −0,91%), ale to 5 transakcji, nie dowód. Projekt z regułą
+  przed liczbami; koszt modelowany rozkładem z pomiaru (85% po 0,40%, 15% ogon),
+  nie średnią.
 
 ## 📊 STAN BOTA 2026-11-14 (check-up, tylko odczyt; dzień 16 papieru Kraken)
 
