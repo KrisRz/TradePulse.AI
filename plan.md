@@ -53,7 +53,7 @@
 | 4 | ~~Wpłata testowa~~ ✅ 2026-11-14: **£10** (decyzja usera), saldo `ZGBP 10.0000` odczytane przez API. Możliwe 24 h „cooling off” przed pierwszym kupnem | **K** | saldo widoczne przez API |
 | 5 | ~~Test T1–T8 na prawdziwej giełdzie~~ ✅ 2026-11-14: **PASS 9/9**, strata £0,16; zlecenia uruchamiał K | **K** + weryfikacja przez API | `docs/KRAKEN_EXECUTOR_RESULTS_2026-11-14.md` |
 | 6 | Review Codexa (jedno przejście) + PR na koniec sesji, w której powstał kod | — | PR zmergowany |
-| 7 | **Kandydat post-only (0,40%)**: projekt → pomiar minimalnymi zleceniami (odsetek wykonanych, czas, cena wobec market) → decyzja | — | dokument wyników |
+| 7 | ~~Kandydat post-only~~ ✅ 2026-11-15 **PRZYJĘTY** (maker 85%, 0,536% na stronę vs 0,80%) | — | `docs/POSTONLY_RESULTS_2026-11-15.md` |
 | 8 | **Kandydat #12**: wielkość pozycji wg zmienności, warianty zrealizowana i DVOL, z pasmem; punkt odniesienia `w = 0,5` + pasmo 0,15; próg tylko na korektach ze zmienności. Projekt w commicie przed liczbami | — | dokument wyników; przyjęty tylko, gdy spłyca DD przy Sharpe ≥ odniesienie − 0,10 |
 | 9 | **Lambda pilota** (ten sam kod co paper + executor, osobny pk w DynamoDB, alarmy, dead-man, kill-switch konta 25%), wdrożona wyłączona | — | Terraform `-target`, przebieg na `validate` |
 | 10 | **Ocena P1–P4** co 28 dni: 2026-11-27, 2026-12-25, 2027-01-22… | — + **K** | raport oceny; gdy P1–P3 PASS → K dopłaca do ~£200 → start pilota |
@@ -113,12 +113,15 @@ pre-rejestracją (nowy zegar albo nie — decyzja wtedy, z liczbami).
   koszt strony ≤ 0,65%, zero zgubionych, żaden `post` jako taker);
 - ✅ kod: `KrakenExecutor.post_only`, `KrakenTrader.maker_open` / `maker_settle`
   (anuluj po terminie → reszta market → stop wraca), 42 testy executora, mutacje 8/8;
-- ⏳ pomiar: 20 zleceń (10 cykli kupno → 15 min → rozliczenie → sprzedaż → 15 min →
-  rozliczenie), uruchamia user: `unblock`, potem `maker-open --kind entry --gbp 3.20
-  --bar M01`, `maker-settle`, `maker-open --kind exit --bar M01x`, `maker-settle`, …
-  Bez pośpiechu — pilot i tak czeka na P3. Budżet straty £1,50.
+- ✅ pomiar 2026-11-14/15 (20 zleceń, uruchomione przez usera, `maker-cycles` przez noc):
+  **PRZYJĘTY 4/4** — maker 85,0%, koszt strony 0,536% (taker 0,80%), 25 filli =
+  25 zleceń Krakena, żaden `post` jako taker, strata £0,33 z budżetu £1,50.
+  Ogon: 3 niewykonane zlecenia kosztowały 1,1–1,9%. →
+  `docs/POSTONLY_RESULTS_2026-11-15.md`.
+- Wejdzie do Lambdy pilota osobnym commitem (pozycja 9); koszt w backteście i papierze
+  zostaje 0,80% do pomiaru bramki C na pilocie.
 
-**Pozycja 6 (review Codexa + PR) — gdy user poprosi.**
+**Następna: 8 — kandydat #12 (projekt przed liczbami). Pozycja 6 (review Codexa + PR) — gdy user poprosi.**
 
 ---
 
